@@ -216,6 +216,11 @@ void main() {
     // the volume, a left-half swipe the brightness, two fingers zoom.
     final semantics = tester.ensureSemantics();
     final screen = tester.getRect(find.byType(PlayerScreen));
+    // The 14 s test video always counts as "in the credits", so Up Next
+    // would sit on the right half: close it, as Keep watching does.
+    // (The screen redraws on the controller's next status tick, each 1 s.)
+    c.upNextDismissed = true;
+    await tester.pump(const Duration(milliseconds: 1200));
     Future<void> swipe(double x) => tester.timedDragFrom(
       // Between the play row and the scrubber, away from the buttons.
       Offset(screen.left + screen.width * x, screen.top + screen.height * 0.6),
@@ -270,9 +275,11 @@ void main() {
         .transform
         .getMaxScaleOnAxis();
     expect(zoom(), 1);
-    final f1 = await tester.startGesture(screen.center - const Offset(40, 0));
+    // Above the play row, clear of every control.
+    final pinch = Offset(screen.center.dx, screen.top + screen.height * 0.3);
+    final f1 = await tester.startGesture(pinch - const Offset(40, 0));
     final f2 = await tester.startGesture(
-      screen.center + const Offset(40, 0),
+      pinch + const Offset(40, 0),
       pointer: 7,
     );
     for (var i = 0; i < 12; i++) {
