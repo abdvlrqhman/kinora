@@ -281,6 +281,7 @@ struct kn_session {
   std::map<std::string, std::shared_ptr<Route>> routes;
   std::deque<std::string> events;
   std::atomic<int> pending_resume{0};
+  int connect_failures = 0;  // alert thread only
 
   std::thread alert_thread;
   std::atomic<bool> stopping{false};
@@ -483,6 +484,18 @@ void handle_alert(kn_session* s, lt::alert* a) {
     push_event(s, "{\"type\":\"listen\",\"port\":" + std::to_string(ls->port) + "}");
     return;
   }
+  // Diagnostics for "finding people sharing it": what trackers answered and
+  // why connections failed (the first 20, then every 100th).
+  if (auto* r = lt::alert_cast<lt::tracker_reply_alert>(a)) {
+    push_log(s, r->message());
+    return;
+  }
+  if (auto* d = lt::alert_cast<lt::peer_disconnected_alert>(a)) {
+    int n = s->connect_failures;
+    if (d->op == lt::operation_t::connect && (n < 20 || n % 100 == 0)) push_log(s, d->message());
+    if (d->op == lt::operation_t::connect) s->connect_failures = n + 1;
+    return;
+  }
   if (a->category() & lt::alert_category::error) {
     push_log(s, a->message());
   }
@@ -546,7 +559,8 @@ void apply_config(lt::settings_pack& sp, const lt::bdecode_node& c, bool initial
     sp.set_int(lt::settings_pack::alert_mask,
                lt::alert_category::status | lt::alert_category::error |
                    lt::alert_category::storage | lt::alert_category::piece_progress |
-                   lt::alert_category::file_progress);
+                   lt::alert_category::file_progress | lt::alert_category::tracker |
+                   lt::alert_category::connect);
     sp.set_str(lt::settings_pack::peer_fingerprint,
                lt::generate_fingerprint("KN", 0, 1, 0, 0));
     sp.set_int(lt::settings_pack::alert_queue_size, 4000);
@@ -568,6 +582,9 @@ void apply_config(lt::settings_pack& sp, const lt::bdecode_node& c, bool initial
     sp.set_int(lt::settings_pack::handshake_timeout, 10);
     sp.set_int(lt::settings_pack::piece_timeout, 10);
     sp.set_int(lt::settings_pack::request_queue_time, 3);
+    // A peer whose first connection failed is tried again after 15 s (not
+    // 60): with few peers, waiting a minute is a minute of black screen.
+    sp.set_int(lt::settings_pack::min_reconnect_time, 15);
     sp.set_int(lt::settings_pack::max_out_request_queue, 1500);
     sp.set_int(lt::settings_pack::whole_pieces_threshold, 20);
     sp.set_int(lt::settings_pack::stop_tracker_timeout, 1);

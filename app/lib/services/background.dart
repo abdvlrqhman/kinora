@@ -68,10 +68,9 @@ final class BackgroundKeeper {
             notificationText: text,
           );
         } else {
-          if (await FlutterForegroundTask.checkNotificationPermission() !=
-              NotificationPermission.granted) {
-            await FlutterForegroundTask.requestNotificationPermission();
-          }
+          // No permission prompt here: this runs on every progress tick, and
+          // the service runs without it (only its notification is hidden).
+          // The first download asks once, with a reason (download_prompts).
           await FlutterForegroundTask.startService(
             serviceId: 4242,
             serviceTypes: [ForegroundServiceTypes.specialUse],
