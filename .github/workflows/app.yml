@@ -70,6 +70,10 @@ jobs:
         with:
           name: libtorrent-arm-neon-android
           path: packages/engine/prebuilt/arm-neon-android
+      - uses: actions/download-artifact@v8
+        with:
+          name: libtorrent-x64-android
+          path: packages/engine/prebuilt/x64-android
       - uses: subosito/flutter-action@v2.23.0
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
