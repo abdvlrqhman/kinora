@@ -1,0 +1,13 @@
+name: stremio
+description: Client for the Stremio addon protocol (manifest, catalog, meta, stream, subtitles) with parallel aggregation.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  http: ^1.6.0
+
+dev_dependencies:
+  test: ^1.33.0

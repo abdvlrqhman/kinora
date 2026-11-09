@@ -1,0 +1,374 @@
+{
+ "metas": [
+  {
+   "imdb_id": "tt37287335",
+   "name": "Obsession",
+   "type": "movie",
+   "awards": "10 wins & 13 nominations total",
+   "cast": [
+    "Michael Johnston",
+    "Inde Navarrette",
+    "Cooper Tomlinson"
+   ],
+   "country": "United States",
+   "description": "After breaking the mysterious \"One Wish Willow\" to win his crush's heart, a hopeless romantic finds himself getting exactly what he asked for but soon discovers that some desires come at a dark, sinister price.",
+   "director": [
+    "Curry Barker"
+   ],
+   "genre": [
+    "Horror",
+    "Thriller"
+   ],
+   "imdbRating": "7.8",
+   "released": "2026-05-15T00:00:00.000Z",
+   "slug": "movie/obsession-37287335",
+   "writer": [
+    "Curry Barker"
+   ],
+   "year": "2026",
+   "moviedb_id": 1339713,
+   "popularities": {
+    "moviedb": 102.5259,
+    "stremio": 3.4175299999999997,
+    "stremio_lib": 0,
+    "trakt": 474
+   },
+   "poster": "https://images.metahub.space/poster/small/tt37287335/img",
+   "runtime": "109 min",
+   "trailers": [
+    {
+     "source": "gMC8kkwbIQQ",
+     "type": "Trailer"
+    }
+   ],
+   "background": "https://images.metahub.space/background/medium/tt37287335/img",
+   "logo": "https://images.metahub.space/logo/medium/tt37287335/img",
+   "popularity": 3.4175299999999997,
+   "id": "tt37287335",
+   "genres": [
+    "Horror",
+    "Thriller"
+   ],
+   "releaseInfo": "2026",
+   "trailerStreams": [
+    {
+     "title": "Obsession",
+     "ytId": "gMC8kkwbIQQ"
+    }
+   ],
+   "links": [
+    {
+     "name": "7.8",
+     "category": "imdb",
+     "url": "https://imdb.com/title/tt37287335"
+    },
+    {
+     "name": "Obsession",
+     "category": "share",
+     "url": "https://www.strem.io/s/movie/obsession-37287335"
+    },
+    {
+     "name": "Horror",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+    },
+    {
+     "name": "Thriller",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+    },
+    {
+     "name": "Michael Johnston",
+     "category": "Cast",
+     "url": "stremio:///search?search=Michael%20Johnston"
+    },
+    {
+     "name": "Inde Navarrette",
+     "category": "Cast",
+     "url": "stremio:///search?search=Inde%20Navarrette"
+    },
+    {
+     "name": "Cooper Tomlinson",
+     "category": "Cast",
+     "url": "stremio:///search?search=Cooper%20Tomlinson"
+    },
+    {
+     "name": "Curry Barker",
+     "category": "Writers",
+     "url": "stremio:///search?search=Curry%20Barker"
+    },
+    {
+     "name": "Curry Barker",
+     "category": "Directors",
+     "url": "stremio:///search?search=Curry%20Barker"
+    }
+   ],
+   "behaviorHints": {
+    "defaultVideoId": "tt37287335",
+    "hasScheduledVideos": false
+   }
+  },
+  {
+   "awards": "2 wins & 11 nominations total",
+   "cast": [
+    "Bette Midler",
+    "Sarah Jessica Parker",
+    "Kathy Najimy"
+   ],
+   "country": "United States",
+   "description": "A teenage boy named Max and his little sister move to Salem, where he struggles to fit in before awakening a trio of diabolical witches that were executed in the 17th century.",
+   "director": [
+    "Kenny Ortega"
+   ],
+   "dvdRelease": "2014-01-01T00:00:00.000Z",
+   "genre": [
+    "Comedy",
+    "Family",
+    "Fantasy"
+   ],
+   "imdbRating": "6.9",
+   "imdb_id": "tt0107120",
+   "moviedb_id": 10439,
+   "name": "Hocus Pocus",
+   "popularity": 0.8566666666666667,
+   "poster": "https://images.metahub.space/poster/small/tt0107120/img",
+   "released": "1993-07-16T00:00:00.000Z",
+   "runtime": "96 min",
+   "trailers": [
+    {
+     "source": "OFm_2RyxXjQ",
+     "type": "Trailer"
+    },
+    {
+     "source": "Oryofd_T-ng",
+     "type": "Trailer"
+    }
+   ],
+   "type": "movie",
+   "writer": [
+    "David Kirschner",
+    "Mick Garris",
+    "Neil Cuthbert"
+   ],
+   "year": "1993",
+   "background": "https://images.metahub.space/background/medium/tt0107120/img",
+   "logo": "https://images.metahub.space/logo/medium/tt0107120/img",
+   "popularities": {
+    "moviedb": 25.7,
+    "stremio": 0.8566666666666667,
+    "trakt": 76,
+    "stremio_lib": 0
+   },
+   "slug": "movie/hocus-pocus-0107120",
+   "id": "tt0107120",
+   "genres": [
+    "Comedy",
+    "Family",
+    "Fantasy"
+   ],
+   "releaseInfo": "1993",
+   "videos": [],
+   "trailerStreams": [
+    {
+     "title": "Hocus Pocus",
+     "ytId": "OFm_2RyxXjQ"
+    },
+    {
+     "title": "Hocus Pocus",
+     "ytId": "Oryofd_T-ng"
+    }
+   ],
+   "links": [
+    {
+     "name": "6.9",
+     "category": "imdb",
+     "url": "https://imdb.com/title/tt0107120"
+    },
+    {
+     "name": "Hocus Pocus",
+     "category": "share",
+     "url": "https://www.strem.io/s/movie/hocus-pocus-0107120"
+    },
+    {
+     "name": "Comedy",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+    },
+    {
+     "name": "Family",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Family"
+    },
+    {
+     "name": "Fantasy",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Fantasy"
+    },
+    {
+     "name": "Bette Midler",
+     "category": "Cast",
+     "url": "stremio:///search?search=Bette%20Midler"
+    },
+    {
+     "name": "Sarah Jessica Parker",
+     "category": "Cast",
+     "url": "stremio:///search?search=Sarah%20Jessica%20Parker"
+    },
+    {
+     "name": "Kathy Najimy",
+     "category": "Cast",
+     "url": "stremio:///search?search=Kathy%20Najimy"
+    },
+    {
+     "name": "David Kirschner",
+     "category": "Writers",
+     "url": "stremio:///search?search=David%20Kirschner"
+    },
+    {
+     "name": "Mick Garris",
+     "category": "Writers",
+     "url": "stremio:///search?search=Mick%20Garris"
+    },
+    {
+     "name": "Neil Cuthbert",
+     "category": "Writers",
+     "url": "stremio:///search?search=Neil%20Cuthbert"
+    },
+    {
+     "name": "Kenny Ortega",
+     "category": "Directors",
+     "url": "stremio:///search?search=Kenny%20Ortega"
+    }
+   ],
+   "behaviorHints": {
+    "defaultVideoId": "tt0107120",
+    "hasScheduledVideos": false
+   }
+  },
+  {
+   "imdb_id": "tt32261958",
+   "name": "Verity",
+   "popularities": {
+    "trakt": 1276,
+    "moviedb": 218.0504,
+    "stremio": 7.268346666666667,
+    "stremio_lib": 0
+   },
+   "type": "movie",
+   "cast": [
+    "Anne Hathaway",
+    "Dakota Johnson",
+    "Josh Hartnett"
+   ],
+   "country": "United States",
+   "description": "Lowen Ashleigh gets hired by Jeremy Crawford to ghostwrite novels for his bestselling author wife Verity, who's unable to finish after an accident. Lowen uncovers Verity's disturbing truths while residing at the Crawfords' home to...",
+   "director": [
+    "Michael Showalter"
+   ],
+   "genre": [
+    "Crime",
+    "Drama",
+    "Mystery"
+   ],
+   "imdbRating": "",
+   "released": "2026-10-02T00:00:00.000Z",
+   "slug": "movie/verity-32261958",
+   "writer": [
+    "Nick Antosca",
+    "Colleen Hoover",
+    "Will Honley"
+   ],
+   "year": "2026",
+   "moviedb_id": 1283515,
+   "poster": "https://images.metahub.space/poster/small/tt32261958/img",
+   "runtime": "117 min",
+   "trailers": [
+    {
+     "source": "xdPMKhjMSFs",
+     "type": "Trailer"
+    }
+   ],
+   "background": "https://images.metahub.space/background/medium/tt32261958/img",
+   "logo": "https://images.metahub.space/logo/medium/tt32261958/img",
+   "popularity": 7.268346666666667,
+   "id": "tt32261958",
+   "genres": [
+    "Crime",
+    "Drama",
+    "Mystery"
+   ],
+   "releaseInfo": "2026",
+   "trailerStreams": [
+    {
+     "title": "Verity",
+     "ytId": "xdPMKhjMSFs"
+    }
+   ],
+   "links": [
+    {
+     "name": "Verity",
+     "category": "share",
+     "url": "https://www.strem.io/s/movie/verity-32261958"
+    },
+    {
+     "name": "Crime",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+    },
+    {
+     "name": "Drama",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+    },
+    {
+     "name": "Mystery",
+     "category": "Genres",
+     "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+    },
+    {
+     "name": "Anne Hathaway",
+     "category": "Cast",
+     "url": "stremio:///search?search=Anne%20Hathaway"
+    },
+    {
+     "name": "Dakota Johnson",
+     "category": "Cast",
+     "url": "stremio:///search?search=Dakota%20Johnson"
+    },
+    {
+     "name": "Josh Hartnett",
+     "category": "Cast",
+     "url": "stremio:///search?search=Josh%20Hartnett"
+    },
+    {
+     "name": "Nick Antosca",
+     "category": "Writers",
+     "url": "stremio:///search?search=Nick%20Antosca"
+    },
+    {
+     "name": "Colleen Hoover",
+     "category": "Writers",
+     "url": "stremio:///search?search=Colleen%20Hoover"
+    },
+    {
+     "name": "Will Honley",
+     "category": "Writers",
+     "url": "stremio:///search?search=Will%20Honley"
+    },
+    {
+     "name": "Michael Showalter",
+     "category": "Directors",
+     "url": "stremio:///search?search=Michael%20Showalter"
+    }
+   ],
+   "behaviorHints": {
+    "defaultVideoId": "tt32261958",
+    "hasScheduledVideos": false
+   }
+  }
+ ],
+ "hasMore": false,
+ "cacheMaxAge": 14400,
+ "staleRevalidate": 3600,
+ "staleError": 3600
+}

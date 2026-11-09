@@ -1,0 +1,41 @@
+{
+ "streams": [
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Breaking.Bad.S01E01.1080p.BluRay.x265-ORPHEUS\n👤 152 💾 1.21 GB ⚙️ ThePirateBay",
+   "infoHash": "8E9F7A6B5C4D3E2F1A0B9C8D7E6F5A4B3C2D1E0F",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Breaking.Bad.S01E01.1080p.BluRay.x265-ORPHEUS.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "dht:8e9f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f"
+   ]
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Breaking.Bad.S01.COMPLETE.720p.WEB-DL.x264-GROUP\nBreaking.Bad.S01E01.720p.WEB-DL.x264-GROUP.mkv\n👤 88 💾 1.1 GB ⚙️ 1337x",
+   "infoHash": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL",
+    "filename": "Breaking.Bad.S01E01.720p.WEB-DL.x264-GROUP.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.torrent.eu.org:451/announce",
+    "dht:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
+   ]
+  },
+  {
+   "name": "Torrentio\n480p",
+   "title": "Breaking Bad S01E01 Pilot 480p\n👤 3 💾 350 MB ⚙️ EZTV",
+   "infoHash": "ffeeddccbbaa99887766554433221100ffeeddcc"
+  }
+ ],
+ "cacheMaxAge": 3600,
+ "staleRevalidate": 14400,
+ "staleError": 604800
+}

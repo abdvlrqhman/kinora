@@ -1,0 +1,28 @@
+{
+ "streams": [
+  {
+   "name": "[RD+] DebridAddon\n2160p",
+   "description": "Big.Buck.Bunny.2008.2160p.UHD.BluRay.x265-GRP\n💾 9.8 GB",
+   "url": "https://debrid.example/resolve/realdebrid/ab12cd34/Big.Buck.Bunny.2008.2160p.UHD.BluRay.x265-GRP.mkv",
+   "behaviorHints": {
+    "bingeGroup": "debridaddon|2160p",
+    "notWebReady": true,
+    "filename": "Big.Buck.Bunny.2008.2160p.UHD.BluRay.x265-GRP.mkv",
+    "videoSize": 10522669875,
+    "videoHash": "8e245d9679d31e12",
+    "proxyHeaders": {
+     "request": { "User-Agent": "Stremio", "Referer": "https://debrid.example/" },
+     "response": { "Content-Type": "video/x-matroska" }
+    }
+   }
+  },
+  {
+   "name": "Trailer",
+   "ytId": "yUQM7H4Swgw"
+  },
+  {
+   "name": "Watch on the web",
+   "externalUrl": "https://www.example.com/watch/big-buck-bunny"
+  }
+ ]
+}

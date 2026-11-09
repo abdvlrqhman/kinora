@@ -1,0 +1,97 @@
+{
+ "meta": {
+  "awards": "1 win.",
+  "cast": null,
+  "country": "Netherlands",
+  "description": "'Big' Buck wakes up in his rabbit hole, only to be pestered by three critters, Gimera, Frank and Rinky. When Gimera kills a butterfly, Buck decides on a payback Predator-style",
+  "director": [
+   "Sacha Goedegebure"
+  ],
+  "dvdRelease": null,
+  "genre": [
+   "Animation",
+   "Short",
+   "Comedy"
+  ],
+  "imdbRating": "6.8",
+  "imdb_id": "tt1254207",
+  "moviedb_id": 10378,
+  "name": "Big Buck Bunny",
+  "poster": "https://images.metahub.space/poster/small/tt1254207/img",
+  "released": "2008-04-09T21:00:00.000Z",
+  "runtime": "10 min",
+  "trailers": [
+   {
+    "source": "yUQM7H4Swgw",
+    "type": "Trailer"
+   }
+  ],
+  "type": "movie",
+  "writer": [
+   "Sacha Goedegebure (script)",
+   "Sacha Goedegebure (story)"
+  ],
+  "year": "2008",
+  "popularities": {
+   "moviedb": 0.72088,
+   "trakt": 1
+  },
+  "background": "https://images.metahub.space/background/medium/tt1254207/img",
+  "logo": "https://images.metahub.space/logo/medium/tt1254207/img",
+  "id": "tt1254207",
+  "genres": [
+   "Animation",
+   "Short",
+   "Comedy"
+  ],
+  "releaseInfo": "2008",
+  "videos": [],
+  "trailerStreams": [
+   {
+    "title": "Big Buck Bunny",
+    "ytId": "yUQM7H4Swgw"
+   }
+  ],
+  "links": [
+   {
+    "name": "6.8",
+    "category": "imdb",
+    "url": "https://imdb.com/title/tt1254207"
+   },
+   {
+    "name": "Animation",
+    "category": "Genres",
+    "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Animation"
+   },
+   {
+    "name": "Short",
+    "category": "Genres",
+    "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Short"
+   },
+   {
+    "name": "Comedy",
+    "category": "Genres",
+    "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+   },
+   {
+    "name": "Sacha Goedegebure (script)",
+    "category": "Writers",
+    "url": "stremio:///search?search=Sacha%20Goedegebure%20(script)"
+   },
+   {
+    "name": "Sacha Goedegebure (story)",
+    "category": "Writers",
+    "url": "stremio:///search?search=Sacha%20Goedegebure%20(story)"
+   },
+   {
+    "name": "Sacha Goedegebure",
+    "category": "Directors",
+    "url": "stremio:///search?search=Sacha%20Goedegebure"
+   }
+  ],
+  "behaviorHints": {
+   "defaultVideoId": "tt1254207",
+   "hasScheduledVideos": false
+  }
+ }
+}

@@ -1,0 +1,13 @@
+name: swarm
+description: BitTorrent magnet links (BEP 9), live UDP/HTTP tracker scraping (BEP 15/48) and public tracker lists.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  http: ^1.6.0
+
+dev_dependencies:
+  test: ^1.33.0

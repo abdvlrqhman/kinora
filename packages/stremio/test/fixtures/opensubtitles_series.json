@@ -1,0 +1,78 @@
+{
+ "subtitles": [
+  {
+   "id": "4290498",
+   "url": "https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1952100886",
+   "SubEncoding": "CP1252",
+   "lang": "por",
+   "m": "i",
+   "g": "2",
+   "subtitleFileName": "Breaking.Bad.S01E01.DVDRip.XviD-ORPHEUS.srt",
+   "movieReleaseName": "Breaking.Bad.S01.DVDRip.XviD-ORPHEUS",
+   "releaseGroup": "ORPHEUS",
+   "releaseFormat": "DVD",
+   "fpsMilli": 23976,
+   "season": 1,
+   "episode": 1
+  },
+  {
+   "id": "3265190",
+   "url": "https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1951845855",
+   "SubEncoding": "CP1252",
+   "lang": "por",
+   "m": "i",
+   "g": "1",
+   "subtitleFileName": "Breaking.Bad.s01e01.dsr.xvid-0tv.srt",
+   "movieReleaseName": "Breaking.Bad.s01e01.dsr.xvid-0tv",
+   "releaseGroup": "0tv",
+   "fpsMilli": 23976,
+   "season": 1,
+   "episode": 1
+  },
+  {
+   "id": "3265167",
+   "url": "https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1951845810",
+   "SubEncoding": "CP1252",
+   "lang": "por",
+   "m": "i",
+   "g": "1",
+   "subtitleFileName": "Breaking.Bad.s01e01.dsr.xvid-0tv.srt",
+   "movieReleaseName": "Breaking.Bad.s01e01.dsr.xvid-0tv",
+   "releaseGroup": "0tv",
+   "fpsMilli": 23976,
+   "season": 1,
+   "episode": 1
+  },
+  {
+   "id": "3290690",
+   "url": "https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1951877389",
+   "SubEncoding": "CP1252",
+   "lang": "fre",
+   "m": "i",
+   "g": "1",
+   "subtitleFileName": "Breaking.Bad.S01E01.DSR.XviD-0TV.srt",
+   "movieReleaseName": "Breaking.Bad.S01E01.DSR.XviD-0TV.avi",
+   "releaseGroup": "0TV",
+   "fpsMilli": 23980,
+   "season": 1,
+   "episode": 1
+  },
+  {
+   "id": "3837187",
+   "url": "https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1952500759",
+   "SubEncoding": "CP1252",
+   "lang": "fre",
+   "m": "i",
+   "g": "2",
+   "subtitleFileName": "Breaking Bad - 1x01 - Pilot.DVDRip.fr.srt",
+   "movieReleaseName": "Breaking Bad - 1x01 - Pilot.DVDRip",
+   "releaseFormat": "DVD",
+   "fpsMilli": 25000,
+   "season": 1,
+   "episode": 1
+  }
+ ],
+ "cacheMaxAge": 172800,
+ "staleRevalidate": 518400,
+ "staleError": 1036800
+}

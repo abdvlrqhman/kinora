@@ -1,0 +1,14 @@
+{
+ "streams": [
+  {
+   "name": "[⚠️] DebridAddon",
+   "description": "Invalid Real-Debrid API key. Update it on the configure page.",
+   "url": "https://debrid.example/static/invalid.mp4"
+  },
+  {
+   "name": "[⚠️] DebridAddon",
+   "description": "Token expired",
+   "url": "https://debrid.example/static/invalid.mp4?2"
+  }
+ ]
+}

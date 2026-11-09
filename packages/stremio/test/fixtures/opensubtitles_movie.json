@@ -1,0 +1,33 @@
+{
+ "subtitles": [
+  {
+   "id": "5833874",
+   "url": "https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954412181",
+   "SubEncoding": "ASCII",
+   "lang": "eng",
+   "m": "i",
+   "g": "",
+   "subtitleFileName": "big_buck_bunny.eng.srt",
+   "movieReleaseName": "big_buck_bunny",
+   "fpsMilli": 24000,
+   "season": 0,
+   "episode": 0
+  },
+  {
+   "id": "5511948",
+   "url": "https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954100982",
+   "SubEncoding": "ASCII",
+   "lang": "ind",
+   "m": "i",
+   "g": "3",
+   "subtitleFileName": "Big Buck Bunny.srt",
+   "movieReleaseName": "Big Buck Bunny",
+   "fpsMilli": 30000,
+   "season": 0,
+   "episode": 0
+  }
+ ],
+ "cacheMaxAge": 3600,
+ "staleRevalidate": 10800,
+ "staleError": 21600
+}
