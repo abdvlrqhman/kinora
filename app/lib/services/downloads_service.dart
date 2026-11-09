@@ -438,7 +438,9 @@ final class DownloadsService implements DownloadActions {
     final others = await (_db.select(
       _db.downloads,
     )..where((t) => t.infoHash.equals(ih))).get();
-    final dir = others.isEmpty ? _folderFor(request) : status.savePath;
+    // One torrent lives in one folder: the first download's, once it owns it.
+    final owned = others.where((r) => r.directory.isNotEmpty).firstOrNull;
+    final dir = owned?.directory ?? _folderFor(request);
     await Directory(dir).create(recursive: true);
     await _db
         .into(_db.downloads)

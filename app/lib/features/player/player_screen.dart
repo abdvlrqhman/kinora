@@ -448,7 +448,9 @@ class _Controls extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (c.engineStats != null) _EngineChip(controller: c),
+                  if (c.engineStats case final es?
+                      when es.size > 0 && es.have >= es.size)
+                    _EngineChip(controller: c),
                   const SizedBox(width: KSpace.x2),
                   GlassIconButton(
                     icon: Icons.cast_rounded,
@@ -467,13 +469,6 @@ class _Controls extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (c.previousEpisode != null)
-                    GlassIconButton(
-                      icon: Icons.skip_previous_rounded,
-                      label: 'Previous episode',
-                      onPressed: c.playPrevious,
-                    ),
-                  const SizedBox(width: KSpace.section),
                   GlassIconButton(
                     icon: Icons.replay_10_rounded,
                     label: 'Back 10 seconds',
@@ -505,13 +500,6 @@ class _Controls extends StatelessWidget {
                     },
                     size: 56,
                   ),
-                  const SizedBox(width: KSpace.section),
-                  if (c.nextEpisode != null)
-                    GlassIconButton(
-                      icon: Icons.skip_next_rounded,
-                      label: 'Next episode',
-                      onPressed: c.playNext,
-                    ),
                 ],
               ),
               const Spacer(),
@@ -535,25 +523,33 @@ class _Controls extends StatelessWidget {
               const SizedBox(height: KSpace.x2),
               Row(
                 children: [
-                  if (req.isEpisode)
-                    GlassButton(
-                      label: 'Episodes',
+                  if (req.isEpisode) ...[
+                    GlassIconButton(
                       icon: Icons.video_library_rounded,
+                      label: 'Episodes',
                       onPressed: () => onPanel(_Panel.episodes),
                     ),
-                  const SizedBox(width: KSpace.x2),
-                  GlassButton(
-                    label: 'Audio and subtitles',
+                    const SizedBox(width: KSpace.x2),
+                  ],
+                  GlassIconButton(
                     icon: Icons.subtitles_rounded,
+                    label: 'Audio and subtitles',
                     onPressed: () => onPanel(_Panel.tracks),
                   ),
                   const SizedBox(width: KSpace.x2),
-                  GlassButton(
-                    label: c.rate == 1 ? 'Speed' : '${c.rate}×',
-                    icon: Icons.speed_rounded,
-                    onPressed: () => onPanel(_Panel.speed),
-                  ),
-                  const Spacer(),
+                  if (c.rate == 1)
+                    GlassIconButton(
+                      icon: Icons.speed_rounded,
+                      label: 'Playback speed',
+                      onPressed: () => onPanel(_Panel.speed),
+                    )
+                  else
+                    GlassButton(
+                      label: '${c.rate}×',
+                      semanticLabel: 'Playback speed ${c.rate} times',
+                      onPressed: () => onPanel(_Panel.speed),
+                    ),
+                  const SizedBox(width: KSpace.x2),
                   GlassIconButton(
                     icon: fill
                         ? Icons.fit_screen_rounded
@@ -561,15 +557,16 @@ class _Controls extends StatelessWidget {
                     label: fill ? 'Fit to screen' : 'Fill screen',
                     onPressed: onFill,
                   ),
-                  if (c.nextEpisode != null) ...[
-                    const SizedBox(width: KSpace.x2),
-                    GlassButton(
-                      label: 'Next episode',
-                      icon: Icons.skip_next_rounded,
-                      prominent: true,
-                      onPressed: c.playNext,
+                  const Spacer(),
+                  if (c.nextEpisode != null)
+                    Flexible(
+                      child: GlassButton(
+                        label: 'Next episode',
+                        icon: Icons.skip_next_rounded,
+                        prominent: true,
+                        onPressed: c.playNext,
+                      ),
                     ),
-                  ],
                 ],
               ),
             ],
