@@ -232,6 +232,18 @@ void main() {
             .isNotEmpty,
         timeout: const Duration(seconds: 5),
         reason: 'volume swipe ($round)',
+        // What a finger at the swipe's start lands on, top first.
+        state: () => tester
+            .hitTestOnBinding(
+              Offset(
+                screen.left + screen.width * 0.8,
+                screen.top + screen.height * 0.6,
+              ),
+            )
+            .path
+            .take(12)
+            .map((e) => e.target.runtimeType)
+            .join(' < '),
       );
       await swipe(0.2);
       await pumpUntil(

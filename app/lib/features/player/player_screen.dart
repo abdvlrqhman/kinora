@@ -93,6 +93,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ]),
     );
     _scheduleHide();
+    unawaited(_readLevels());
     _pipSub = Pip.instance.changes.listen((v) {
       if (mounted) setState(() => _inPip = v);
     });
@@ -233,14 +234,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _swiping = false;
   Offset _travel = Offset.zero;
 
-  /// The brightness or volume being set (null until it's been read).
+  /// The brightness or volume being set.
   double? _level;
+
+  /// Last known levels, read when the player opens and refreshed at each
+  /// gesture, so a swipe never waits on the platform before it responds.
+  double? _brightnessNow, _volumeNow;
+
+  Future<void> _readLevels() async {
+    try {
+      _brightnessNow = await ScreenBrightness.instance.application;
+      _volumeNow = await VolumeController.instance.getVolume();
+    } on Object {
+      // Unknown: swipes start from the middle.
+    }
+  }
 
   /// Shown on the side being adjusted while swiping.
   ({bool brightness, double value})? _levelShown;
   Timer? _levelHide;
 
   void _gestureStart(ScaleStartDetails d, double width) {
+    if (!_swiping) unawaited(_readLevels()); // changed with the buttons?
     _fingers = d.pointerCount;
     _zoomStart = _zoom;
     _swipeLeftSide = d.localFocalPoint.dx < width / 2;
@@ -262,15 +277,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (!_swiping) {
       if (!PlayerGestures.isVerticalSwipe(_travel.dx, _travel.dy)) return;
       _swiping = true;
-      _level = _swipeLeftSide
-          ? await ScreenBrightness.instance.application
-          : await VolumeController.instance.getVolume();
-      return;
+      _level = (_swipeLeftSide ? _brightnessNow : _volumeNow) ?? 0.5;
     }
-    final from = _level;
-    if (from == null) return; // still reading the current level
-    final next = PlayerGestures.level(from, d.focalPointDelta.dy, height);
+    final next = PlayerGestures.level(_level!, d.focalPointDelta.dy, height);
     _level = next;
+    if (_swipeLeftSide) {
+      _brightnessNow = next;
+    } else {
+      _volumeNow = next;
+    }
     _levelHide?.cancel();
     setState(() => _levelShown = (brightness: _swipeLeftSide, value: next));
     if (_swipeLeftSide) {
