@@ -1021,62 +1021,67 @@ class _UpNextState extends State<_UpNext> with SingleTickerProviderStateMixin {
           child: Glass(
             radius: KRadius.sheet,
             padding: const EdgeInsets.all(KSpace.x4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 112,
-                      child: Artwork(
-                        url: next.still,
-                        radius: KRadius.still,
-                        aspectRatio: 16 / 9,
-                        memCacheWidth: decodeWidth(context, 112),
-                      ),
-                    ),
-                    const SizedBox(width: KSpace.x3),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Up next  S${next.season} E${next.episode}',
-                            style: KType.tabular(KType.small),
-                          ),
-                          Text(
-                            name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textDirection: contentDir(name),
-                            style: KType.title,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: KSpace.x3),
-                GlassGroup(
-                  child: Wrap(
-                    spacing: KSpace.x2,
-                    runSpacing: KSpace.x2,
+            // Scrolls instead of overflowing when space shrinks (rotation
+            // back to portrait as the player closes, very large text).
+            child: SingleChildScrollView(
+              primary: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _CountdownButton(
-                        seconds: counting ? _left : null,
-                        drain: _drain,
-                        onPressed: widget.controller.playNext,
+                      SizedBox(
+                        width: 112,
+                        child: Artwork(
+                          url: next.still,
+                          radius: KRadius.still,
+                          aspectRatio: 16 / 9,
+                          memCacheWidth: decodeWidth(context, 112),
+                        ),
                       ),
-                      GlassButton(
-                        label: 'Keep watching',
-                        onPressed: _keepWatching,
+                      const SizedBox(width: KSpace.x3),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Up next  S${next.season} E${next.episode}',
+                              style: KType.tabular(KType.small),
+                            ),
+                            Text(
+                              name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textDirection: contentDir(name),
+                              style: KType.title,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: KSpace.x3),
+                  GlassGroup(
+                    child: Wrap(
+                      spacing: KSpace.x2,
+                      runSpacing: KSpace.x2,
+                      children: [
+                        _CountdownButton(
+                          seconds: counting ? _left : null,
+                          drain: _drain,
+                          onPressed: widget.controller.playNext,
+                        ),
+                        GlassButton(
+                          label: 'Keep watching',
+                          onPressed: _keepWatching,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
