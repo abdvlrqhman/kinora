@@ -9,8 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/log.dart';
 
 /// Kinora's releases: the public GitHub API, no account or key.
-const _latest =
-    'https://api.github.com/repos/abdvlrqhman/kinora/releases/latest';
+const _releases =
+    'https://api.github.com/repos/abdvlrqhman/kinora/releases?per_page=30';
 
 /// A newer Kinora on GitHub.
 final class KinoraRelease {
@@ -43,7 +43,12 @@ final class KinoraRelease {
   static KinoraRelease? fromJson(Map<String, Object?> j) {
     final tag = j['tag_name'];
     final page = Uri.tryParse(j['html_url'] as String? ?? '');
-    if (tag is! String || page == null || j['draft'] == true) return null;
+    if (tag is! String ||
+        page == null ||
+        j['draft'] == true ||
+        j['prerelease'] == true) {
+      return null;
+    }
     return KinoraRelease(
       version: tag.startsWith('v') ? tag.substring(1) : tag,
       page: page,
@@ -75,24 +80,52 @@ bool isNewer(String candidate, String current) {
 }
 
 /// The newest release when it's newer than [current], else null (also
-/// when GitHub can't be reached: updates are never in the way).
+/// when GitHub can't be reached: updates are never in the way). Its notes
+/// cover every release since [current], so skipping versions loses no news.
 Future<KinoraRelease?> newerRelease(http.Client client, String current) async {
   try {
     final res = await client
         .get(
-          Uri.parse(_latest),
+          Uri.parse(_releases),
           headers: {'accept': 'application/vnd.github+json'},
         )
         .timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) return null;
-    final r = KinoraRelease.fromJson(
-      jsonDecode(res.body) as Map<String, Object?>,
+    final newer = [
+      for (final j in (jsonDecode(
+        res.body,
+      ) as List<Object?>).whereType<Map<String, Object?>>())
+        if (KinoraRelease.fromJson(j) case final r?
+            when isNewer(r.version, current))
+          r,
+    ]..sort((a, b) => isNewer(a.version, b.version) ? 1 : -1);
+    if (newer.isEmpty) return null;
+    final latest = newer.last;
+    return KinoraRelease(
+      version: latest.version,
+      page: latest.page,
+      assets: latest.assets,
+      notes: mergedNotes(newer),
     );
-    return r != null && isNewer(r.version, current) ? r : null;
   } on Object catch (e) {
     Log.d('updates', 'check: $e');
     return null;
   }
+}
+
+/// The notes of [releases] (oldest first) as one changelog; a change two
+/// releases both list (their "### " titles match) shows once.
+String mergedNotes(List<KinoraRelease> releases) {
+  final seen = <String>{};
+  final out = StringBuffer();
+  for (final r in releases) {
+    for (final part in r.notes.split(RegExp(r'^(?=### )', multiLine: true))) {
+      final text = part.trim();
+      if (text.isEmpty || !seen.add(text.split('\n').first.trim())) continue;
+      out.write('$text\n\n');
+    }
+  }
+  return out.toString().trim();
 }
 
 /// Android: downloads the APK (reporting 0..1) and opens it, which shows

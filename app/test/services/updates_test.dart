@@ -53,7 +53,7 @@ void main() {
 
   test('only a newer release is offered, and offline means quiet', () async {
     MockClient answering(Map<String, Object?> j) =>
-        MockClient((_) async => http.Response(jsonEncode(j), 200));
+        MockClient((_) async => http.Response(jsonEncode([j]), 200));
     expect(
       (await newerRelease(answering(_release('v0.1.8')), '0.1.7'))?.version,
       '0.1.8',
@@ -63,6 +63,39 @@ void main() {
     expect(await newerRelease(offline, '0.1.7'), isNull);
     final limited = MockClient((_) async => http.Response('{}', 403));
     expect(await newerRelease(limited, '0.1.7'), isNull);
+  });
+
+  test('skipped versions keep their news; pre-releases are left out', () async {
+    Map<String, Object?> at(String tag, String body, {bool pre = false}) => {
+      ..._release(tag),
+      'body': body,
+      'prerelease': pre,
+    };
+    final client = MockClient(
+      (_) async => http.Response(
+        jsonEncode([
+          at('v0.1.11', '### Kinora 0.1.11: next\n\nC\n'),
+          // Edited to repeat the one before: shown once.
+          at(
+            'v0.1.10',
+            '### Kinora 0.1.9: cast\n\nA\n\n### Kinora 0.1.10: version\n\nB\n',
+          ),
+          at('v0.1.9', '### Kinora 0.1.9: cast\n\nA\n', pre: true),
+          at('v0.1.8', '### Kinora 0.1.8: old\n\nZ\n'),
+        ]),
+        200,
+      ),
+    );
+    final r = (await newerRelease(client, '0.1.8'))!;
+    expect(r.version, '0.1.11');
+    expect(r.ipa.toString(), endsWith('/v0.1.11/Kinora.ipa'));
+    expect(
+      r.notes,
+      '### Kinora 0.1.9: cast\n\nA\n\n'
+      '### Kinora 0.1.10: version\n\nB\n\n'
+      '### Kinora 0.1.11: next\n\nC',
+    );
+    expect(await newerRelease(client, '0.1.11'), isNull);
   });
 
   test('changelog lines wrapped by the commit are joined back', () {
