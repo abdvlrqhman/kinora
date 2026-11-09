@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/app/app.dart';
+import 'package:kinora/app/intro.dart';
 import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/settings.dart';
@@ -228,6 +229,34 @@ void main() {
   }
 
   // At rest: Continue watching clears the tab bar.
+  // Launch: the mark switching on, then the hold with Powered by Spacie.
+  testScreen('intro', (tester) async {
+    tester.view
+      ..physicalSize = const Size(390, 844) * 3
+      ..devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    IntroOverlay.debugReset();
+    await tester.pumpWidget(
+      const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: IntroOverlay(
+          child: Scaffold(body: Center(child: Text('app'))),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await expectLater(
+      find.byType(IntroOverlay),
+      matchesGoldenFile('screens/intro_lighting.png'),
+    );
+    await tester.pump(const Duration(milliseconds: 900));
+    await expectLater(
+      find.byType(IntroOverlay),
+      matchesGoldenFile('screens/intro.png'),
+    );
+    await tester.pumpAndSettle();
+  });
+
   testScreen('home', (tester) async {
     await pumpHome(tester);
     await expectLater(

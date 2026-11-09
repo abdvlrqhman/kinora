@@ -12,6 +12,10 @@ class IntroOverlay extends StatefulWidget {
 
   final Widget child;
 
+  /// Lets a test show it again (it shows once per launch).
+  @visibleForTesting
+  static void debugReset() => _IntroOverlayState._shown = false;
+
   @override
   State<IntroOverlay> createState() => _IntroOverlayState();
 }
