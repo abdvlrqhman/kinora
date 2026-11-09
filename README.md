@@ -26,7 +26,7 @@ days) or any re-signing tool you trust.
    Stremio-compatible addon you choose. Cinemeta (catalogs) and OpenSubtitles
    v3 (subtitles) are offered as one-tap suggestions.
 3. Optional: turn on subtitle sites (SubDL, SubSource, Wyzie, OpenSubtitles,
-   Jimaku, Podnapisi) with your own keys. Keys stay in the Keychain/Keystore.
+   Jimaku) with your own keys. Keys stay in the Keychain/Keystore.
 
 ## What it does
 

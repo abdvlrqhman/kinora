@@ -75,13 +75,6 @@ const subtitleProviderCatalog = [
     keyLabel: 'API key',
     keyHelp: 'jimaku.cc › Account',
   ),
-  ProviderInfo(
-    id: 'podnapisi',
-    name: 'Podnapisi',
-    description: 'Public archive, no key needed.',
-    keyLabel: '',
-    needsKey: false,
-  ),
 ];
 
 /// Maps Kinora's parsed release to the subtitles package's view of it.
@@ -128,7 +121,8 @@ final subtitleProvidersProvider = FutureProvider<List<SubtitleProvider>>((
         client: http,
       ),
       'jimaku' => JimakuProvider(apiKey: c.apiKey, client: http),
-      _ => PodnapisiProvider(client: http),
+      // Podnapisi's site is offline (2026); its client stays in the package.
+      _ => throw StateError('unknown provider $id'),
     });
   }
   final addons = await ref.watch(enabledAddonsProvider.future);
