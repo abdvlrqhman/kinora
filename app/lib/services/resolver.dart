@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ranking/ranking.dart';
 import 'package:release_parser/release_parser.dart';
@@ -173,6 +174,16 @@ final subtitleFitProvider =
           (video, releaseNames) async => const {},
     );
 
+/// True on mobile data (ranking then prefers smaller files).
+final onCellularProvider = StreamProvider<bool>(
+  (ref) => Connectivity().onConnectivityChanged.map(
+    (r) =>
+        r.contains(ConnectivityResult.mobile) &&
+        !r.contains(ConnectivityResult.wifi) &&
+        !r.contains(ConnectivityResult.ethernet),
+  ),
+);
+
 /// Live seeders/leechers for info-hashes (BEP 15 UDP scrape, ~2.5 s).
 typedef SwarmLookup = Future<Map<String, SwarmStats>> Function(
   List<String> infoHashes,
@@ -341,7 +352,8 @@ final resolveProvider = FutureProvider.autoDispose
         castTarget: ref.read(castTargetCapsProvider),
         bandwidthBytesPerSec: ref.read(bandwidthEstimateProvider),
         runtimeMinutes: video.runtimeMinutes,
-        dataSaver: settings.dataSaver,
+        dataSaver:
+            settings.dataSaver || (ref.read(onCellularProvider).value ?? false),
       );
       final ranked = rank(
         candidates,
