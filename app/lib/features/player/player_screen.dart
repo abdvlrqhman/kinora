@@ -402,7 +402,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                               )
                             : _Controls(
                                 controller: c,
-                                status: _Status(controller: c, flash: _flash),
+                                // Buffering shows as the Play ring and the
+                                // top-bar chip here: one pill at most.
+                                status: _Status(
+                                  controller: c,
+                                  flash: _flash,
+                                  buffering: false,
+                                ),
                                 onSeekBy: _seekBy,
                                 fill: _fill,
                                 onBack: () => Navigator.of(context).maybePop(),
@@ -448,7 +454,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     if (c.inCredits &&
                         !c.upNextDismissed &&
                         _panel == _Panel.none)
-                      _UpNext(controller: c),
+                      // Under the controls it would cover Play and +10; the
+                      // bar has Next episode then. Kept, so it resumes.
+                      Offstage(
+                        offstage: _controls && !_locked,
+                        child: _UpNext(
+                          controller: c,
+                          paused: _controls && !_locked,
+                        ),
+                      ),
                   ],
                   if (_panel != _Panel.none)
                     GestureDetector(
@@ -595,7 +609,8 @@ class _Controls extends StatelessWidget {
                       ),
                     ),
                     if (c.engineStats case final es?
-                        when es.size > 0 && es.have >= es.size)
+                        when (es.size > 0 && es.have >= es.size) ||
+                            c.player.state.buffering)
                       _EngineChip(controller: c),
                     const SizedBox(width: KSpace.x2),
                     GlassIconButton(
@@ -636,16 +651,22 @@ class _Controls extends StatelessWidget {
                           size: 56,
                         ),
                         const SizedBox(width: KSpace.section),
-                        GlassIconButton(
-                          icon: playing
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          label: playing ? 'Pause' : 'Play',
-                          onPressed: () {
-                            onInteract();
-                            c.player.playOrPause();
-                          },
-                          size: 76,
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            _BufferRing(controller: c),
+                            GlassIconButton(
+                              icon: playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              label: playing ? 'Pause' : 'Play',
+                              onPressed: () {
+                                onInteract();
+                                c.player.playOrPause();
+                              },
+                              size: 76,
+                            ),
+                          ],
                         ),
                         const SizedBox(width: KSpace.section),
                         GlassIconButton(
@@ -817,6 +838,34 @@ class _LevelIndicator extends StatelessWidget {
   }
 }
 
+/// Around the Play button while buffering (controls up): how close the
+/// stream is to playing on.
+class _BufferRing extends StatelessWidget {
+  const _BufferRing({required this.controller});
+  final PlayerController controller;
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<bool>(
+    stream: controller.player.stream.buffering,
+    initialData: controller.player.state.buffering,
+    builder: (context, snap) {
+      if (snap.data != true) return const SizedBox.shrink();
+      final ready = controller.engineStats?.ready;
+      return IgnorePointer(
+        child: SizedBox.square(
+          dimension: 86,
+          child: CircularProgressIndicator(
+            value: ready == null ? null : ready / 100,
+            strokeWidth: 3,
+            color: KColors.lamp,
+            backgroundColor: const Color(0x33F5EEE4),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class _EngineChip extends StatelessWidget {
   const _EngineChip({required this.controller});
   final PlayerController controller;
@@ -825,9 +874,13 @@ class _EngineChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = controller.engineStats!;
     final done = s.size > 0 && s.have >= s.size;
+    final waiting = !done && controller.player.state.buffering;
     return Semantics(
+      liveRegion: waiting,
       label: done
           ? 'Fully downloaded'
+          : waiting
+          ? 'Buffering ${s.ready}%, ${s.peers} peers, ${Fmt.speed(s.rate)}'
           : '${s.peers} peers, ${Fmt.speed(s.rate)}',
       excludeSemantics: true,
       child: Glass(
@@ -835,6 +888,8 @@ class _EngineChip extends StatelessWidget {
         child: Text(
           done
               ? 'Saved on this device'
+              : waiting
+              ? 'Buffering ${s.ready}%  ${s.peers} peers  ${Fmt.speed(s.rate)}'
               : '${s.peers} peers  ${Fmt.speed(s.rate)}',
           style: KType.tabular(
             KType.small.copyWith(color: done ? KColors.go : KColors.lamp),
@@ -881,15 +936,20 @@ class _FlashLabel extends StatelessWidget {
 /// "Buffering" pill when playback stalls mid-way.
 /// Buffering and the latest seek/volume/brightness feedback, stacked.
 class _Status extends StatelessWidget {
-  const _Status({required this.controller, required this.flash});
+  const _Status({
+    required this.controller,
+    required this.flash,
+    this.buffering = true,
+  });
   final PlayerController controller;
   final String? flash;
+  final bool buffering;
 
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      _BufferingHint(controller: controller),
+      if (buffering) _BufferingHint(controller: controller),
       if (flash != null) ...[
         const SizedBox(height: KSpace.x2),
         _FlashLabel(text: flash!),
@@ -970,8 +1030,9 @@ class _PrepareView extends StatelessWidget {
         ),
         const LegibilityScrim(stops: [0, 1]),
         FillOrScroll(
+          // Same edges as the controls, so Back doesn't jump at playback.
           padding: EdgeInsets.fromLTRB(
-            pad.left + KSpace.margin * 2,
+            pad.left + KSpace.margin,
             pad.top + KSpace.x3,
             pad.right + KSpace.margin,
             pad.bottom + KSpace.margin,
@@ -1006,7 +1067,7 @@ class _PrepareView extends StatelessWidget {
                   liveRegion: true,
                   child: Text(
                     c.prepareNote!,
-                    style: KType.body.copyWith(color: KColors.marquee),
+                    style: KType.body.copyWith(color: KColors.caution),
                   ),
                 ),
                 const SizedBox(height: KSpace.x2),
@@ -1150,8 +1211,11 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
 /// Up Next near the credits: counts down inside its Play button (whose
 /// fill drains over 10 s), then plays the next episode.
 class _UpNext extends StatefulWidget {
-  const _UpNext({required this.controller});
+  const _UpNext({required this.controller, this.paused = false});
   final PlayerController controller;
+
+  /// Hidden behind the controls: the countdown waits.
+  final bool paused;
 
   @override
   State<_UpNext> createState() => _UpNextState();
@@ -1173,15 +1237,32 @@ class _UpNextState extends State<_UpNext> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    if (_counting) {
-      _t = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (!mounted) return;
-        setState(() => _left--);
-        if (_left <= 0) {
-          t.cancel();
-          unawaited(widget.controller.playNext());
-        }
-      });
+    if (_counting && !widget.paused) _run();
+  }
+
+  void _run() {
+    _t?.cancel();
+    _t = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() => _left--);
+      if (_left <= 0) {
+        t.cancel();
+        unawaited(widget.controller.playNext());
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(_UpNext old) {
+    super.didUpdateWidget(old);
+    if (old.paused == widget.paused || !_counting || _left <= 0) return;
+    if (widget.paused) {
+      _t?.cancel();
+      _drain.stop();
+    } else if (!widget.controller.upNextDismissed) {
+      _run();
+      final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+      if (!reduce) unawaited(_drain.reverse(from: _left / _seconds));
     }
   }
 

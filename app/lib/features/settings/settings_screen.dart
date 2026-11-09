@@ -118,7 +118,7 @@ class SettingsScreen extends ConsumerWidget {
         const SectionTitle('Help'),
         NavRow(
           label: 'Diagnostics',
-          value: 'Versions and recent log',
+          value: 'App version and recent log',
           onTap: () => go('diagnostics'),
         ),
         NavRow(

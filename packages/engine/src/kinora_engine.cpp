@@ -1324,6 +1324,9 @@ char* kn_add(kn_session* s, const uint8_t* params, int32_t params_len) {
     if (int_of(p, "paused", 0)) atp.flags |= lt::torrent_flags::paused;
     if (int_of(p, "seed_mode", 0)) atp.flags |= lt::torrent_flags::seed_mode;
     if (int_of(p, "sequential", 0)) atp.flags |= lt::torrent_flags::sequential_download;
+    // With priorities given, files past the list (packs bigger than it)
+    // stay off too, not "normal".
+    if (!atp.file_priorities.empty()) atp.flags |= lt::torrent_flags::default_dont_download;
     std::int64_t max_conn = int_of(p, "max_connections", -1);
     if (max_conn > 0) atp.max_connections = static_cast<int>(max_conn);
     std::int64_t dl = int_of(p, "download_limit", -1);
@@ -1649,7 +1652,10 @@ char* kn_stream_stats(kn_session* s, const char* token) {
       std::int64_t p = abs / plen;
       while (p < static_cast<std::int64_t>(t->have.size()) && p * plen < file_end && t->have[static_cast<std::size_t>(p)]) ++p;
       std::int64_t ahead = std::max<std::int64_t>(0, std::min(p * plen, file_end) - abs);
-      if (p * plen < file_end && p < static_cast<std::int64_t>(t->have.size())) {
+      // Only while short of data: the query waits on libtorrent's thread
+      // and is called from the UI thread every second.
+      if (ahead < (std::int64_t{8} << 20) && p * plen < file_end &&
+          p < static_cast<std::int64_t>(t->have.size())) {
         frontier = p;
         h = t->handle;
       }

@@ -68,7 +68,7 @@ String addonProvides(Addon addon) {
   }
   final ms = h.lastLatency?.inMilliseconds ?? 0;
   final secs = (ms / 1000).toStringAsFixed(1);
-  if (ms >= 3000) return ('Slow, answers in $secs s', KColors.marquee);
+  if (ms >= 3000) return ('Slow, answers in $secs s', KColors.caution);
   return ('Healthy, answers in $secs s', KColors.go);
 }
 

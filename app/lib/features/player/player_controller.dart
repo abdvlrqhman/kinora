@@ -73,6 +73,22 @@ class PlayerController extends ChangeNotifier {
       player.stream.position.listen(_onPosition),
     ];
     _castSub = _ref.listen(castServiceProvider, (_, _) {});
+    // Languages or subtitle sites changed (in the player's panel or
+    // anywhere else): look again once the changes settle.
+    _subtitleSettingsSub = _ref.listen(
+      settingsProvider.select(
+        (s) =>
+            '${s.subtitleLanguages.join(',')}|'
+            '${s.enabledSubtitleProviders.join(',')}',
+      ),
+      (_, _) {
+        _subtitleSearchAgain?.cancel();
+        _subtitleSearchAgain = Timer(
+          const Duration(milliseconds: 900),
+          () => unawaited(searchSubtitlesAgain()),
+        );
+      },
+    );
     _ref.read(castServiceProvider).addListener(_onCast);
     _pipSub = Pip.instance.changes.listen(_onPip);
     _lifecycle = AppLifecycleListener(onHide: _onHide);
@@ -351,11 +367,16 @@ class PlayerController extends ChangeNotifier {
       final began = DateTime.now();
       _progressAt = began;
       _bytesSeen = -1;
+      // Only torrents report bytes arriving; links and files keep a plain
+      // 75 s limit.
+      final measured = src.kind == PlaybackKind.torrent;
       _startWatchdog = Timer.periodic(const Duration(seconds: 5), (t) {
         if (gen != _generation || _started) return t.cancel();
         final now = DateTime.now();
-        if (now.difference(_progressAt) > const Duration(seconds: 60) ||
-            now.difference(began) > const Duration(minutes: 4)) {
+        final stalled = measured
+            ? now.difference(_progressAt) > const Duration(seconds: 60)
+            : now.difference(began) > const Duration(seconds: 75);
+        if (stalled || now.difference(began) > const Duration(minutes: 4)) {
           t.cancel();
           unawaited(_failStart());
         }
@@ -528,10 +549,12 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  /// Looks for subtitles again after sites or languages changed in the
-  /// player.
+  ProviderSubscription<String>? _subtitleSettingsSub;
+  Timer? _subtitleSearchAgain;
+
+  /// Looks for subtitles again (sites or languages changed).
   Future<void> searchSubtitlesAgain() async {
-    if (_disposed) return;
+    if (_disposed || phase != PlayerPhase.playing) return;
     subtitleSearch = SubtitleSearch.searching;
     subtitleNote = null;
     notifyListeners();
@@ -1358,6 +1381,8 @@ class PlayerController extends ChangeNotifier {
     unawaited(_noisySub?.cancel());
     _ref.read(castServiceProvider).removeListener(_onCast);
     _castSub?.close();
+    _subtitleSettingsSub?.close();
+    _subtitleSearchAgain?.cancel();
     _cancelPrepare?.complete();
     _saveTimer?.cancel();
     _statusTimer?.cancel();

@@ -119,7 +119,7 @@ DownloadStatus downloadStatus(DownloadRow r, {double? rate}) {
     'paused' when r.error == waitingForWifi => (
       strong: waitingForWifi,
       soft: sizes,
-      color: KColors.marquee,
+      color: KColors.caution,
       progress: null,
     ),
     'paused' => (
@@ -575,7 +575,7 @@ class _Trailing extends StatelessWidget {
       'failed' => (Icons.refresh_rounded, 'Try again', onToggle),
       // Waiting for Wi-Fi: asks before using mobile data.
       _ when _waiting(row) => (
-        Icons.wifi_rounded,
+        Icons.network_cell_rounded,
         'Download options',
         onToggle,
       ),

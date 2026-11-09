@@ -114,10 +114,8 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
   /// Settings stay inside the player; closing them searches again.
   Widget _fixPanel(SubtitleFix fix) => SidePanel(
     title: fix == SubtitleFix.sites ? 'Subtitle sites' : 'Languages',
-    onClose: () {
-      setState(() => _fixing = null);
-      unawaited(widget.controller.searchSubtitlesAgain());
-    },
+    // The controller searches again by itself when these settings change.
+    onClose: () => setState(() => _fixing = null),
     child: ListView(
       padding: const EdgeInsets.only(bottom: KSpace.x4),
       children: fix == SubtitleFix.sites

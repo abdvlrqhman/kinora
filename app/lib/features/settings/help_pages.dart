@@ -210,7 +210,7 @@ class _LogLineRow extends StatelessWidget {
     final time = '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
     final color = switch (line.level) {
       LogLevel.error => KColors.cut,
-      LogLevel.warn => KColors.marquee,
+      LogLevel.warn => KColors.caution,
       _ => KColors.haze,
     };
     final level = switch (line.level) {

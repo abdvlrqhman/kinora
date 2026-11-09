@@ -345,11 +345,13 @@ final tmdbKeyProvider = FutureProvider<String?>((ref) async {
 /// TMDB's details for a title; null without a key, for non-IMDb ids, when
 /// TMDB doesn't know it, or when it can't be reached (the page works
 /// without it).
-final tmdbTitleProvider =
-    FutureProvider.family<TmdbTitle?, ({String type, String id})>((
-      ref,
-      key,
-    ) async {
+final tmdbTitleProvider = FutureProvider.autoDispose
+    .family<TmdbTitle?, ({String type, String id})>((ref, key) async {
+      // Kept 5 minutes after the last screen using it (back and forth
+      // between titles), not for the whole session.
+      final link = ref.keepAlive();
+      final timer = Timer(const Duration(minutes: 5), link.close);
+      ref.onDispose(timer.cancel);
       final apiKey = await ref.watch(tmdbKeyProvider.future);
       final imdb = key.id.split(':').first;
       if (apiKey == null || !imdb.startsWith('tt')) return null;

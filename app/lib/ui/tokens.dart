@@ -23,6 +23,10 @@ abstract final class KColors {
   /// marquee light (Blackout labels read on it at 8:1).
   static const marquee = Color(0xFFB48CFF);
 
+  /// Caution: warnings and things that need attention (amber), never the
+  /// brand color, so a warning can't read as selected or lit.
+  static const caution = Color(0xFFFFC15E);
+
   /// Ready / downloaded / best match.
   static const go = Color(0xFF7EE2B8);
 

@@ -38,7 +38,9 @@ Future<T?> showGlassSheet<T>(
             // highlighted row.
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: KColors.seat.withValues(alpha: 0.6),
+                // Opaque: a lit button behind would glow through like a
+                // selected row.
+                color: KColors.seat,
                 borderRadius: BorderRadius.circular(KRadius.sheet),
               ),
               child: GlassGroup(

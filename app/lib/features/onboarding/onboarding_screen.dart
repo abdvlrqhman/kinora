@@ -422,7 +422,7 @@ class _Done extends ConsumerWidget {
           fact(
             Icons.hub_outlined,
             'No sources yet. Add one in Settings to see movies and shows.',
-            color: KColors.marquee,
+            color: KColors.caution,
           )
         else ...[
           fact(
@@ -435,7 +435,7 @@ class _Done extends ConsumerWidget {
             fact(
               Icons.play_disabled_rounded,
               'Nothing will play yet: add a source that provides streams.',
-              color: KColors.marquee,
+              color: KColors.caution,
             ),
             Padding(
               padding: const EdgeInsets.only(bottom: KSpace.x3),

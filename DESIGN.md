@@ -24,6 +24,7 @@ it. That is the one bold thing. Everything else stays quiet.
 | Reel | `#77707A` | Tertiary text, disabled. |
 | Spill | dynamic | Accent extracted from the current title's artwork (vivid, contrast-checked against Lamp). |
 | Marquee | `#B48CFF` | Brand accent (icon, intro) and the fallback when there's no artwork: violet marquee light. |
+| Caution | `#FFC15E` | Warnings and things that need attention (few seeds, waiting for Wi-Fi, can't play on the TV). Never the brand color, so a warning can't read as selected. |
 | Go | `#7EE2B8` | Ready / downloaded / best match. |
 | Cut | `#FF6B6B` | Errors and destructive actions. |
 

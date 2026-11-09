@@ -185,7 +185,9 @@ final class EngineService {
 
   void _applyPriorities(String infoHash) {
     final e = _engine;
-    if (e == null || e.status(infoHash) == null) return;
+    // Not status(): it's empty for a fresh magnet until metadata or the
+    // first status update, exactly when the early priorities matter.
+    if (e == null) return;
     final files = e.files(infoHash);
     final wanted = {
       for (final i in _claims[infoHash]?.values ?? const <int>[]) i,
@@ -195,8 +197,9 @@ final class EngineService {
       // them for when the file list arrives): otherwise the torrent looks
       // finished for a moment once metadata is in, and seeds drop a peer
       // that says it wants nothing.
+      // Nothing claimed (metadata only, or released): all off. Files past
+      // the list stay off as well (the engine adds magnets that way).
       final top = wanted.fold(-1, (a, b) => b > a ? b : a);
-      if (top < 0) return; // metadata only: everything stays off
       Log.d('engine', 'priorities ${_short(infoHash)}: files $wanted, early');
       try {
         e.setFilePriorities(infoHash, [

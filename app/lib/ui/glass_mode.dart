@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart'
+    show AppLifecycleListener, AppLifecycleState;
 import 'package:flutter/services.dart';
 
 import '../core/db/database.dart';
@@ -37,6 +39,21 @@ Future<void> decideGlass(
 }) async {
   realGlass = false;
   glassFailed = false;
+  try {
+    await _decide(db, vulkan: vulkan, shaderFilters: shaderFilters);
+  } on Object catch (e) {
+    // Never keep Kinora from opening (a full disk fails the write).
+    Log.w('glass', 'check failed: $e');
+    realGlass = false;
+    glassReason = 'Frosted: the glass check couldn’t run';
+  }
+}
+
+Future<void> _decide(
+  AppDatabase db, {
+  Future<bool> Function()? vulkan,
+  bool? shaderFilters,
+}) async {
   if (kForceFakeGlass) {
     glassReason = 'Frosted (set by the build)';
     return;
@@ -56,10 +73,29 @@ Future<void> decideGlass(
     glassReason = 'Frosted: this phone draws without Vulkan';
     return;
   }
-  await _write(db, 'pending');
   realGlass = true;
   glassReason = 'Liquid glass';
-  _confirmFrames(db);
+  await _probeWhenVisible(db);
+}
+
+/// The probe starts once Kinora is on screen: a launch in the background
+/// (iOS waking it for downloads) draws nothing and mustn't count as a
+/// failure.
+Future<void> _probeWhenVisible(AppDatabase db) async {
+  Future<void> begin() async {
+    await _write(db, 'pending');
+    _confirmFrames(db);
+  }
+
+  final state = SchedulerBinding.instance.lifecycleState;
+  if (state == null || state == AppLifecycleState.resumed) return begin();
+  late final AppLifecycleListener listener;
+  listener = AppLifecycleListener(
+    onResume: () {
+      listener.dispose();
+      unawaited(begin().catchError((Object e) => Log.w('glass', '$e')));
+    },
+  );
 }
 
 /// Lets the next launch try liquid glass again.
@@ -87,7 +123,7 @@ void _confirmFrames(AppDatabase db) {
     }
     binding.removeTimingsCallback(onTimings);
     nudge?.cancel();
-    unawaited(_write(db, 'ok'));
+    unawaited(_write(db, 'ok').catchError((Object e) => Log.w('glass', '$e')));
   };
   binding.addTimingsCallback(onTimings);
   // A still screen draws nothing: ask for frames until one is reported.

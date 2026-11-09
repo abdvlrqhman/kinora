@@ -231,19 +231,10 @@ class FactLine extends StatelessWidget {
         if (meta.releaseInfo case final year? when year.isNotEmpty)
           Text(year, style: strong),
         if (certification != null)
-          DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.all(color: KColors.haze),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: Text(
-                certification!,
-                style: soft,
-                semanticsLabel: 'Rated $certification',
-              ),
-            ),
+          Text(
+            certification!,
+            style: soft.copyWith(fontWeight: FontWeight.w600),
+            semanticsLabel: 'Rated $certification',
           ),
         if (length != null) Text(length, style: soft),
         if (rating != null && rating.isNotEmpty)

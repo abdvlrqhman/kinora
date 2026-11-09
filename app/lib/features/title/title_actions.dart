@@ -137,7 +137,7 @@ class MyListAction extends ConsumerWidget {
       return (
         icon: Icons.wifi_rounded,
         label: waitingForWifi,
-        color: KColors.marquee,
+        color: KColors.caution,
       );
     case 'paused':
       return (icon: Icons.pause_rounded, label: 'Paused', color: KColors.haze);

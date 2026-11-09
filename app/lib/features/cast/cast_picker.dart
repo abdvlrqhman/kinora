@@ -423,7 +423,7 @@ class CastDeviceRow extends StatelessWidget {
                     Text(
                       n.text,
                       style: KType.label.copyWith(
-                        color: n.problem ? KColors.marquee : KColors.haze,
+                        color: n.problem ? KColors.caution : KColors.haze,
                       ),
                     ),
                 ],

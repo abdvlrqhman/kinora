@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../ui/tokens.dart';
@@ -36,18 +38,25 @@ class _IntroOverlayState extends State<IntroOverlay>
     super.initState();
     if (_done) return;
     _shown = true;
-    _c.forward().whenComplete(() {
-      if (mounted) setState(() => _done = true);
+    // A status listener, not forward()'s future: restarting the animation
+    // (skip, reduced motion) cancels that future, which then never ends.
+    _c.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _done = true);
+      }
     });
+    unawaited(_c.forward());
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Reduced motion: everything at once, a short hold, then a quick fade.
-    if (!_done && (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+    if (!_done &&
+        _c.value < 0.5 &&
+        (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
       _c.duration = const Duration(milliseconds: 1100);
-      if (_c.value < 0.8) _c.value = 0.5;
+      unawaited(_c.forward(from: 0.5));
     }
   }
 
@@ -58,7 +67,7 @@ class _IntroOverlayState extends State<IntroOverlay>
   }
 
   void _skip() {
-    if (_c.value < 0.8) _c.value = 0.8;
+    if (_c.value < 0.8) unawaited(_c.forward(from: 0.8));
   }
 
   /// [t] mapped onto [begin]..[end], eased.
@@ -67,76 +76,85 @@ class _IntroOverlayState extends State<IntroOverlay>
 
   @override
   Widget build(BuildContext context) {
-    if (_done) return widget.child;
+    // The app keeps its place in the tree when the intro goes (dropping the
+    // Stack would rebuild it from scratch).
     return Stack(
       fit: StackFit.expand,
       children: [
         widget.child,
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _skip,
-          child: AnimatedBuilder(
-            animation: _c,
-            builder: (context, _) {
-              final t = _c.value;
-              final words = _span(t, 0.30, 0.48, Curves.easeOutCubic);
-              final credit = _span(t, 0.40, 0.58, Curves.easeOutCubic);
-              return Opacity(
-                opacity: 1 - _span(t, 0.80, 1, Curves.easeInCubic),
-                child: Material(
-                  // Above the app's navigator: give the text a Material.
-                  color: KColors.seat,
-                  child: Semantics(
-                    label: 'Kinora. Powered by Spacie.',
-                    excludeSemantics: true,
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CustomPaint(
-                            size: const Size.square(132),
-                            painter: KinoraMark(
-                              lamp: _span(t, 0, 0.15),
-                              light: _span(t, 0.12, 0.40, Curves.easeOutCubic),
-                            ),
-                          ),
-                          const SizedBox(height: KSpace.x2),
-                          Opacity(
-                            opacity: words,
-                            child: Transform.translate(
-                              offset: Offset(0, 8 * (1 - words)),
-                              child: Text(
-                                'Kinora',
-                                style: KType.hero.copyWith(color: KColors.lamp),
+        if (!_done)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _skip,
+            child: AnimatedBuilder(
+              animation: _c,
+              builder: (context, _) {
+                final t = _c.value;
+                final words = _span(t, 0.30, 0.48, Curves.easeOutCubic);
+                final credit = _span(t, 0.40, 0.58, Curves.easeOutCubic);
+                return Opacity(
+                  opacity: 1 - _span(t, 0.80, 1, Curves.easeInCubic),
+                  child: Material(
+                    // Above the app's navigator: give the text a Material.
+                    color: KColors.seat,
+                    child: Semantics(
+                      label: 'Kinora. Powered by Spacie.',
+                      excludeSemantics: true,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CustomPaint(
+                              size: const Size.square(132),
+                              painter: KinoraMark(
+                                lamp: _span(t, 0, 0.15),
+                                light: _span(
+                                  t,
+                                  0.12,
+                                  0.40,
+                                  Curves.easeOutCubic,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: KSpace.x4),
-                          Opacity(
-                            opacity: credit,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'Powered by',
-                                  style: KType.label.copyWith(
-                                    color: KColors.haze,
+                            const SizedBox(height: KSpace.x2),
+                            Opacity(
+                              opacity: words,
+                              child: Transform.translate(
+                                offset: Offset(0, 8 * (1 - words)),
+                                child: Text(
+                                  'Kinora',
+                                  style: KType.hero.copyWith(
+                                    color: KColors.lamp,
                                   ),
                                 ),
-                                const SizedBox(width: KSpace.x2),
-                                const SpacieLogo(size: 30),
-                              ],
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: KSpace.x4),
+                            Opacity(
+                              opacity: credit,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Powered by',
+                                    style: KType.label.copyWith(
+                                      color: KColors.haze,
+                                    ),
+                                  ),
+                                  const SizedBox(width: KSpace.x2),
+                                  const SpacieLogo(size: 30),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }

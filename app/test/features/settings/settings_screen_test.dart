@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinora/app/providers.dart' show kinoraVersion;
 import 'package:kinora/core/log.dart';
 import 'package:kinora/core/secure_keys.dart';
 import 'package:kinora/core/settings.dart';
@@ -221,7 +222,7 @@ void main() {
     await SecureKeys(kit.storage)
         .write('subdl', const ProviderCredentials(apiKey: 'MYSUBDLKEY'));
     await tester.pumpAndSettle();
-    expect(find.text('0.1.0'), findsOneWidget);
+    expect(find.text(kinoraVersion), findsOneWidget);
     expect(find.text('Not available on this device'), findsOneWidget);
     expect(find.text('Played Harbor Lights'), findsOneWidget);
     expect(find.textContaining('SECRETKEY99'), findsNothing);
@@ -233,7 +234,7 @@ void main() {
     Log.i('test', 'key in a log by mistake: MYSUBDLKEY');
     await tester.tap(find.text('Copy diagnostics'));
     await tester.pumpAndSettle();
-    expect(copied, contains('Kinora 0.1.0'));
+    expect(copied, contains('Kinora $kinoraVersion'));
     expect(copied, contains('Played Harbor Lights'));
     expect(copied, isNot(contains('SECRETKEY99')));
     expect(copied, isNot(contains('MYSUBDLKEY')));

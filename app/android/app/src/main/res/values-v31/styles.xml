@@ -4,6 +4,8 @@
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">@color/kinora_seat</item>
+        <!-- Background only: the intro draws the K itself. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>

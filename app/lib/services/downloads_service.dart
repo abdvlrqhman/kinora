@@ -694,7 +694,7 @@ final class DownloadsService implements DownloadActions {
       if (have >= r.totalBytes) await _complete(r);
     }
     final progress = total == 0 ? null : done / total;
-    await _markPending(rows.length);
+    await _markPending();
     await BackgroundKeeper.instance.hold(
       'downloads',
       title: rows.length == 1
@@ -875,24 +875,37 @@ final class DownloadsService implements DownloadActions {
   // ------------------------------------------------------------- helpers --
 
   int? _pendingMarked;
+  Future<void> _pendingWrite = Future.value();
 
-  /// How many torrent downloads are unfinished, for Android's boot receiver
-  /// (MainActivity.kt › DownloadsBootReceiver): after a restart it says they
-  /// wait for Kinora to open, since torrents need the app running.
-  Future<void> _markPending(int count) async {
-    if (count == _pendingMarked) return;
-    _pendingMarked = count;
-    final f = File(p.join(_paths.support.path, 'pending_downloads'));
+  /// How many torrent downloads are unfinished (downloading, queued or
+  /// waiting for Wi-Fi), for Android's boot receiver
+  /// (DownloadsBootReceiver.kt): after a restart it says they wait for
+  /// Kinora to open, since torrents need the app running. One count, one
+  /// write at a time.
+  Future<void> _markPending() => _pendingWrite = _pendingWrite.then((_) async {
     try {
+      final rows =
+          await (_db.select(_db.downloads)..where(
+                (t) =>
+                    t.kind.equals('torrent') &
+                    (t.state.isIn(['queued', 'downloading']) |
+                        (t.state.equals('paused') &
+                            t.error.equals('Waiting for Wi-Fi'))),
+              ))
+              .get();
+      final count = rows.length;
+      if (count == _pendingMarked) return;
+      _pendingMarked = count;
+      final f = File(p.join(_paths.support.path, 'pending_downloads'));
       if (count == 0) {
         if (f.existsSync()) await f.delete();
       } else {
         await f.writeAsString('$count');
       }
-    } on FileSystemException catch (e) {
+    } on Object catch (e) {
       Log.w('downloads', 'pending marker: $e');
     }
-  }
+  });
 
   Future<void> _refreshKeepAlive() async {
     final rows = await (_db.select(
@@ -904,7 +917,7 @@ final class DownloadsService implements DownloadActions {
     final waiting = rows
         .where((r) => r.state == 'paused' && r.error == 'Waiting for Wi-Fi')
         .length;
-    await _markPending(active + waiting);
+    await _markPending();
     if (active == 0 && waiting == 0) {
       await BackgroundKeeper.instance.drop('downloads');
     } else if (active == 0) {

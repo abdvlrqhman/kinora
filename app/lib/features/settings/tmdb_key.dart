@@ -10,7 +10,7 @@ import '../../ui/glass.dart';
 import '../../ui/tokens.dart';
 import 'widgets/settings_ui.dart';
 
-/// Settings › Sources › More details: the user's own TMDB key, checked
+/// Settings › Sources › Cast photos and trailers: the user's own TMDB key, checked
 /// before it's saved. None by default.
 class TmdbKeySection extends ConsumerStatefulWidget {
   const TmdbKeySection({super.key});
@@ -49,11 +49,15 @@ class _TmdbKeySectionState extends ConsumerState<TmdbKeySection> {
       error = 'Couldn’t reach TMDB. Check your connection, then try again.';
     }
     if (error == null) {
-      await ref
-          .read(secureKeysProvider)
-          .write(tmdbKeyId, ProviderCredentials(apiKey: key));
-      ref.invalidate(tmdbKeyProvider);
-      _key.clear();
+      try {
+        await ref
+            .read(secureKeysProvider)
+            .write(tmdbKeyId, ProviderCredentials(apiKey: key));
+        ref.invalidate(tmdbKeyProvider);
+        _key.clear();
+      } on Object {
+        error = 'Kinora couldn’t save the key on this phone. Try again.';
+      }
     }
     if (!mounted) return;
     setState(() {
@@ -75,7 +79,7 @@ class _TmdbKeySectionState extends ConsumerState<TmdbKeySection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionTitle('More details'),
+        const SectionTitle('Cast photos and trailers'),
         Note(
           on
               ? 'TMDB adds cast photos, trailers, More like this, age '
@@ -83,12 +87,13 @@ class _TmdbKeySectionState extends ConsumerState<TmdbKeySection> {
                     'phone.'
               : 'Add your free TMDB key for cast photos, trailers, More like '
                     'this, age ratings and missing artwork. Get one at '
-                    'themoviedb.org › Settings › API.',
+                    'themoviedb.org › Settings › API (the API key or the '
+                    'read token both work).',
         ),
         if (!on)
           GlassField(
             controller: _key,
-            label: 'TMDB API key or read access token',
+            label: 'Your TMDB key',
             obscure: true,
             paste: true,
             onSubmitted: (_) => unawaited(_save()),
