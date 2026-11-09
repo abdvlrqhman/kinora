@@ -64,6 +64,7 @@ final class DownloadsService implements DownloadActions {
   Future<void> start() async {
     if (_started) return;
     _started = true;
+    await _rebaseMovedPaths();
     _http = FileDownloader().updates.listen(
       (u) => _whileAlive(() => _onHttpUpdate(u)),
     );
@@ -503,6 +504,48 @@ final class DownloadsService implements DownloadActions {
         .insertOnConflictUpdate(
           KeyValue(key: _deferredKey, value: jsonEncode(all)),
         );
+  }
+
+  /// After an iOS update the files are where they were, under a new
+  /// folder path: saved paths follow, so downloads keep playing offline.
+  Future<void> _rebaseMovedPaths() async {
+    String? moved(String? path) {
+      if (path == null ||
+          FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound) {
+        return null;
+      }
+      return _paths.rebased(path);
+    }
+
+    for (final r in await _db.select(_db.downloads).get()) {
+      final dir = moved(r.directory);
+      final file = moved(r.filePath);
+      String? subs;
+      try {
+        var changed = false;
+        final list = jsonDecode(r.subtitlesJson) as List<Object?>;
+        for (final e in list.whereType<Map<String, Object?>>()) {
+          final to = moved(e['path'] as String?);
+          if (to != null) {
+            e['path'] = to;
+            changed = true;
+          }
+        }
+        if (changed) subs = jsonEncode(list);
+      } on Object {
+        subs = null; // unreadable: left as it is
+      }
+      if (dir == null && file == null && subs == null) continue;
+      Log.i('downloads', 'paths moved with the app folder: ${r.title}');
+      await _update(
+        r.id,
+        DownloadsCompanion(
+          directory: dir == null ? const Value.absent() : Value(dir),
+          filePath: file == null ? const Value.absent() : Value(file),
+          subtitlesJson: subs == null ? const Value.absent() : Value(subs),
+        ),
+      );
+    }
   }
 
   static List<String> _subtitlePaths(DownloadRow row) {

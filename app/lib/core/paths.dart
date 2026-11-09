@@ -25,6 +25,19 @@ final class AppPaths {
 
   Directory get downloads => Directory(p.join(downloadsRoot.path, 'Kinora'));
 
+  /// iOS gives the app's data folder a new path after an update
+  /// (…/Data/Application/<id>/…), so a path saved before points at the old
+  /// one. Returns [saved] inside today's folder, or null when it isn't such
+  /// a path (Android's don't move).
+  String? rebased(String saved) {
+    final now = _container.firstMatch(downloadsRoot.path)?[0];
+    final then = _container.firstMatch(saved);
+    if (now == null || then == null || then[0] == now) return null;
+    return '$now${saved.substring(then.end)}';
+  }
+
+  static final _container = RegExp(r'^.*/Data/Application/[0-9A-Fa-f-]{36}');
+
   /// Stream buffers. On Android they share the Downloads volume so keeping a
   /// finished stream is a rename, not a multi-GB copy.
   Directory get streams => Directory(
