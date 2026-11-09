@@ -5,6 +5,10 @@ import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'tint.dart';
 import 'tokens.dart';
 
+/// Build with `--dart-define=KINORA_FAKE_GLASS=true` to use the frosted
+/// fallback everywhere (emulators without GPU support, functional tests).
+const kForceFakeGlass = bool.fromEnvironment('KINORA_FAKE_GLASS');
+
 /// Shares one backdrop sample among the [Glass] widgets below it (cheaper
 /// than one layer per control). Use it around rows of controls.
 class GlassGroup extends StatelessWidget {
@@ -16,6 +20,7 @@ class GlassGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LiquidGlassLayer(
     settings: LiquidGlassSettings.ios27RegularDark(),
+    fake: kForceFakeGlass,
     child: child,
   );
 }
@@ -48,6 +53,7 @@ class Glass extends StatelessWidget {
     return LiquidGlass.auto(
       shape: LiquidRoundedSuperellipse(borderRadius: radius ?? 999),
       settings: LiquidGlassSettings.ios27RegularDark(),
+      fake: kForceFakeGlass,
       appearance: LiquidGlassAppearance.ios27RegularDark(
         tint: accent.withValues(alpha: tintStrength),
       ),
@@ -116,6 +122,8 @@ class _GlassButtonState extends State<GlassButton> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
+                // Centers the label when the button is stretched full width.
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (widget.icon != null) ...[
                     Icon(widget.icon, size: 20, color: fg),

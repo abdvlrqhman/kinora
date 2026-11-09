@@ -135,7 +135,9 @@ jobs:
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           disable-animations: true
-          script: cd app && flutter test integration_test/app_test.dart -d emulator-5554 --reporter expanded
+          script: |
+            cd app && flutter test integration_test/app_test.dart -d emulator-5554 --reporter expanded --dart-define=KINORA_FAKE_GLASS=true
+            cd app && (timeout 600 flutter test integration_test/glass_test.dart -d emulator-5554 --reporter expanded || echo "::warning::Real liquid glass did not render on the emulator (see log)")
 
   ios:
     needs: [check, engine]

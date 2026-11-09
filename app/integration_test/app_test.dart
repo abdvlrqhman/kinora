@@ -33,11 +33,18 @@ Future<void> pumpUntil(
   String? reason,
 }) async {
   final end = DateTime.now().add(timeout);
+  final started = DateTime.now();
+  // ignore: avoid_print
+  print('E2E waiting: ${reason ?? 'condition'}');
   while (!done()) {
     if (DateTime.now().isAfter(end))
       fail('Timed out: ${reason ?? 'condition'}');
     await tester.pump(const Duration(milliseconds: 250));
   }
+  // ignore: avoid_print
+  print(
+    'E2E ok: ${reason ?? 'condition'} (${DateTime.now().difference(started).inMilliseconds} ms)',
+  );
 }
 
 void main() {
