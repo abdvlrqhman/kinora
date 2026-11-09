@@ -1,0 +1,17 @@
+name: dlna
+description: >-
+  Pure-Dart DLNA/UPnP casting for Kinora: SSDP discovery, subnet probe,
+  AVTransport/RenderingControl SOAP control, Samsung subtitle extensions and
+  cast playability profiles.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  http: ^1.6.0
+  xml: ^7.1.0
+
+dev_dependencies:
+  test: ^1.33.0

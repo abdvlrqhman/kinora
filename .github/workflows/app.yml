@@ -36,6 +36,16 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       - run: flutter test
+      - name: Pure Dart packages (format, analyze, offline tests)
+        working-directory: packages
+        run: |
+          for d in release_parser ranking stremio swarm subtitles dlna; do
+            [ -f "$d/pubspec.yaml" ] || continue
+            echo "::group::$d"
+            (cd "$d" && dart pub get && dart format --output=none --set-exit-if-changed . \
+              && dart analyze --fatal-infos && dart test -x live)
+            echo "::endgroup::"
+          done
       - name: Engine (Dart layer)
         working-directory: packages/engine
         run: |
