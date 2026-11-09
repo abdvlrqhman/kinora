@@ -180,6 +180,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
+          # Only the app builds, not the engine's libtorrent folders.
+          pattern: kinora-*
           merge-multiple: true
       - env:
           GH_TOKEN: ${{ github.token }}
