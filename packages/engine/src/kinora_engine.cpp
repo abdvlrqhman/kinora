@@ -61,6 +61,8 @@
 #include <libtorrent/version.hpp>
 #include <libtorrent/write_resume_data.hpp>
 
+static_assert(sizeof(off_t) == 8, "kinora_engine needs a 64-bit off_t (_FILE_OFFSET_BITS=64)");
+
 #if defined(__APPLE__)
 #define KN_SEND_FLAGS 0
 #else
@@ -101,13 +103,14 @@ std::string hex_of(const lt::sha1_hash& h) {
   return out;
 }
 
+// 128 bits from the OS generator; tokens guard routes reachable on the LAN.
 std::string random_token() {
   static std::mutex mu;
-  static std::mt19937_64 rng{std::random_device{}()};
+  static std::random_device rd;
   std::lock_guard<std::mutex> lk(mu);
-  std::ostringstream os;
-  os << std::hex << rng() << rng();
-  return os.str();
+  char buf[33];
+  std::snprintf(buf, sizeof(buf), "%08x%08x%08x%08x", rd(), rd(), rd(), rd());
+  return std::string(buf, 32);
 }
 
 std::string json_escape(lt::string_view in) {
@@ -240,6 +243,8 @@ struct Torrent {
   int piece_len = 0;
   int num_pieces = 0;
   std::string status_json;
+  // Bumped when a connection drops its deadlines, so the others re-assert.
+  std::uint32_t window_epoch = 0;
 };
 
 struct Route {
@@ -444,18 +449,20 @@ void handle_alert(kn_session* s, lt::alert* a) {
     return;
   }
   if (auto* mv = lt::alert_cast<lt::storage_moved_alert>(a)) {
+    std::string path = mv->storage_path();
+    auto ti = mv->handle.torrent_file();
+    lt::renamed_files renames = mv->handle.get_renamed_files();
     std::lock_guard<std::mutex> lk(s->mu);
     auto it = s->by_handle.find(mv->handle);
     std::string ih = it == s->by_handle.end() ? "" : it->second;
-    push_event(s, "{\"type\":\"moved\",\"ih\":\"" + ih + "\",\"path\":" +
-                      json_escape(mv->storage_path()) + "}");
+    push_event(s, "{\"type\":\"moved\",\"ih\":\"" + ih + "\",\"path\":" + json_escape(path) + "}");
     // Open streams read from the old path; repoint them.
-    for (auto& kv : s->routes) {
-      if (kv.second->ih != ih || !kv.second->is_stream) continue;
-      auto ti = mv->handle.torrent_file();
-      if (!ti) continue;
-      kv.second->disk_path = mv->handle.get_renamed_files().file_path(
-          ti->layout(), lt::file_index_t{kv.second->file_index}, mv->storage_path());
+    if (ti) {
+      for (auto& kv : s->routes) {
+        if (kv.second->ih != ih || !kv.second->is_stream) continue;
+        kv.second->disk_path =
+            renames.file_path(ti->layout(), lt::file_index_t{kv.second->file_index}, path);
+      }
     }
     return;
   }
@@ -481,7 +488,7 @@ void alert_loop(kn_session* s) {
   auto last_update = steady::now() - 10s;
   auto last_resume = steady::now();
   std::vector<lt::alert*> alerts;
-  while (!s->stopping.load()) {
+  while (!s->stopping.load()) try {
     s->ses->wait_for_alert(250ms);
     alerts.clear();
     s->ses->pop_alerts(&alerts);
@@ -505,9 +512,16 @@ void alert_loop(kn_session* s) {
         for (auto& kv : s->torrents) handles.push_back(kv.second.handle);
       }
       for (auto& h : handles) {
-        if (h.need_save_resume_data()) request_resume(s, h, true);
+        try {
+          if (h.need_save_resume_data()) request_resume(s, h, true);
+        } catch (...) {
+          // Removed meanwhile.
+        }
       }
     }
+  } catch (const std::exception& e) {
+    push_log(s, std::string("alert loop: ") + e.what());
+  } catch (...) {
   }
 }
 
@@ -692,6 +706,7 @@ bool parse_range(const std::string& value, std::int64_t size, std::int64_t& star
 struct Window {
   int first = -1;
   int last = -1;
+  std::uint32_t epoch = 0;
   steady::time_point issued{};
 };
 
@@ -705,11 +720,16 @@ void clear_window(kn_session* s, const Route& r, Window& w) {
     if (it == s->torrents.end()) return;
     h = it->second.handle;
     have = it->second.have;
+    ++it->second.window_epoch;
   }
-  for (int p = w.first; p <= w.last; ++p) {
-    if (p < static_cast<int>(have.size()) && !have[static_cast<std::size_t>(p)]) {
-      h.reset_piece_deadline(lt::piece_index_t{p});
+  try {
+    for (int p = w.first; p <= w.last; ++p) {
+      if (p < static_cast<int>(have.size()) && !have[static_cast<std::size_t>(p)]) {
+        h.reset_piece_deadline(lt::piece_index_t{p});
+      }
     }
+  } catch (...) {
+    // Torrent removed meanwhile.
   }
   w = Window{};
 }
@@ -719,6 +739,7 @@ void move_window(kn_session* s, const Route& r, Window& w, int piece) {
   lt::torrent_handle h;
   std::vector<std::uint8_t> have;
   int plen = 0;
+  std::uint32_t epoch = 0;
   {
     std::lock_guard<std::mutex> lk(s->mu);
     auto it = s->torrents.find(r.ih);
@@ -726,6 +747,7 @@ void move_window(kn_session* s, const Route& r, Window& w, int piece) {
     h = it->second.handle;
     have = it->second.have;
     plen = it->second.piece_len;
+    epoch = it->second.window_epoch;
   }
   int file_last = static_cast<int>((r.file_offset + std::max<std::int64_t>(r.size, 1) - 1) / plen);
   int count = static_cast<int>(std::clamp<std::int64_t>(r.readahead / plen, 4, 512));
@@ -733,27 +755,32 @@ void move_window(kn_session* s, const Route& r, Window& w, int piece) {
   int last = std::min(file_last, piece + count - 1);
   auto now = steady::now();
   bool fresh = w.first < 0 || first < w.first || first - w.first >= std::max(1, count / 8) ||
-               now - w.issued > 2s;
+               now - w.issued > 2s || w.epoch != epoch;
   if (!fresh) return;
   int step = r.bitrate > 0
                  ? static_cast<int>(std::clamp<std::int64_t>(
                        static_cast<std::int64_t>(plen) * 1000 / r.bitrate, 20, 3000))
                  : 150;
-  if (w.first >= 0) {
-    for (int p = w.first; p <= w.last; ++p) {
-      if ((p < first || p > last) && p < static_cast<int>(have.size()) &&
-          !have[static_cast<std::size_t>(p)]) {
-        h.reset_piece_deadline(lt::piece_index_t{p});
+  try {
+    if (w.first >= 0) {
+      for (int p = w.first; p <= w.last; ++p) {
+        if ((p < first || p > last) && p < static_cast<int>(have.size()) &&
+            !have[static_cast<std::size_t>(p)]) {
+          h.reset_piece_deadline(lt::piece_index_t{p});
+        }
       }
     }
-  }
-  for (int p = first; p <= last; ++p) {
-    if (p < static_cast<int>(have.size()) && !have[static_cast<std::size_t>(p)]) {
-      h.set_piece_deadline(lt::piece_index_t{p}, (p - first) * step);
+    for (int p = first; p <= last; ++p) {
+      if (p < static_cast<int>(have.size()) && !have[static_cast<std::size_t>(p)]) {
+        h.set_piece_deadline(lt::piece_index_t{p}, (p - first) * step);
+      }
     }
+  } catch (...) {
+    return;  // torrent removed meanwhile
   }
   w.first = first;
   w.last = last;
+  w.epoch = epoch;
   w.issued = now;
 }
 
@@ -822,6 +849,17 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
   r->connections.fetch_add(1);
   Window w;
   int file_fd = -1;
+  struct Cleanup {
+    kn_session* s;
+    Route* r;
+    Window* w;
+    int* fd;
+    ~Cleanup() {
+      if (*fd >= 0) ::close(*fd);
+      clear_window(s, *r, *w);
+      r->connections.fetch_sub(1);
+    }
+  } cleanup{s, r.get(), &w, &file_fd};
   std::vector<char> buf(256 * 1024);
   std::int64_t pos = start;
   bool ok = true;
@@ -860,9 +898,6 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
       pos += n;
     }
   }
-  if (file_fd >= 0) ::close(file_fd);
-  clear_window(s, *r, w);
-  r->connections.fetch_sub(1);
 }
 
 void serve_file(kn_session* s, int fd, const Request& req, std::shared_ptr<Route> r) {
@@ -975,7 +1010,16 @@ void accept_loop(kn_session* s) {
       s->client_fds.insert(fd);
     }
     s->client_count.fetch_add(1);
-    std::thread(handle_client, s, fd).detach();
+    try {
+      std::thread(handle_client, s, fd).detach();
+    } catch (...) {
+      {
+        std::lock_guard<std::mutex> lk(s->server_mu);
+        s->client_fds.erase(fd);
+      }
+      ::close(fd);
+      s->client_count.fetch_sub(1);
+    }
   }
 }
 
@@ -1008,12 +1052,18 @@ void stop_server(kn_session* s) {
   std::thread accept;
   {
     std::lock_guard<std::mutex> lk(s->server_mu);
-    for (int fd : s->client_fds) ::shutdown(fd, SHUT_RDWR);
     accept = std::move(s->accept_thread);
   }
-  s->piece_cv.notify_all();
-  if (accept.joinable()) accept.join();
-  for (int i = 0; i < 100 && s->client_count.load() > 0; ++i) std::this_thread::sleep_for(20ms);
+  if (accept.joinable()) accept.join();  // no new clients after this
+  // Detached client threads use `s`: wait for every one before it's freed.
+  while (s->client_count.load() > 0) {
+    {
+      std::lock_guard<std::mutex> lk(s->server_mu);
+      for (int fd : s->client_fds) ::shutdown(fd, SHUT_RDWR);
+    }
+    s->piece_cv.notify_all();
+    std::this_thread::sleep_for(20ms);
+  }
   std::lock_guard<std::mutex> lk(s->server_mu);
   if (s->listen_fd >= 0) ::close(s->listen_fd);
   s->listen_fd = -1;
@@ -1428,6 +1478,23 @@ int32_t kn_move_storage(kn_session* s, const char* ih, const char* path) {
     return 0;
   } catch (...) {
     return -1;
+  }
+}
+
+char* kn_file_progress(kn_session* s, const char* ih) {
+  try {
+    lt::torrent_handle h = handle_of(s, ih);
+    if (!h.is_valid() || !h.torrent_file()) return nullptr;
+    std::vector<std::int64_t> done = h.file_progress(lt::torrent_handle::piece_granularity);
+    std::string out = "[";
+    for (std::size_t i = 0; i < done.size(); ++i) {
+      if (i) out += ",";
+      out += std::to_string(done[i]);
+    }
+    out += "]";
+    return dup_string(out);
+  } catch (...) {
+    return nullptr;
   }
 }
 

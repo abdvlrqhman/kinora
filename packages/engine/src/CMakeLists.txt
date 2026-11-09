@@ -38,6 +38,8 @@ target_include_directories(kinora_engine PRIVATE "${KN_PREBUILT}/include")
 # Must match the flags libtorrent was built with (see its pkg-config file).
 target_compile_definitions(kinora_engine PRIVATE
   DART_SHARED_LIB
+  # 64-bit file offsets on 32-bit Android (armeabi-v7a): files > 2 GiB.
+  _FILE_OFFSET_BITS=64
   BOOST_ASIO_NO_DEPRECATED BOOST_SYSTEM_USE_UTF8
   TORRENT_ABI_VERSION=100 TORRENT_USE_RTC=0
   TORRENT_USE_OPENSSL TORRENT_USE_LIBCRYPTO TORRENT_SSL_PEERS

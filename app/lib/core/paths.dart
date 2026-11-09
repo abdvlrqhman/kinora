@@ -23,7 +23,14 @@ final class AppPaths {
   final Directory cache;
 
   Directory get downloads => Directory(p.join(downloadsRoot.path, 'Kinora'));
-  Directory get streams => Directory(p.join(cache.path, 'streams'));
+
+  /// Stream buffers. On Android they share the Downloads volume so keeping a
+  /// finished stream is a rename, not a multi-GB copy.
+  Directory get streams => Directory(
+    Platform.isAndroid
+        ? p.join(downloadsRoot.path, '.kinora-streams')
+        : p.join(cache.path, 'streams'),
+  );
   Directory get subtitles => Directory(p.join(cache.path, 'subtitles'));
   Directory get resume => Directory(p.join(support.path, 'resume'));
   Directory get logs => Directory(p.join(support.path, 'logs'));

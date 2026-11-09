@@ -199,6 +199,17 @@ final class KinoraEngine {
     ),
   );
 
+  /// Bytes on disk for each file (complete pieces only), or null before
+  /// metadata. Lets several owners of one torrent (episodes of a season
+  /// pack) track their own file.
+  List<int>? fileProgress(String infoHash) {
+    final json = _withStr(infoHash, (ih) => _b.take(_b.fileProgress(_s, ih)));
+    if (json == null) return null;
+    return [
+      for (final v in jsonDecode(json) as List<Object?>) (v! as num).toInt(),
+    ];
+  }
+
   /// BitTorrent listen port (0 until listening).
   int get listenPort => _b.listenPort(_s);
 

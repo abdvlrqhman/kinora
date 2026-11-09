@@ -937,6 +937,21 @@ class $WatchProgressTable extends WatchProgress
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _dismissedMeta = const VerificationMeta(
+    'dismissed',
+  );
+  @override
+  late final GeneratedColumn<bool> dismissed = GeneratedColumn<bool>(
+    'dismissed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dismissed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _posterMeta = const VerificationMeta('poster');
   @override
   late final GeneratedColumn<String> poster = GeneratedColumn<String>(
@@ -979,6 +994,7 @@ class $WatchProgressTable extends WatchProgress
     positionMs,
     durationMs,
     completed,
+    dismissed,
     poster,
     still,
     updatedAt,
@@ -1070,6 +1086,12 @@ class $WatchProgressTable extends WatchProgress
         completed.isAcceptableOrUnknown(data['completed']!, _completedMeta),
       );
     }
+    if (data.containsKey('dismissed')) {
+      context.handle(
+        _dismissedMeta,
+        dismissed.isAcceptableOrUnknown(data['dismissed']!, _dismissedMeta),
+      );
+    }
     if (data.containsKey('poster')) {
       context.handle(
         _posterMeta,
@@ -1137,6 +1159,10 @@ class $WatchProgressTable extends WatchProgress
         DriftSqlType.bool,
         data['${effectivePrefix}completed'],
       )!,
+      dismissed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dismissed'],
+      )!,
       poster: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}poster'],
@@ -1170,6 +1196,9 @@ class WatchProgressData extends DataClass
   final int positionMs;
   final int durationMs;
   final bool completed;
+
+  /// Hidden from Continue watching by the viewer (watched marks stay).
+  final bool dismissed;
   final String? poster;
   final String? still;
   final DateTime updatedAt;
@@ -1184,6 +1213,7 @@ class WatchProgressData extends DataClass
     required this.positionMs,
     required this.durationMs,
     required this.completed,
+    required this.dismissed,
     this.poster,
     this.still,
     required this.updatedAt,
@@ -1207,6 +1237,7 @@ class WatchProgressData extends DataClass
     map['position_ms'] = Variable<int>(positionMs);
     map['duration_ms'] = Variable<int>(durationMs);
     map['completed'] = Variable<bool>(completed);
+    map['dismissed'] = Variable<bool>(dismissed);
     if (!nullToAbsent || poster != null) {
       map['poster'] = Variable<String>(poster);
     }
@@ -1235,6 +1266,7 @@ class WatchProgressData extends DataClass
       positionMs: Value(positionMs),
       durationMs: Value(durationMs),
       completed: Value(completed),
+      dismissed: Value(dismissed),
       poster: poster == null && nullToAbsent
           ? const Value.absent()
           : Value(poster),
@@ -1261,6 +1293,7 @@ class WatchProgressData extends DataClass
       positionMs: serializer.fromJson<int>(json['positionMs']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       completed: serializer.fromJson<bool>(json['completed']),
+      dismissed: serializer.fromJson<bool>(json['dismissed']),
       poster: serializer.fromJson<String?>(json['poster']),
       still: serializer.fromJson<String?>(json['still']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1280,6 +1313,7 @@ class WatchProgressData extends DataClass
       'positionMs': serializer.toJson<int>(positionMs),
       'durationMs': serializer.toJson<int>(durationMs),
       'completed': serializer.toJson<bool>(completed),
+      'dismissed': serializer.toJson<bool>(dismissed),
       'poster': serializer.toJson<String?>(poster),
       'still': serializer.toJson<String?>(still),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1297,6 +1331,7 @@ class WatchProgressData extends DataClass
     int? positionMs,
     int? durationMs,
     bool? completed,
+    bool? dismissed,
     Value<String?> poster = const Value.absent(),
     Value<String?> still = const Value.absent(),
     DateTime? updatedAt,
@@ -1311,6 +1346,7 @@ class WatchProgressData extends DataClass
     positionMs: positionMs ?? this.positionMs,
     durationMs: durationMs ?? this.durationMs,
     completed: completed ?? this.completed,
+    dismissed: dismissed ?? this.dismissed,
     poster: poster.present ? poster.value : this.poster,
     still: still.present ? still.value : this.still,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -1333,6 +1369,7 @@ class WatchProgressData extends DataClass
           ? data.durationMs.value
           : this.durationMs,
       completed: data.completed.present ? data.completed.value : this.completed,
+      dismissed: data.dismissed.present ? data.dismissed.value : this.dismissed,
       poster: data.poster.present ? data.poster.value : this.poster,
       still: data.still.present ? data.still.value : this.still,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1352,6 +1389,7 @@ class WatchProgressData extends DataClass
           ..write('positionMs: $positionMs, ')
           ..write('durationMs: $durationMs, ')
           ..write('completed: $completed, ')
+          ..write('dismissed: $dismissed, ')
           ..write('poster: $poster, ')
           ..write('still: $still, ')
           ..write('updatedAt: $updatedAt')
@@ -1371,6 +1409,7 @@ class WatchProgressData extends DataClass
     positionMs,
     durationMs,
     completed,
+    dismissed,
     poster,
     still,
     updatedAt,
@@ -1389,6 +1428,7 @@ class WatchProgressData extends DataClass
           other.positionMs == this.positionMs &&
           other.durationMs == this.durationMs &&
           other.completed == this.completed &&
+          other.dismissed == this.dismissed &&
           other.poster == this.poster &&
           other.still == this.still &&
           other.updatedAt == this.updatedAt);
@@ -1405,6 +1445,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
   final Value<int> positionMs;
   final Value<int> durationMs;
   final Value<bool> completed;
+  final Value<bool> dismissed;
   final Value<String?> poster;
   final Value<String?> still;
   final Value<DateTime> updatedAt;
@@ -1420,6 +1461,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
     this.positionMs = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.completed = const Value.absent(),
+    this.dismissed = const Value.absent(),
     this.poster = const Value.absent(),
     this.still = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1436,6 +1478,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
     required int positionMs,
     required int durationMs,
     this.completed = const Value.absent(),
+    this.dismissed = const Value.absent(),
     this.poster = const Value.absent(),
     this.still = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1457,6 +1500,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
     Expression<int>? positionMs,
     Expression<int>? durationMs,
     Expression<bool>? completed,
+    Expression<bool>? dismissed,
     Expression<String>? poster,
     Expression<String>? still,
     Expression<DateTime>? updatedAt,
@@ -1473,6 +1517,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
       if (positionMs != null) 'position_ms': positionMs,
       if (durationMs != null) 'duration_ms': durationMs,
       if (completed != null) 'completed': completed,
+      if (dismissed != null) 'dismissed': dismissed,
       if (poster != null) 'poster': poster,
       if (still != null) 'still': still,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1491,6 +1536,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
     Value<int>? positionMs,
     Value<int>? durationMs,
     Value<bool>? completed,
+    Value<bool>? dismissed,
     Value<String?>? poster,
     Value<String?>? still,
     Value<DateTime>? updatedAt,
@@ -1507,6 +1553,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
       positionMs: positionMs ?? this.positionMs,
       durationMs: durationMs ?? this.durationMs,
       completed: completed ?? this.completed,
+      dismissed: dismissed ?? this.dismissed,
       poster: poster ?? this.poster,
       still: still ?? this.still,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1547,6 +1594,9 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
     if (completed.present) {
       map['completed'] = Variable<bool>(completed.value);
     }
+    if (dismissed.present) {
+      map['dismissed'] = Variable<bool>(dismissed.value);
+    }
     if (poster.present) {
       map['poster'] = Variable<String>(poster.value);
     }
@@ -1575,6 +1625,7 @@ class WatchProgressCompanion extends UpdateCompanion<WatchProgressData> {
           ..write('positionMs: $positionMs, ')
           ..write('durationMs: $durationMs, ')
           ..write('completed: $completed, ')
+          ..write('dismissed: $dismissed, ')
           ..write('poster: $poster, ')
           ..write('still: $still, ')
           ..write('updatedAt: $updatedAt, ')
@@ -4372,6 +4423,7 @@ typedef $$WatchProgressTableCreateCompanionBuilder =
       required int positionMs,
       required int durationMs,
       Value<bool> completed,
+      Value<bool> dismissed,
       Value<String?> poster,
       Value<String?> still,
       Value<DateTime> updatedAt,
@@ -4389,6 +4441,7 @@ typedef $$WatchProgressTableUpdateCompanionBuilder =
       Value<int> positionMs,
       Value<int> durationMs,
       Value<bool> completed,
+      Value<bool> dismissed,
       Value<String?> poster,
       Value<String?> still,
       Value<DateTime> updatedAt,
@@ -4451,6 +4504,11 @@ class $$WatchProgressTableFilterComposer
 
   ColumnFilters<bool> get completed => $composableBuilder(
     column: $table.completed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get dismissed => $composableBuilder(
+    column: $table.dismissed,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4529,6 +4587,11 @@ class $$WatchProgressTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get dismissed => $composableBuilder(
+    column: $table.dismissed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get poster => $composableBuilder(
     column: $table.poster,
     builder: (column) => ColumnOrderings(column),
@@ -4590,6 +4653,9 @@ class $$WatchProgressTableAnnotationComposer
   GeneratedColumn<bool> get completed =>
       $composableBuilder(column: $table.completed, builder: (column) => column);
 
+  GeneratedColumn<bool> get dismissed =>
+      $composableBuilder(column: $table.dismissed, builder: (column) => column);
+
   GeneratedColumn<String> get poster =>
       $composableBuilder(column: $table.poster, builder: (column) => column);
 
@@ -4645,6 +4711,7 @@ class $$WatchProgressTableTableManager
                 Value<int> positionMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
+                Value<bool> dismissed = const Value.absent(),
                 Value<String?> poster = const Value.absent(),
                 Value<String?> still = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -4660,6 +4727,7 @@ class $$WatchProgressTableTableManager
                 positionMs: positionMs,
                 durationMs: durationMs,
                 completed: completed,
+                dismissed: dismissed,
                 poster: poster,
                 still: still,
                 updatedAt: updatedAt,
@@ -4677,6 +4745,7 @@ class $$WatchProgressTableTableManager
                 required int positionMs,
                 required int durationMs,
                 Value<bool> completed = const Value.absent(),
+                Value<bool> dismissed = const Value.absent(),
                 Value<String?> poster = const Value.absent(),
                 Value<String?> still = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -4692,6 +4761,7 @@ class $$WatchProgressTableTableManager
                 positionMs: positionMs,
                 durationMs: durationMs,
                 completed: completed,
+                dismissed: dismissed,
                 poster: poster,
                 still: still,
                 updatedAt: updatedAt,

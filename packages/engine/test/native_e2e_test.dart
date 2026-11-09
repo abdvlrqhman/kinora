@@ -182,6 +182,7 @@ void main() {
       expect(headers.keys.where((k) => k.contains('bad')), isEmpty);
 
       await _until(() => leecher.status(ih)?.isComplete ?? false);
+      expect(leecher.fileProgress(ih), [data.length]);
       final stats = leecher.streamStats(stream.token)!;
       expect(stats.haveBytes, data.length);
       expect(stats.size, data.length);

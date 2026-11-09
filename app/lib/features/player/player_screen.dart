@@ -16,6 +16,7 @@ import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
+import '../../ui/widgets/states.dart';
 import '../../services/cast_service.dart';
 import 'player_controller.dart';
 import 'widgets/cast_panel.dart';
@@ -822,7 +823,7 @@ class _UpNextState extends State<_UpNext> {
   @override
   void initState() {
     super.initState();
-    if (widget.controller.request.isEpisode) {
+    if (widget.controller.request.isEpisode && widget.controller.autoplayNext) {
       _t = Timer.periodic(const Duration(seconds: 1), (t) {
         if (!mounted) return;
         setState(() => _left--);
@@ -862,7 +863,12 @@ class _UpNextState extends State<_UpNext> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Next episode in $_left', style: KType.small),
+                Text(
+                  widget.controller.autoplayNext
+                      ? 'Next episode in $_left'
+                      : 'Up next',
+                  style: KType.small,
+                ),
                 const SizedBox(height: KSpace.x2),
                 Row(
                   children: [
@@ -945,7 +951,10 @@ class _VersionsPanel extends ConsumerWidget {
         ),
         error: (e, _) => Padding(
           padding: const EdgeInsets.all(KSpace.margin),
-          child: Text('Couldn’t load versions. $e', style: KType.small),
+          child: Text(
+            'Couldn’t load versions. ${friendlyError(e)}',
+            style: KType.small,
+          ),
         ),
         data: (res) => res.releases.isEmpty
             ? Padding(
@@ -984,7 +993,9 @@ class _VersionsPanel extends ConsumerWidget {
                             controller.switchTo(
                               r.copyWith(
                                 candidateId: v.candidateId,
-                                startAt: controller.player.state.position,
+                                startAt: controller.phase == PlayerPhase.playing
+                                    ? controller.player.state.position
+                                    : null,
                               ),
                             );
                           },

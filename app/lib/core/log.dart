@@ -58,8 +58,25 @@ abstract final class Log {
         error == null ? message : '$message: $error\n${st ?? ''}',
       );
 
+  static final _url = RegExp(r'(https?://[^/\s]+)(/[^\s]*)');
+  static final _secretish = RegExp(r'[A-Za-z0-9_\-]{32,}');
+  static final _infoHash = RegExp(r'^[0-9a-f]{40}$');
+
+  /// Hides what may be a key: addon config paths (they can hold debrid
+  /// keys) and long opaque tokens. Info-hashes stay readable.
+  static String redact(String s) => s
+      .replaceAllMapped(_url, (m) {
+        final path = m[2]!;
+        final opaque = path.length > 48 || _secretish.hasMatch(path);
+        return opaque ? '${m[1]}/…' : m[0]!;
+      })
+      .replaceAllMapped(
+        _secretish,
+        (m) => _infoHash.hasMatch(m[0]!) ? m[0]! : '…',
+      );
+
   static void _add(LogLevel level, String tag, String message) {
-    final line = LogLine(DateTime.now(), level, tag, message);
+    final line = LogLine(DateTime.now(), level, tag, redact(message));
     _lines.addLast(line);
     while (_lines.length > _max) {
       _lines.removeFirst();

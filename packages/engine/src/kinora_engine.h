@@ -66,6 +66,8 @@ KN_API int32_t kn_connect_peer(kn_session* s, const char* ih, const char* ip,
 // Moves the torrent's data to `path` (e.g. stream cache -> Downloads).
 // Asynchronous; a "moved" or "move_failed" event follows.
 KN_API int32_t kn_move_storage(kn_session* s, const char* ih, const char* path);
+// Bytes on disk per file (JSON array, piece granularity), or NULL.
+KN_API char* kn_file_progress(kn_session* s, const char* ih);
 
 // Stream server ------------------------------------------------------------
 // Port of the HTTP server (starts lazily, binds all interfaces).

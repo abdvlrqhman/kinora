@@ -214,167 +214,176 @@ final resolveProvider = FutureProvider.autoDispose
       final keep = ref.keepAlive();
       final timer = Timer(const Duration(minutes: 4), keep.close);
       ref.onDispose(timer.cancel);
-
-      final addons = await ref.watch(enabledAddonsProvider.future);
-      final settings = ref.read(settingsProvider);
-      final streamAddons = [
-        for (final a in addons)
-          if (a.supports('stream', video.type, video.videoId)) a,
-      ];
-      if (addons.isEmpty) {
-        return const ResolveResult(
-          releases: [],
-          message: 'Add a source in Settings to find versions.',
-        );
+      try {
+        final result = await _resolve(ref, video);
+        // Only good answers are reused; "Try again" must really try again.
+        if (result.releases.isEmpty || result.sourcesFailed > 0) keep.close();
+        return result;
+      } on Object {
+        keep.close();
+        rethrow;
       }
-      if (streamAddons.isEmpty) {
-        return const ResolveResult(
-          releases: [],
-          message: 'None of your sources offers versions of this.',
-        );
-      }
-
-      // 1. Ask every source at once.
-      final query = ref
-          .read(aggregatorProvider)
-          .streams(streamAddons, video.type, video.videoId);
-      final perAddon = await query.results.toList();
-      final failed = perAddon.where((r) => r.error != null).length;
-      final rejection = perAddon
-          .map((r) => r.error)
-          .whereType<DebridKeyRejectedException>()
-          .firstOrNull;
-
-      // 2. Parse and dedupe.
-      final byId =
-          <String, ({StreamItem stream, ParsedRelease parsed, String addon})>{};
-      for (final r in perAddon) {
-        for (final s in r.items) {
-          if (isDebridKeyRejection(s)) continue;
-          final id = s.infoHash != null
-              ? '${s.infoHash}:${s.fileIdx ?? -1}'
-              : (s.url ?? s.externalUrl ?? s.title ?? '');
-          if (id.isEmpty || byId.containsKey(id)) continue;
-          final parsed = parseAddonStream(
-            name: s.name,
-            title: s.title,
-            description: s.description,
-            filename: s.filename,
-          );
-          byId[id] = (stream: s, parsed: parsed, addon: r.addon.manifest.name);
-        }
-      }
-      if (byId.isEmpty) {
-        return ResolveResult(
-          releases: const [],
-          sourcesAsked: streamAddons.length,
-          sourcesFailed: failed,
-          message: rejection != null
-              ? 'Your debrid service rejected its key. Check it in Settings › Sources.'
-              : failed == streamAddons.length
-              ? 'Your sources didn’t answer. Check your connection and try again.'
-              : 'No versions were found for this yet.',
-        );
-      }
-
-      // 3. Live swarm health for the most promising torrents (≈2.5 s).
-      final hashes = <String>[
-        for (final e
-            in (byId.values.where((v) => v.stream.infoHash != null).toList()
-                  ..sort(
-                    (a, b) => (b.parsed.seeders ?? 0).compareTo(
-                      a.parsed.seeders ?? 0,
-                    ),
-                  ))
-                .take(70))
-          e.stream.infoHash!,
-      ];
-      var live = <String, SwarmStats>{};
-      if (hashes.isNotEmpty) {
-        try {
-          live = await ref.read(swarmLookupProvider)(hashes, {
-            for (final v in byId.values)
-              for (final t in v.stream.trackers) ?Uri.tryParse(t),
-          });
-        } on Object catch (e) {
-          Log.d('resolve', 'scrape failed: $e');
-        }
-      }
-
-      // 4. Subtitle fit for each release in the user's languages.
-      var fit = <String, Map<String, double>>{};
-      if (settings.subtitleLanguages.isNotEmpty) {
-        try {
-          fit = await ref
-              .read(subtitleFitProvider)(video, {
-                for (final e in byId.entries)
-                  e.key: e.value.stream.filename ?? e.value.parsed.raw,
-              })
-              .timeout(const Duration(seconds: 6));
-        } on Object catch (e) {
-          Log.d('resolve', 'subtitle fit unavailable: $e');
-        }
-      }
-
-      // 5. Rank.
-      final now = DateTime.now();
-      final candidates = [
-        for (final e in byId.entries)
-          Candidate(
-            id: e.key,
-            release: e.value.parsed,
-            addonId: e.value.addon,
-            sizeBytes: e.value.stream.videoSize ?? e.value.parsed.sizeBytes,
-            addonSeeders: e.value.parsed.seeders,
-            live: switch (live[e.value.stream.infoHash]) {
-              final s? when s.sources > 0 => SwarmHealth(
-                seeders: s.seeders,
-                leechers: s.leechers,
-                measuredAt: now,
-              ),
-              _ => null,
-            },
-            isDirectUrl:
-                e.value.stream.url != null && e.value.stream.infoHash == null,
-            isDebridCached: e.value.parsed.debridCached ?? false,
-            fileIndex: e.value.stream.fileIdx,
-            subtitleFit: fit[e.key] ?? const {},
-          ),
-      ];
-      final prefs = RankPrefs(
-        device: phoneCaps,
-        audioLanguages: [
-          for (final l in settings.audioLanguages)
-            if (l != 'original') l,
-        ],
-        subtitleLanguages: settings.subtitleLanguages,
-        maxResolution: _resolution(settings.maxResolution),
-        castTarget: ref.read(castTargetCapsProvider),
-        bandwidthBytesPerSec: ref.read(bandwidthEstimateProvider),
-        runtimeMinutes: video.runtimeMinutes,
-        dataSaver:
-            settings.dataSaver || (ref.read(onCellularProvider).value ?? false),
-      );
-      final ranked = rank(
-        candidates,
-        prefs,
-        episode: video.season != null && video.episode != null
-            ? EpisodeRef(season: video.season!, episode: video.episode!)
-            : null,
-      );
-      final kept = ranked.where((r) => !r.isRejected).toList();
-      return ResolveResult(
-        releases: [
-          for (final r in kept) _toRelease(r, byId[r.candidate.id]!.stream),
-        ],
-        rejectedCount: ranked.length - kept.length,
-        sourcesAsked: streamAddons.length,
-        sourcesFailed: failed,
-        message: kept.isEmpty
-            ? 'The versions found are for other episodes or can’t play here.'
-            : null,
-      );
     });
+
+Future<ResolveResult> _resolve(Ref ref, VideoRef video) async {
+  final addons = await ref.watch(enabledAddonsProvider.future);
+  final settings = ref.read(settingsProvider);
+  final streamAddons = [
+    for (final a in addons)
+      if (a.supports('stream', video.type, video.videoId)) a,
+  ];
+  if (addons.isEmpty) {
+    return const ResolveResult(
+      releases: [],
+      message: 'Add a source in Settings to find versions.',
+    );
+  }
+  if (streamAddons.isEmpty) {
+    return const ResolveResult(
+      releases: [],
+      message: 'None of your sources offers versions of this.',
+    );
+  }
+
+  // 1. Ask every source at once.
+  final query = ref
+      .read(aggregatorProvider)
+      .streams(streamAddons, video.type, video.videoId);
+  final perAddon = await query.results.toList();
+  final failed = perAddon.where((r) => r.error != null).length;
+  final rejection = perAddon
+      .map((r) => r.error)
+      .whereType<DebridKeyRejectedException>()
+      .firstOrNull;
+
+  // 2. Parse and dedupe.
+  final byId =
+      <String, ({StreamItem stream, ParsedRelease parsed, String addon})>{};
+  for (final r in perAddon) {
+    for (final s in r.items) {
+      if (isDebridKeyRejection(s)) continue;
+      final id = s.infoHash != null
+          ? '${s.infoHash}:${s.fileIdx ?? -1}'
+          : (s.url ?? s.externalUrl ?? s.title ?? '');
+      if (id.isEmpty || byId.containsKey(id)) continue;
+      final parsed = parseAddonStream(
+        name: s.name,
+        title: s.title,
+        description: s.description,
+        filename: s.filename,
+      );
+      byId[id] = (stream: s, parsed: parsed, addon: r.addon.manifest.name);
+    }
+  }
+  if (byId.isEmpty) {
+    return ResolveResult(
+      releases: const [],
+      sourcesAsked: streamAddons.length,
+      sourcesFailed: failed,
+      message: rejection != null
+          ? 'Your debrid service rejected its key. Check it in Settings › Sources.'
+          : failed == streamAddons.length
+          ? 'Your sources didn’t answer. Check your connection and try again.'
+          : 'No versions were found for this yet.',
+    );
+  }
+
+  // 3. Live swarm health for the most promising torrents (≈2.5 s).
+  final hashes = <String>[
+    for (final e
+        in (byId.values.where((v) => v.stream.infoHash != null).toList()..sort(
+              (a, b) =>
+                  (b.parsed.seeders ?? 0).compareTo(a.parsed.seeders ?? 0),
+            ))
+            .take(70))
+      e.stream.infoHash!,
+  ];
+  var live = <String, SwarmStats>{};
+  if (hashes.isNotEmpty) {
+    try {
+      live = await ref.read(swarmLookupProvider)(hashes, {
+        for (final v in byId.values)
+          for (final t in v.stream.trackers) ?Uri.tryParse(t),
+      });
+    } on Object catch (e) {
+      Log.d('resolve', 'scrape failed: $e');
+    }
+  }
+
+  // 4. Subtitle fit for each release in the user's languages.
+  var fit = <String, Map<String, double>>{};
+  if (settings.subtitleLanguages.isNotEmpty) {
+    try {
+      fit = await ref
+          .read(subtitleFitProvider)(video, {
+            for (final e in byId.entries)
+              e.key: e.value.stream.filename ?? e.value.parsed.raw,
+          })
+          .timeout(const Duration(seconds: 6));
+    } on Object catch (e) {
+      Log.d('resolve', 'subtitle fit unavailable: $e');
+    }
+  }
+
+  // 5. Rank.
+  final now = DateTime.now();
+  final candidates = [
+    for (final e in byId.entries)
+      Candidate(
+        id: e.key,
+        release: e.value.parsed,
+        addonId: e.value.addon,
+        sizeBytes: e.value.stream.videoSize ?? e.value.parsed.sizeBytes,
+        addonSeeders: e.value.parsed.seeders,
+        live: switch (live[e.value.stream.infoHash]) {
+          final s? when s.sources > 0 => SwarmHealth(
+            seeders: s.seeders,
+            leechers: s.leechers,
+            measuredAt: now,
+          ),
+          _ => null,
+        },
+        isDirectUrl:
+            e.value.stream.url != null && e.value.stream.infoHash == null,
+        isDebridCached: e.value.parsed.debridCached ?? false,
+        fileIndex: e.value.stream.fileIdx,
+        subtitleFit: fit[e.key] ?? const {},
+      ),
+  ];
+  final prefs = RankPrefs(
+    device: phoneCaps,
+    audioLanguages: [
+      for (final l in settings.audioLanguages)
+        if (l != 'original') l,
+    ],
+    subtitleLanguages: settings.subtitleLanguages,
+    maxResolution: _resolution(settings.maxResolution),
+    castTarget: ref.read(castTargetCapsProvider),
+    bandwidthBytesPerSec: ref.read(bandwidthEstimateProvider),
+    runtimeMinutes: video.runtimeMinutes,
+    dataSaver:
+        settings.dataSaver || (ref.read(onCellularProvider).value ?? false),
+  );
+  final ranked = rank(
+    candidates,
+    prefs,
+    episode: video.season != null && video.episode != null
+        ? EpisodeRef(season: video.season!, episode: video.episode!)
+        : null,
+  );
+  final kept = ranked.where((r) => !r.isRejected).toList();
+  return ResolveResult(
+    releases: [
+      for (final r in kept) _toRelease(r, byId[r.candidate.id]!.stream),
+    ],
+    rejectedCount: ranked.length - kept.length,
+    sourcesAsked: streamAddons.length,
+    sourcesFailed: failed,
+    message: kept.isEmpty
+        ? 'The versions found are for other episodes or can’t play here.'
+        : null,
+  );
+}
 
 Resolution _resolution(int lines) => switch (lines) {
   >= 2160 => Resolution.p2160,

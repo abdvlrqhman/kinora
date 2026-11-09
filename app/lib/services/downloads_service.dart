@@ -28,6 +28,11 @@ import 'subtitles_service.dart';
 /// through the OS background transfer service), keeps them going in the
 /// background, restores them after a restart, and adopts streams that
 /// finished downloading while being watched.
+///
+/// Torrent downloads only ever *claim* their own file (see
+/// [EngineService.claim]): episodes of one season pack, streams and
+/// downloads share a torrent without starving or deleting each other, and
+/// each row completes when its own file is complete.
 final class DownloadsService implements DownloadActions {
   DownloadsService(this._ref);
 
@@ -39,10 +44,15 @@ final class DownloadsService implements DownloadActions {
   bool _onWifi = true;
   bool _started = false;
 
+  /// Videos whose download is being set up right now (double taps).
+  final _starting = <String>{};
+
   AppDatabase get _db => _ref.read(databaseProvider);
   AppPaths get _paths => _ref.read(pathsProvider);
   AppSettings get _settings => _ref.read(settingsProvider);
   EngineService get _engines => _ref.read(engineServiceProvider);
+
+  static String _owner(String id) => 'dl:$id';
 
   /// Restores unfinished downloads and starts listening. Idempotent.
   Future<void> start() async {
@@ -60,54 +70,63 @@ final class DownloadsService implements DownloadActions {
             ))
             .get();
     for (final row in active) {
-      if (row.infoHash == null) continue;
-      _engines.add(
-        infoHash: row.infoHash!,
-        name: row.releaseName,
-        savePath: row.directory,
-        forDownload: true,
-      );
+      if (_settings.wifiOnlyDownloads && !_onWifi) {
+        await _update(
+          row.id,
+          const DownloadsCompanion(
+            state: Value('paused'),
+            error: Value('Waiting for Wi-Fi'),
+          ),
+        );
+      } else if (row.infoHash == null) {
+        // Killed while finding a version: start over.
+        unawaited(_startDownload(row.id, _requestOf(row), row.directory));
+      } else {
+        unawaited(_reclaim(row));
+      }
     }
-    if (active.isNotEmpty) _ensurePolling();
   }
 
-  // ---------------------------------------------------------- actions --
+  // ------------------------------------------------------------- actions --
 
   @override
   Future<void> download(PlayRequest request) async {
     await start();
-    final existing = await (_db.select(
-      _db.downloads,
-    )..where((t) => t.videoId.equals(request.videoId))).getSingleOrNull();
-    if (existing != null) {
-      if (existing.state == 'paused' || existing.state == 'failed')
-        await resume(existing.id);
-      return;
+    if (!_starting.add(request.videoId)) return;
+    try {
+      final existing = await _rowForVideo(request.videoId);
+      if (existing != null) {
+        if (existing.state == 'paused' || existing.state == 'failed')
+          await resume(existing.id);
+        return;
+      }
+      final id = _newId();
+      final dir = Directory(_folderFor(request));
+      await dir.create(recursive: true);
+      await _db
+          .into(_db.downloads)
+          .insert(
+            DownloadsCompanion.insert(
+              id: id,
+              mediaId: request.mediaId,
+              videoId: request.videoId,
+              type: request.type,
+              title: request.title,
+              episodeTitle: Value(request.episodeTitle),
+              season: Value(request.season),
+              episode: Value(request.episode),
+              poster: Value(request.poster),
+              still: Value(request.still ?? request.background),
+              releaseName: 'Finding the best version',
+              kind: 'torrent',
+              directory: dir.path,
+              state: 'queued',
+            ),
+          );
+      unawaited(_startDownload(id, request, dir.path));
+    } finally {
+      _starting.remove(request.videoId);
     }
-    final id = _newId();
-    final dir = Directory(_folderFor(request));
-    await dir.create(recursive: true);
-    await _db
-        .into(_db.downloads)
-        .insert(
-          DownloadsCompanion.insert(
-            id: id,
-            mediaId: request.mediaId,
-            videoId: request.videoId,
-            type: request.type,
-            title: request.title,
-            episodeTitle: Value(request.episodeTitle),
-            season: Value(request.season),
-            episode: Value(request.episode),
-            poster: Value(request.poster),
-            still: Value(request.still ?? request.background),
-            releaseName: 'Finding the best version',
-            kind: 'torrent',
-            directory: dir.path,
-            state: 'queued',
-          ),
-        );
-    unawaited(_startDownload(id, request, dir.path));
   }
 
   Future<void> _startDownload(
@@ -124,6 +143,7 @@ final class DownloadsService implements DownloadActions {
         episode: request.episode,
       );
       final result = await _ref.read(resolveProvider(video).future);
+      if (await _row(id) == null) return; // removed meanwhile
       final releases = [...result.releases];
       if (request.candidateId != null) {
         final i = releases.indexWhere(
@@ -150,15 +170,27 @@ final class DownloadsService implements DownloadActions {
           stream.filename,
         );
       } else if (stream.infoHash != null) {
-        await _startTorrent(
+        await _update(
           id,
-          request,
-          dir,
-          best,
-          stream.infoHash!,
-          stream.trackers,
-          best.fileIndex ?? stream.fileIdx,
+          DownloadsCompanion(
+            releaseName: Value(best.releaseName),
+            infoHash: Value(stream.infoHash!.toLowerCase()),
+            fileIndex: Value(best.fileIndex ?? stream.fileIdx),
+          ),
         );
+        if (_settings.wifiOnlyDownloads && !_onWifi) {
+          await _update(
+            id,
+            const DownloadsCompanion(
+              state: Value('paused'),
+              error: Value('Waiting for Wi-Fi'),
+            ),
+          );
+          return;
+        }
+        final row = await _row(id);
+        if (row != null)
+          await _reclaim(row, trackers: stream.trackers, request: request);
       } else {
         await _fail(id, 'This version can’t be downloaded.');
       }
@@ -168,74 +200,92 @@ final class DownloadsService implements DownloadActions {
     }
   }
 
-  Future<void> _startTorrent(
-    String id,
-    PlayRequest request,
-    String dir,
-    ResolvedRelease release,
-    String infoHash,
-    List<String> trackers,
-    int? fileIndex,
-  ) async {
-    if (_settings.wifiOnlyDownloads && !_onWifi) {
+  /// (Re)attaches a torrent row to the engine: adds the torrent, claims the
+  /// row's file once metadata is known, and makes sure the data lives in
+  /// the Downloads folder (never in the stream cache).
+  Future<void> _reclaim(
+    DownloadRow row, {
+    List<String> trackers = const [],
+    PlayRequest? request,
+  }) async {
+    final id = row.id;
+    final ih = row.infoHash!;
+    final owner = _owner(id);
+    try {
+      final engine = _engines.engine;
+      final added = _engines.add(
+        infoHash: ih,
+        name: row.releaseName,
+        trackers: trackers,
+        savePath: row.directory,
+        forDownload: true,
+      );
+      _engines.claim(added, owner, row.fileIndex ?? -1);
+      await _update(
+        id,
+        const DownloadsCompanion(
+          state: Value('downloading'),
+          error: Value(null),
+        ),
+      );
+      _ensurePolling();
+      final files = await engine.waitForFiles(
+        added,
+        timeout: const Duration(minutes: 3),
+      );
+      if (await _row(id) == null) {
+        _retire(added, owner);
+        return;
+      }
+      final file = pickFile(
+        files,
+        fileIndex: row.fileIndex,
+        season: row.season,
+        episode: row.episode,
+      );
+      if (file == null) {
+        _retire(added, owner);
+        await _fail(id, 'This version has no video file.');
+        return;
+      }
+      _engines.claim(added, owner, file.index);
+      // Data folder: ours, unless another download already owns this
+      // torrent (one torrent can only live in one folder).
+      final others =
+          (await (_db.select(
+            _db.downloads,
+          )..where((t) => t.infoHash.equals(added))).get()).where(
+            (r) => r.id != id,
+          );
+      final st = engine.status(added);
+      var base = st?.savePath ?? row.directory;
+      if (others.isEmpty && !p.equals(base, row.directory)) {
+        engine.moveStorage(added, row.directory);
+        base = row.directory;
+      }
+      final path = p.join(base, file.path);
       await _update(
         id,
         DownloadsCompanion(
-          releaseName: Value(release.releaseName),
-          infoHash: Value(infoHash),
-          fileIndex: Value(fileIndex),
-          state: const Value('paused'),
-          error: const Value('Waiting for Wi-Fi'),
+          fileIndex: Value(file.index),
+          filePath: Value(path),
+          totalBytes: Value(file.size),
         ),
       );
-      return;
+      if (row.subtitlesJson == '[]') {
+        unawaited(
+          _saveSubtitles(id, request ?? _requestOf(row), row.releaseName, path),
+        );
+      }
+    } on EngineException catch (e) {
+      _retire(ih, owner);
+      await _fail(
+        id,
+        e.message.contains('metadata')
+            ? 'No one is sharing this version right now. Try again later or choose another version.'
+            : 'Download couldn’t start. Try again.',
+      );
     }
-    final engine = _engines.engine;
-    final ih = _engines.add(
-      infoHash: infoHash,
-      name: release.releaseName,
-      trackers: trackers,
-      savePath: dir,
-      forDownload: true,
-    );
-    await _update(
-      id,
-      DownloadsCompanion(
-        releaseName: Value(release.releaseName),
-        infoHash: Value(ih),
-        fileIndex: Value(fileIndex),
-        state: const Value('downloading'),
-        error: const Value(null),
-      ),
-    );
-    _ensurePolling();
-    final files = await engine.waitForFiles(
-      ih,
-      timeout: const Duration(minutes: 3),
-    );
-    final file = pickFile(
-      files,
-      fileIndex: fileIndex,
-      season: request.season,
-      episode: request.episode,
-    );
-    if (file == null) {
-      await _fail(id, 'This version has no video file.');
-      return;
-    }
-    engine.setFilePriorities(ih, [
-      for (final f in files) f.index == file.index ? 4 : 0,
-    ]);
-    final path = p.join(dir, file.path);
-    await _update(
-      id,
-      DownloadsCompanion(
-        fileIndex: Value(file.index),
-        filePath: Value(path),
-        totalBytes: Value(file.size),
-      ),
-    );
-    unawaited(_saveSubtitles(id, request, release.releaseName, path));
   }
 
   Future<void> _startHttp(
@@ -288,7 +338,14 @@ final class DownloadsService implements DownloadActions {
       final task = await FileDownloader().taskForId(downloadId);
       if (task is DownloadTask) await FileDownloader().pause(task);
     } else if (row.infoHash != null && _engines.isRunning) {
-      _engines.engine.pause(row.infoHash!);
+      // Pause this file only; others sharing the torrent keep going.
+      if (!_engines.release(row.infoHash!, _owner(row.id))) {
+        try {
+          _engines.engine.pause(row.infoHash!);
+        } on EngineException {
+          // Not in the session.
+        }
+      }
     }
     await _update(
       downloadId,
@@ -315,21 +372,7 @@ final class DownloadsService implements DownloadActions {
       }
     }
     if (row.infoHash != null) {
-      _engines.add(
-        infoHash: row.infoHash!,
-        name: row.releaseName,
-        savePath: row.directory,
-        forDownload: true,
-      );
-      _engines.engine.resume(row.infoHash!);
-      await _update(
-        downloadId,
-        const DownloadsCompanion(
-          state: Value('downloading'),
-          error: Value(null),
-        ),
-      );
-      _ensurePolling();
+      await _reclaim(row);
       return;
     }
     // Never got a version: start over.
@@ -343,18 +386,12 @@ final class DownloadsService implements DownloadActions {
   Future<void> remove(String downloadId) async {
     final row = await _row(downloadId);
     if (row == null) return;
-    if (row.kind == 'http') {
-      await FileDownloader().cancelTaskWithId(downloadId);
-    }
-    if (row.infoHash != null &&
-        _engines.isRunning &&
-        _engines.engine.status(row.infoHash!) != null) {
-      _engines.engine.remove(row.infoHash!, deleteFiles: true);
-    }
-    await _deleteFiles(row);
+    if (row.kind == 'http') await FileDownloader().cancelTaskWithId(downloadId);
     await (_db.delete(
       _db.downloads,
     )..where((t) => t.id.equals(downloadId))).go();
+    if (row.infoHash != null) _retire(row.infoHash!, _owner(row.id));
+    await _deleteFiles(row);
     await _refreshKeepAlive();
   }
 
@@ -376,32 +413,33 @@ final class DownloadsService implements DownloadActions {
 
   // ------------------------------------------- completed streams → downloads --
 
-  /// A stream reached 100%: move it into Downloads instead of deleting it.
+  /// A stream reached 100%: keep it in Downloads instead of deleting it.
   Future<void> adoptCompletedStream(
     PlaybackSource source,
     PlayRequest request,
   ) async {
     final ih = source.infoHash;
-    if (ih == null || request.videoId.startsWith('magnet:')) return;
-    final existing = await (_db.select(
-      _db.downloads,
-    )..where((t) => t.videoId.equals(request.videoId))).getSingleOrNull();
-    if (existing != null) return;
+    if (ih == null ||
+        request.videoId.startsWith('magnet:') ||
+        request.videoId.startsWith('http'))
+      return;
+    if (await _rowForVideo(request.videoId) != null) return;
     final engine = _engines.engine;
     final files = engine.files(ih);
     final status = engine.status(ih);
     if (files == null || status == null) return;
     final file =
-        files.where((f) => p.basename(f.path) == source.fileName).firstOrNull ??
-        files
-            .where((f) => f.isVideo)
-            .fold<TorrentFile?>(
-              null,
-              (a, b) => a == null || b.size > a.size ? b : a,
-            );
+        files.where((f) => f.index == source.fileIndex).firstOrNull ??
+        files.where((f) => p.basename(f.path) == source.fileName).firstOrNull;
     if (file == null) return;
-    final dir = Directory(_folderFor(request))..createSync(recursive: true);
     final id = _newId();
+    final owner = _owner(id);
+    _engines.claim(ih, owner, file.index);
+    final others = await (_db.select(
+      _db.downloads,
+    )..where((t) => t.infoHash.equals(ih))).get();
+    final dir = others.isEmpty ? _folderFor(request) : status.savePath;
+    await Directory(dir).create(recursive: true);
     await _db
         .into(_db.downloads)
         .insert(
@@ -421,34 +459,44 @@ final class DownloadsService implements DownloadActions {
             kind: 'torrent',
             infoHash: Value(ih),
             fileIndex: Value(file.index),
-            directory: dir.path,
-            filePath: Value(p.join(dir.path, file.path)),
+            directory: dir,
+            filePath: Value(p.join(dir, file.path)),
             totalBytes: Value(file.size),
             doneBytes: Value(file.size),
             state: 'completed',
             completedAt: Value(DateTime.now()),
           ),
         );
-    final moved = Completer<bool>();
-    final sub = engine.events.listen((e) {
-      if (e is StorageMoved && e.infoHash == ih && !moved.isCompleted)
-        moved.complete(true);
-      if (e is StorageMoveFailed && e.infoHash == ih && !moved.isCompleted)
-        moved.complete(false);
-    });
-    engine.moveStorage(ih, dir.path);
-    final ok = await moved.future.timeout(
-      const Duration(minutes: 2),
-      onTimeout: () => false,
-    );
-    await sub.cancel();
-    if (!ok) {
-      Log.w('downloads', 'keeping a finished stream failed for $ih');
-      await (_db.delete(_db.downloads)..where((t) => t.id.equals(id))).go();
-      engine.remove(ih, deleteFiles: true);
-      return;
+    if (!p.equals(status.savePath, dir)) {
+      final moved = Completer<bool>();
+      final sub = engine.events.listen((e) {
+        if (e is StorageMoved && e.infoHash == ih && !moved.isCompleted)
+          moved.complete(true);
+        if (e is StorageMoveFailed && e.infoHash == ih && !moved.isCompleted)
+          moved.complete(false);
+      });
+      engine.moveStorage(ih, dir);
+      // Same volume as the stream cache, so normally a rename; never delete
+      // the user's data because a big copy is slow.
+      final ok = await moved.future.timeout(
+        const Duration(minutes: 30),
+        onTimeout: () => false,
+      );
+      await sub.cancel();
+      if (!ok) {
+        Log.w('downloads', 'keeping a finished stream failed for $ih');
+        await _update(
+          id,
+          DownloadsCompanion(
+            state: const Value('failed'),
+            filePath: Value(p.join(status.savePath, file.path)),
+            error: const Value(
+              'Couldn’t move this episode into Downloads. It plays from where it is.',
+            ),
+          ),
+        );
+      }
     }
-    if (!_settings.seedAfterDownload) engine.remove(ih);
     Log.i(
       'downloads',
       'kept finished stream ${request.title} ${request.videoId}',
@@ -458,9 +506,12 @@ final class DownloadsService implements DownloadActions {
         id,
         request,
         source.release?.releaseName ?? source.fileName ?? '',
-        p.join(dir.path, file.path),
+        p.join(dir, file.path),
       ),
     );
+    // The stream is over: its claim goes now, so the torrent can retire.
+    if (source.owner != null) _engines.release(ih, source.owner!);
+    _finishClaim(ih, owner);
   }
 
   // ------------------------------------------------------------ progress --
@@ -487,26 +538,19 @@ final class DownloadsService implements DownloadActions {
     }
     final engine = _engines.engine;
     var done = 0, total = 0, rate = 0;
+    final rates = <String>{};
     for (final r in rows) {
-      final st = engine.status(r.infoHash ?? '');
-      if (st == null) continue;
-      total += st.totalWanted;
-      done += st.totalWantedDone;
-      rate += st.downloadRate;
-      if (st.totalWantedDone != r.doneBytes ||
-          (st.totalWanted > 0 && st.totalWanted != r.totalBytes)) {
-        await _update(
-          r.id,
-          DownloadsCompanion(
-            doneBytes: Value(st.totalWantedDone),
-            totalBytes: Value(
-              st.totalWanted > 0 ? st.totalWanted : r.totalBytes,
-            ),
-          ),
-        );
-      }
-      if (st.isComplete && st.hasMetadata && st.totalWanted > 0)
-        await _complete(r);
+      final ih = r.infoHash;
+      if (ih == null || r.fileIndex == null || r.totalBytes <= 0) continue;
+      final fp = engine.fileProgress(ih);
+      if (fp == null || r.fileIndex! >= fp.length) continue;
+      final have = fp[r.fileIndex!];
+      total += r.totalBytes;
+      done += have;
+      if (rates.add(ih)) rate += engine.status(ih)?.downloadRate ?? 0;
+      if (have != r.doneBytes)
+        await _update(r.id, DownloadsCompanion(doneBytes: Value(have)));
+      if (have >= r.totalBytes) await _complete(r);
     }
     final progress = total == 0 ? null : done / total;
     await BackgroundKeeper.instance.keepAlive(
@@ -522,22 +566,18 @@ final class DownloadsService implements DownloadActions {
 
   Future<void> _onEngineEvent(EngineEvent e) async {
     if (e is TorrentFinished) {
-      final rows = await (_db.select(
-        _db.downloads,
-      )..where((t) => t.infoHash.equals(e.infoHash))).get();
-      for (final r in rows) {
-        if (r.state != 'completed') await _complete(r);
-      }
+      // Finished means every *claimed* file is done; check each row's own.
+      await _tick();
     } else if (e is TorrentFileError) {
       final rows = await (_db.select(
         _db.downloads,
       )..where((t) => t.infoHash.equals(e.infoHash))).get();
-      for (final r in rows) {
+      for (final r in rows.where((r) => r.state != 'completed')) {
         await _fail(
           r.id,
-          e.message.contains('space')
-              ? 'Your device is out of space.'
-              : 'Saving failed: ${e.message}',
+          RegExp('space|ENOSPC', caseSensitive: false).hasMatch(e.message)
+              ? 'Your device is out of space. Free some up, then tap to try again.'
+              : 'Saving failed. Check free space, then tap to try again.',
         );
       }
     }
@@ -554,11 +594,50 @@ final class DownloadsService implements DownloadActions {
       ),
     );
     Log.i('downloads', 'completed ${_label(r)}');
-    if (!_settings.seedAfterDownload &&
-        r.infoHash != null &&
-        _engines.isRunning) {
-      _engines.engine.remove(r.infoHash!); // stop sharing; files stay
+    if (r.infoHash != null) _finishClaim(r.infoHash!, _owner(r.id));
+  }
+
+  /// A finished download no longer needs the network: release its claim and,
+  /// unless sharing is on, retire the torrent once nobody else uses it.
+  void _finishClaim(String ih, String owner) {
+    if (_settings.seedAfterDownload) return; // keep sharing
+    if (!_engines.release(ih, owner)) {
+      // Give a stream of the next episode in the same pack a moment.
+      Timer(const Duration(seconds: 30), () => _retire(ih, null));
     }
+  }
+
+  /// Releases [owner] (if given) and removes the torrent when unclaimed,
+  /// keeping finished files and deleting leftovers no download owns.
+  void _retire(String ih, String? owner) {
+    if (owner != null) _engines.release(ih, owner);
+    if (!_engines.isRunning || _engines.isClaimed(ih)) return;
+    final engine = _engines.engine;
+    final status = engine.status(ih);
+    if (status == null) return;
+    final files = engine.files(ih);
+    final progress = engine.fileProgress(ih);
+    final savePath = status.savePath;
+    _engines.removeIfUnclaimed(ih, deleteFiles: false);
+    unawaited(() async {
+      final owned = {
+        for (final r in await (_db.select(
+          _db.downloads,
+        )..where((t) => t.infoHash.equals(ih))).get())
+          ?r.filePath,
+      };
+      if (files != null) {
+        for (final f in files) {
+          final path = p.join(savePath, f.path);
+          final partial =
+              progress == null ||
+              f.index >= progress.length ||
+              progress[f.index] < f.size;
+          if (!owned.contains(path) && partial) await _deleteIfExists(path);
+        }
+      }
+      if (owned.isEmpty) await _deleteIfExists(p.join(savePath, '.$ih.parts'));
+    }());
   }
 
   Future<void> _onHttpUpdate(TaskUpdate update) async {
@@ -580,10 +659,13 @@ final class DownloadsService implements DownloadActions {
             final row = await _row(id);
             if (row != null) await _complete(row);
           case TaskStatus.failed || TaskStatus.notFound:
+            Log.w(
+              'downloads',
+              'http download failed: ${exception?.description}',
+            );
             await _fail(
               id,
-              exception?.description ??
-                  'The download link stopped working. Try another version.',
+              'The download link stopped working. Try another version.',
             );
           case TaskStatus.paused:
             await _update(id, const DownloadsCompanion(state: Value('paused')));
@@ -619,14 +701,10 @@ final class DownloadsService implements DownloadActions {
     )..where((t) => t.kind.equals('torrent'))).get();
     for (final row in rows) {
       if (!wifi && row.state == 'downloading') {
-        if (row.infoHash != null && _engines.isRunning)
-          _engines.engine.pause(row.infoHash!);
+        await pause(row.id);
         await _update(
           row.id,
-          const DownloadsCompanion(
-            state: Value('paused'),
-            error: Value('Waiting for Wi-Fi'),
-          ),
+          const DownloadsCompanion(error: Value('Waiting for Wi-Fi')),
         );
       } else if (wifi &&
           row.state == 'paused' &&
@@ -671,7 +749,7 @@ final class DownloadsService implements DownloadActions {
             releaseName: releaseName,
             videoPath: videoPath,
           );
-      if (saved.isNotEmpty) {
+      if (saved.isNotEmpty && await _row(id) != null) {
         await _update(
           id,
           DownloadsCompanion(subtitlesJson: Value(jsonEncode(saved))),
@@ -684,13 +762,14 @@ final class DownloadsService implements DownloadActions {
 
   Future<void> _deleteFiles(DownloadRow row) async {
     final path = row.filePath;
-    if (path != null) {
-      final f = File(path);
-      if (f.existsSync()) await f.delete();
-    }
-    for (final s in await savedDownloadSubtitles(_db, row.videoId)) {
-      final f = File(s['path']!);
-      if (f.existsSync()) await f.delete();
+    if (path != null) await _deleteIfExists(path);
+    try {
+      for (final e in jsonDecode(row.subtitlesJson) as List<Object?>) {
+        if (e is Map<String, Object?> && e['path'] is String)
+          await _deleteIfExists(e['path']! as String);
+      }
+    } on FormatException {
+      // No saved subtitles.
     }
     // Remove now-empty folders up to the Downloads root.
     var dir = path == null ? Directory(row.directory) : File(path).parent;
@@ -704,9 +783,22 @@ final class DownloadsService implements DownloadActions {
     }
   }
 
+  static Future<void> _deleteIfExists(String path) async {
+    try {
+      final f = File(path);
+      if (f.existsSync()) await f.delete();
+    } on FileSystemException catch (e) {
+      Log.d('downloads', 'delete $path: $e');
+    }
+  }
+
   Future<DownloadRow?> _row(String id) => (_db.select(
     _db.downloads,
   )..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  Future<DownloadRow?> _rowForVideo(String videoId) async => (await (_db.select(
+    _db.downloads,
+  )..where((t) => t.videoId.equals(videoId))).get()).firstOrNull;
 
   Future<void> _update(String id, DownloadsCompanion c) =>
       (_db.update(_db.downloads)..where((t) => t.id.equals(id))).write(c);

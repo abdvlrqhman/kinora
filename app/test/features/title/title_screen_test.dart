@@ -273,6 +273,7 @@ void main() {
           positionMs: done ? 3000000 : 60000,
           durationMs: 3000000,
           completed: done,
+          dismissed: false,
           updatedAt: day.add(Duration(days: days)),
         );
 

@@ -41,6 +41,9 @@ class WatchProgress extends Table {
   IntColumn get positionMs => integer()();
   IntColumn get durationMs => integer()();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
+
+  /// Hidden from Continue watching by the viewer (watched marks stay).
+  BoolColumn get dismissed => boolean().withDefault(const Constant(false))();
   TextColumn get poster => text().nullable()();
   TextColumn get still => text().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -153,11 +156,28 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forExecutor(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  static const _uniqueVideo =
+      'CREATE UNIQUE INDEX IF NOT EXISTS downloads_video_id ON downloads (video_id)';
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) => m.createAll(),
+    onCreate: (m) async {
+      await m.createAll();
+      await customStatement(_uniqueVideo);
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(watchProgress, watchProgress.dismissed);
+        // One download per video: keep the oldest of any duplicates.
+        await customStatement(
+          'DELETE FROM downloads WHERE rowid NOT IN '
+          '(SELECT MIN(rowid) FROM downloads GROUP BY video_id)',
+        );
+        await customStatement(_uniqueVideo);
+      }
+    },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },

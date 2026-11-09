@@ -86,7 +86,8 @@ final class EngineService {
       ],
     );
     final resume = File('${_paths.resume.path}/$infoHash.fastresume');
-    return engine.add(
+    final existed = engine.status(infoHash) != null;
+    final ih = engine.add(
       AddTorrent.magnet(
         magnet.toUri().toString(),
         savePath:
@@ -94,12 +95,18 @@ final class EngineService {
             (forDownload ? _paths.downloads.path : _paths.streams.path),
         resumePath: resume.existsSync() ? resume.path : null,
         name: name,
+        // Nothing downloads until an owner claims its file (see [claim]).
+        filePriorities: existed ? null : List.filled(1024, 0),
         // Not sharing while watching: a trickle keeps peers willing to send.
         uploadLimit: !forDownload && !_settings.seedWhileWatching
             ? 20 * 1024
             : null,
       ),
     );
+    // Reusing a torrent someone paused (kept stream, paused download).
+    if (engine.status(ih)?.paused ?? false) engine.resume(ih);
+    if (existed) _applyPriorities(ih);
+    return ih;
   }
 
   /// Deletes stream leftovers older than [keepHours] (all of them when 0),
@@ -131,6 +138,65 @@ final class EngineService {
       }
     }
     if (removed > 0) Log.i('engine', 'cleaned $removed old stream files');
+  }
+
+  // ------------------------------------------------------------ claims --
+
+  /// Who needs which file of each torrent: info-hash → owner → file index
+  /// (-1 = metadata only). File priorities are always the union, so streams
+  /// and downloads of one season pack never starve each other, and a
+  /// torrent is only removed once nobody owns it.
+  final _claims = <String, Map<String, int>>{};
+
+  /// [owner] needs [fileIndex] of [infoHash] (-1: just keep it warm).
+  void claim(String infoHash, String owner, int fileIndex) {
+    (_claims[infoHash] ??= {})[owner] = fileIndex;
+    _applyPriorities(infoHash);
+  }
+
+  /// [owner] no longer needs [infoHash]. Returns whether anyone still does.
+  bool release(String infoHash, String owner) {
+    final m = _claims[infoHash];
+    m?.remove(owner);
+    if (m != null && m.isEmpty) _claims.remove(infoHash);
+    _applyPriorities(infoHash);
+    return isClaimed(infoHash);
+  }
+
+  bool isClaimed(String infoHash) => _claims[infoHash]?.isNotEmpty ?? false;
+
+  /// Owners currently holding [infoHash] (for diagnostics and tests).
+  Map<String, int> claimsOf(String infoHash) =>
+      Map.unmodifiable(_claims[infoHash] ?? const {});
+
+  void _applyPriorities(String infoHash) {
+    final e = _engine;
+    if (e == null || e.status(infoHash) == null) return;
+    final files = e.files(infoHash);
+    if (files == null)
+      return; // applied again when an owner claims after metadata
+    final wanted = {
+      for (final i in _claims[infoHash]?.values ?? const <int>[]) i,
+    };
+    try {
+      e.setFilePriorities(infoHash, [
+        for (final f in files) wanted.contains(f.index) ? 4 : 0,
+      ]);
+    } on EngineException catch (err) {
+      Log.d('engine', 'priorities for $infoHash: $err');
+    }
+  }
+
+  /// Removes [infoHash] if nobody claims it. [deleteFiles] for stream
+  /// leftovers; downloads keep their files.
+  void removeIfUnclaimed(String infoHash, {required bool deleteFiles}) {
+    final e = _engine;
+    if (e == null || isClaimed(infoHash) || e.status(infoHash) == null) return;
+    try {
+      e.remove(infoHash, deleteFiles: deleteFiles);
+    } on EngineException catch (err) {
+      Log.d('engine', 'remove $infoHash: $err');
+    }
   }
 
   /// Saves resume data and the DHT table (call when backgrounded).

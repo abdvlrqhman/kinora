@@ -72,7 +72,9 @@ final class ProgressRepository {
     final q = _db.select(_db.watchProgress)
       ..where(
         (t) =>
-            t.completed.equals(false) & t.positionMs.isBiggerThanValue(30000),
+            t.completed.equals(false) &
+            t.dismissed.equals(false) &
+            t.positionMs.isBiggerThanValue(30000),
       )
       ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
     return q.watch().map((rows) {
@@ -114,6 +116,7 @@ final class ProgressRepository {
             positionMs: position.inMilliseconds,
             durationMs: duration.inMilliseconds,
             completed: Value(done),
+            dismissed: const Value(false), // watching again brings it back
             poster: Value(poster),
             still: Value(still),
             updatedAt: Value(DateTime.now()),
@@ -130,6 +133,11 @@ final class ProgressRepository {
           updatedAt: Value(DateTime.now()),
         ),
       );
+
+  /// Hides a title from Continue watching; progress and watched marks stay.
+  Future<void> dismiss(String mediaId) =>
+      (_db.update(_db.watchProgress)..where((t) => t.mediaId.equals(mediaId)))
+          .write(const WatchProgressCompanion(dismissed: Value(true)));
 
   Future<void> remove(String mediaId) => (_db.delete(
     _db.watchProgress,

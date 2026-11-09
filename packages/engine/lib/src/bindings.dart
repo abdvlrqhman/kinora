@@ -152,6 +152,9 @@ final class EngineBindings {
       moveStorage = lib.lookupFunction<_PeerLikeN, _PeerLikeD>(
         'kn_move_storage',
       ),
+      fileProgress = lib.lookupFunction<_SesStrStrN, _SesStrStrD>(
+        'kn_file_progress',
+      ),
       serverPort = lib.lookupFunction<_SesIntN, _SesIntD>('kn_server_port'),
       streamOpen = lib.lookupFunction<_OpenN, _OpenD>('kn_stream_open'),
       streamClose = lib.lookupFunction<_SesStrIntN, _SesStrIntD>(
@@ -202,6 +205,7 @@ final class EngineBindings {
   final _SesStrIntD saveResume;
   final _PeerD connectPeer;
   final _PeerLikeD moveStorage;
+  final _SesStrStrD fileProgress;
   final _SesIntD serverPort;
   final _OpenD streamOpen;
   final _SesStrIntD streamClose;

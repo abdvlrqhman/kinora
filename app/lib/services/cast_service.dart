@@ -45,6 +45,7 @@ final class CastService extends ChangeNotifier {
   StreamSubscription<DlnaDevice>? _ssdp;
   StreamSubscription<DlnaDevice>? _probe;
   final _routes = <String>[];
+  int _castGen = 0;
 
   bool get isCasting =>
       device != null && phase != CastPhase.idle && phase != CastPhase.stopped;
@@ -225,7 +226,9 @@ final class CastService extends ChangeNotifier {
     String? subtitlePath,
     String? subtitleLanguage,
   }) async {
+    final gen = ++_castGen;
     await stop(silent: true);
+    if (gen != _castGen) return false;
     device = d;
     phase = CastPhase.connecting;
     message = null;
@@ -296,7 +299,9 @@ final class CastService extends ChangeNotifier {
           Log.d('cast', 'seek after load: $e');
         }
       }
+      if (gen != _castGen) return false; // a newer cast took over
       phase = CastPhase.playing;
+      await _watch?.cancel();
       _watch = renderer
           .watch(interval: const Duration(seconds: 1))
           .listen(_onStatus);

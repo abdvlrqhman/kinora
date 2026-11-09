@@ -15,9 +15,11 @@ import '../../services/engine_service.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
 import '../../services/playback.dart';
+import '../../services/cast_service.dart';
 import '../../services/downloads.dart';
 import '../../services/resolver.dart';
 import '../../services/sources.dart';
+import '../../ui/widgets/media.dart' show runtimeMinutes;
 import '../../services/subtitle_option.dart';
 import '../../services/subtitles_service.dart';
 
@@ -75,6 +77,9 @@ class PlayerController extends ChangeNotifier {
 
   /// Chapter markers (title, start) read from the file.
   List<({String title, Duration start})> chapters = const [];
+
+  /// Whether Up Next may start the next episode by itself.
+  bool get autoplayNext => _settings.autoplayNext;
 
   /// Up Next is offered near the end of an episode.
   bool upNextDismissed = false;
@@ -147,7 +152,10 @@ class PlayerController extends ChangeNotifier {
               notifyListeners();
             },
           );
-      if (gen != _generation || _disposed) return;
+      if (gen != _generation || _disposed) {
+        await _dropSource(src, keepIfComplete: false);
+        return;
+      }
       source = src;
       final start = req.startAt ?? await _savedPosition(req.videoId);
       status = 'Buffering';
@@ -155,6 +163,7 @@ class PlayerController extends ChangeNotifier {
       await player.open(
         Media(src.uri.toString(), httpHeaders: src.headers, start: start),
       );
+      if (gen != _generation || _disposed) return;
       phase = PlayerPhase.playing;
       _startTimers();
       notifyListeners();
@@ -204,12 +213,7 @@ class PlayerController extends ChangeNotifier {
     await set('sid', 'no'); // subtitles are chosen by Kinora, not mpv
   }
 
-  int? _runtimeMinutes() {
-    final r = meta?.runtime;
-    if (r == null) return null;
-    final m = RegExp(r'(\d+)').firstMatch(r);
-    return m == null ? null : int.tryParse(m.group(1)!);
-  }
+  int? _runtimeMinutes() => runtimeMinutes(meta?.runtime);
 
   Future<void> _loadMeta() async {
     if (_request.videoId.startsWith('magnet:') ||
@@ -366,6 +370,7 @@ class PlayerController extends ChangeNotifier {
   /// Switches to another episode or version without leaving the player.
   Future<void> switchTo(PlayRequest next) async {
     await _saveProgress();
+    _releasePrefetch();
     await _releaseSource();
     await player.stop();
     await _load(next);
@@ -435,17 +440,34 @@ class PlayerController extends ChangeNotifier {
         ).future,
       );
       final best = result.best?.stream;
-      if (best?.infoHash != null) {
-        _ref
-            .read(engineServiceProvider)
-            .add(
-              infoHash: best!.infoHash!,
-              name: best.filename,
-              trackers: best.trackers.map((t) => t.toString()).toList(),
-            );
-      }
+      if (best?.infoHash == null || _disposed) return;
+      final service = _ref.read(engineServiceProvider);
+      final ih = service.add(
+        infoHash: best!.infoHash!,
+        name: best.filename,
+        trackers: best.trackers.map((t) => t.toString()).toList(),
+      );
+      // Metadata and peers only: nothing downloads until Next is pressed.
+      _releasePrefetch();
+      _prefetched = (ih: ih, owner: 'prefetch:${next.videoId}');
+      service.claim(ih, _prefetched!.owner, -1);
     } on Object catch (e) {
       Log.d('player', 'prefetch next failed: $e');
+    }
+  }
+
+  ({String ih, String owner})? _prefetched;
+
+  void _releasePrefetch() {
+    final p = _prefetched;
+    _prefetched = null;
+    if (p == null) return;
+    final service = _ref.read(engineServiceProvider);
+    if (!service.release(p.ih, p.owner)) {
+      Timer(
+        const Duration(seconds: 30),
+        () => service.removeIfUnclaimed(p.ih, deleteFiles: true),
+      );
     }
   }
 
@@ -545,7 +567,11 @@ class PlayerController extends ChangeNotifier {
         variant: choice.subtitleVariant,
         id: choice.subtitleId,
       );
-      if (sub == null) {
+      // The exact remembered file may still be on its way (external
+      // subtitles arrive after playback starts): wait for it even when a
+      // fallback in the same language shows meanwhile.
+      if (sub == null ||
+          (choice.subtitleId != null && sub.id != choice.subtitleId)) {
         _pending = (
           lang: choice.subtitleLanguage!,
           variant: choice.subtitleVariant,
@@ -641,12 +667,17 @@ class PlayerController extends ChangeNotifier {
     subtitles = [...subtitles, ...options.where((o) => ids.add(o.id))];
     notifyListeners();
     final want = _pending;
-    if (want != null && activeSubtitleId == null) {
+    if (want == null) return;
+    final exact = want.id == null
+        ? null
+        : subtitles.where((o) => o.id == want.id).firstOrNull;
+    if (exact != null) {
+      _pending = null;
+      unawaited(_activate(exact, remember: false));
+    } else if (activeSubtitleId == null) {
       final pick = _bestSubtitle(want.lang, variant: want.variant, id: want.id);
-      if (pick != null) {
-        _pending = null;
-        unawaited(_activate(pick, remember: false));
-      }
+      if (pick != null && want.id == null) _pending = null;
+      if (pick != null) unawaited(_activate(pick, remember: false));
     }
   }
 
@@ -732,6 +763,7 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> _remember() async {
     final active = subtitles.where((s) => s.id == activeSubtitleId).firstOrNull;
+    final pending = active == null ? _pending : null;
     final audio = player.state.track.audio;
     await _ref
         .read(trackMemoryProvider)
@@ -741,9 +773,9 @@ class PlayerController extends ChangeNotifier {
           choice: TrackChoice(
             audioLanguage: normalizeLang(audio.language),
             audioTrackId: audio.id == 'auto' ? null : audio.id,
-            subtitleLanguage: active?.language,
-            subtitleVariant: active == null ? 'off' : active.variant,
-            subtitleId: active?.id,
+            subtitleLanguage: active?.language ?? pending?.lang,
+            subtitleVariant: active?.variant ?? pending?.variant ?? 'off',
+            subtitleId: active?.id ?? pending?.id,
             subtitleOffsetMs: subtitleDelay.inMilliseconds,
           ),
         );
@@ -830,8 +862,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> _saveProgress() async {
-    final d = player.state.duration;
-    final pos = player.state.position;
+    final cast = _ref.read(castServiceProvider);
+    final casting = cast.isCasting && cast.duration > Duration.zero;
+    final d = casting ? cast.duration : player.state.duration;
+    final pos = casting ? cast.position : player.state.position;
     if (d == Duration.zero || pos < const Duration(seconds: 5)) return;
     if (_request.videoId.startsWith('magnet:') ||
         _request.videoId.startsWith('http'))
@@ -860,47 +894,72 @@ class PlayerController extends ChangeNotifier {
     _watchedLocalFile = null;
     if (watched != null && _settings.deleteWatchedDownloads) {
       final db = _ref.read(databaseProvider);
-      final row = await (db.select(
+      final rows = await (db.select(
         db.downloads,
-      )..where((t) => t.filePath.equals(watched))).getSingleOrNull();
-      if (row != null) await _ref.read(downloadActionsProvider).remove(row.id);
+      )..where((t) => t.filePath.equals(watched))).get();
+      for (final row in rows) {
+        await _ref.read(downloadActionsProvider).remove(row.id);
+      }
     }
     final src = source;
     source = null;
     _statusTimer?.cancel();
-    if (src == null || src.kind != PlaybackKind.torrent) return;
-    final engine = _ref.read(engineServiceProvider).engine;
-    engine.closeStream(src.streamToken!);
-    // The same torrent may be a download in progress: never touch its data.
-    final db = _ref.read(databaseProvider);
-    final owned = await (db.select(
-      db.downloads,
-    )..where((t) => t.infoHash.equals(src.infoHash!))).get();
-    if (owned.isNotEmpty) return;
-    final st = engine.status(src.infoHash!);
-    final s = _settings;
-    if (st != null && st.isComplete && s.keepCompletedStreams) {
-      await _ref.read(completedStreamHandlerProvider)(src, _request);
+    if (src != null) await _dropSource(src, keepIfComplete: true);
+  }
+
+  /// Ends a source: closes its stream and releases its claim. A complete
+  /// file is kept as a download (setting); otherwise the torrent goes after
+  /// 30 s unless someone else claims it (the next episode of a pack).
+  Future<void> _dropSource(
+    PlaybackSource src, {
+    required bool keepIfComplete,
+  }) async {
+    if (src.kind != PlaybackKind.torrent) return;
+    final service = _ref.read(engineServiceProvider);
+    final ih = src.infoHash!;
+    try {
+      service.engine.closeStream(src.streamToken!);
+    } on Object {
+      // Already gone.
+    }
+    final complete = () {
+      final fp = service.engine.fileProgress(ih);
+      final i = src.fileIndex;
+      return fp != null &&
+          i != null &&
+          i < fp.length &&
+          src.sizeBytes != null &&
+          fp[i] >= src.sizeBytes!;
+    }();
+    if (keepIfComplete && complete && _settings.keepCompletedStreams) {
+      // Runs in the background: moving a big file must not hold up Next.
+      unawaited(
+        _ref.read(completedStreamHandlerProvider)(src, _request).whenComplete(
+          () {
+            if (src.owner != null) service.release(ih, src.owner!);
+          },
+        ),
+      );
       return;
     }
-    // Wait a moment: the next episode is often in the same torrent (season
-    // packs); then the torrent stays and nothing is fetched twice.
-    final ih = src.infoHash!;
-    final keep = s.keepStreamsHours > 0;
+    if (src.owner != null) service.release(ih, src.owner!);
+    final keep = _settings.keepStreamsHours > 0;
     Timer(const Duration(seconds: 30), () async {
-      if (!_disposed && source?.infoHash == ih) return;
-      final service = _ref.read(engineServiceProvider);
-      if (!service.isRunning || service.engine.status(ih) == null) return;
+      if (service.isClaimed(ih)) return;
       // A download of the same torrent may have started meanwhile.
       final db = _ref.read(databaseProvider);
       final owned = await (db.select(
         db.downloads,
       )..where((t) => t.infoHash.equals(ih))).get();
-      if (owned.isNotEmpty) return;
+      if (owned.isNotEmpty || service.isClaimed(ih)) return;
       if (keep) {
-        service.engine.pause(ih);
+        try {
+          service.engine.pause(ih);
+        } on Object {
+          // Gone already.
+        }
       } else {
-        service.engine.remove(ih, deleteFiles: true);
+        service.removeIfUnclaimed(ih, deleteFiles: true);
       }
     });
   }
@@ -916,6 +975,7 @@ class PlayerController extends ChangeNotifier {
     }
     unawaited(() async {
       await _saveProgress();
+      _releasePrefetch();
       await _releaseSource();
       await player.dispose();
     }());

@@ -187,7 +187,7 @@ class ContinueTile extends ConsumerWidget {
     void goToTitle() => openTitle(context, type: item.type, id: item.mediaId);
     void markWatched() =>
         unawaited(repo.setWatched(item.videoId, watched: true));
-    void remove() => unawaited(repo.remove(item.mediaId));
+    void remove() => unawaited(repo.dismiss(item.mediaId));
 
     return Pressable(
       label: ['Resume ${item.name}', ?episode, '$left left'].join(', '),

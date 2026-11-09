@@ -137,7 +137,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Remove from row'));
     await tester.pumpAndSettle();
-    expect(await db.select(db.watchProgress).get(), isEmpty);
+    // Hidden from the row; progress and watched marks are kept.
+    final kept = await db.select(db.watchProgress).get();
+    expect(kept, isNotEmpty);
+    expect(kept.every((r) => r.dismissed), isTrue);
     expect(find.text('Continue watching'), findsNothing);
   });
 

@@ -324,6 +324,8 @@ final class PlayerSubtitles {
       try {
         final loaded = await search.load(best.$1.result, query: query);
         final path = '$base.$code.srt';
+        // The torrent may not have created its folder yet.
+        await File(path).parent.create(recursive: true);
         await File(path).writeAsString(loaded.document.toSrt(), encoding: utf8);
         saved.add({
           'lang': code,

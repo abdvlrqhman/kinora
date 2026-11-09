@@ -21,6 +21,8 @@ final class PlaybackSource {
     this.streamToken,
     this.fileName,
     this.sizeBytes,
+    this.owner,
+    this.fileIndex,
   });
 
   final Uri uri;
@@ -33,6 +35,10 @@ final class PlaybackSource {
   final String? streamToken;
   final String? fileName;
   final int? sizeBytes;
+
+  /// Claim held on the torrent's file while this source is in use.
+  final String? owner;
+  final int? fileIndex;
 }
 
 enum PlaybackKind { local, direct, torrent }
@@ -196,50 +202,61 @@ final class PlaybackService {
   }) async {
     final engineService = _ref.read(engineServiceProvider);
     final engine = engineService.engine;
+    final existed = engine.status(infoHash.toLowerCase()) != null;
     final ih = engineService.add(
       infoHash: infoHash,
       name: name,
       trackers: trackers,
     );
-    final deadline = DateTime.now().add(metadataTimeout);
-    List<TorrentFile>? files;
-    while ((files = engine.files(ih)) == null) {
-      final st = engine.status(ih);
-      onStatus?.call(
-        FindingPeers(peers: st?.numPeers ?? 0, seeds: st?.numSeeds ?? 0),
-      );
-      if (DateTime.now().isAfter(deadline)) {
-        throw const PlaybackException(
-          'No one is sharing this version right now.',
+    final owner =
+        'stream:${request.videoId}:${DateTime.now().microsecondsSinceEpoch}';
+    // Keep it warm while metadata arrives; nothing downloads yet.
+    engineService.claim(ih, owner, -1);
+    try {
+      final deadline = DateTime.now().add(metadataTimeout);
+      List<TorrentFile>? files;
+      while ((files = engine.files(ih)) == null) {
+        final st = engine.status(ih);
+        onStatus?.call(
+          FindingPeers(peers: st?.numPeers ?? 0, seeds: st?.numSeeds ?? 0),
         );
+        if (DateTime.now().isAfter(deadline)) {
+          throw const PlaybackException(
+            'No one is sharing this version right now.',
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 300));
       }
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final file = pickFile(
+        files!,
+        fileIndex: fileIndex,
+        season: request.season,
+        episode: request.episode,
+      );
+      if (file == null)
+        throw const PlaybackException('This version has no video file.');
+      engineService.claim(ih, owner, file.index);
+      final bitrate = runtimeMinutes != null && runtimeMinutes > 0
+          ? file.size ~/ (runtimeMinutes * 60)
+          : null;
+      final handle = engine.openStream(ih, file.index, bitrate: bitrate);
+      return PlaybackSource(
+        uri: handle.uri(),
+        kind: PlaybackKind.torrent,
+        release: release,
+        infoHash: ih,
+        streamToken: handle.token,
+        fileName: file.name,
+        sizeBytes: file.size,
+        owner: owner,
+        fileIndex: file.index,
+      );
+    } on Object {
+      // Don't leave a torrent we started running for nobody.
+      engineService.release(ih, owner);
+      if (!existed) engineService.removeIfUnclaimed(ih, deleteFiles: true);
+      rethrow;
     }
-    final file = pickFile(
-      files!,
-      fileIndex: fileIndex,
-      season: request.season,
-      episode: request.episode,
-    );
-    if (file == null)
-      throw const PlaybackException('This version has no video file.');
-    // Only the chosen file downloads (packs!), the rest stay untouched.
-    engine.setFilePriorities(ih, [
-      for (final f in files) f.index == file.index ? 4 : 0,
-    ]);
-    final bitrate = runtimeMinutes != null && runtimeMinutes > 0
-        ? file.size ~/ (runtimeMinutes * 60)
-        : null;
-    final handle = engine.openStream(ih, file.index, bitrate: bitrate);
-    return PlaybackSource(
-      uri: handle.uri(),
-      kind: PlaybackKind.torrent,
-      release: release,
-      infoHash: ih,
-      streamToken: handle.token,
-      fileName: file.name,
-      sizeBytes: file.size,
-    );
   }
 
   static Future<bool> _isDone(Future<void> f) async {
