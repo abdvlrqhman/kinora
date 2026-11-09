@@ -86,4 +86,19 @@ void main() {
     expect(swipes.last, isTrue);
     await tester.pump(const Duration(seconds: 1));
   });
+
+  test('player edges: iPhone landscape insets capped, Android kept', () {
+    const iphone = EdgeInsets.fromLTRB(59, 0, 59, 21);
+    expect(
+      PlayerGestures.edges(iphone, ios: true),
+      const EdgeInsets.fromLTRB(32, 0, 32, 21),
+    );
+    const android = EdgeInsets.fromLTRB(44, 0, 0, 0); // cutout on the left
+    expect(PlayerGestures.edges(android, ios: false), android);
+    expect(
+      PlayerGestures.edges(EdgeInsets.zero, ios: true),
+      EdgeInsets.zero,
+      reason: 'portrait or no notch',
+    );
+  });
 }

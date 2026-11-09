@@ -1,3 +1,7 @@
+import 'dart:math' as math;
+
+import 'package:flutter/painting.dart' show EdgeInsets;
+
 /// Gesture math for the player, kept pure so it can be tested.
 abstract final class PlayerGestures {
   /// Zoom limits: the whole picture up to three times its size.
@@ -20,6 +24,15 @@ abstract final class PlayerGestures {
   /// swipe (brightness or volume) rather than a stray touch.
   static bool isVerticalSwipe(double dx, double dy) =>
       dy.abs() >= swipeSlop && dy.abs() > dx.abs();
+
+  /// The player's side insets (see playerEdges): an iPhone's symmetric
+  /// landscape insets capped at 32 pt, Android's real cutout side as is.
+  static EdgeInsets edges(EdgeInsets pad, {required bool ios}) => ios
+      ? pad.copyWith(
+          left: math.min(pad.left, 32),
+          right: math.min(pad.right, 32),
+        )
+      : pad;
 
   /// The new brightness or volume after moving [dy] (down is positive) on
   /// a screen [height] tall: the full range in about 80% of the height.

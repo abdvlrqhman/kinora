@@ -343,7 +343,14 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Audio and subtitles'));
       await tester.pump(const Duration(milliseconds: 600));
       await shot(tester, 'player-tracks');
-      await tester.tap(find.bySemanticsLabel(RegExp('^Subtitle style')));
+      // Further down the panel's list: scroll to it first.
+      final style = find.text('Subtitle style');
+      await tester.scrollUntilVisible(
+        style,
+        120,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.tap(style);
       await tester.pump(const Duration(milliseconds: 600));
       await shot(tester, 'player-subtitle-style');
       // Close the panel: tap the dimmed video beside it.

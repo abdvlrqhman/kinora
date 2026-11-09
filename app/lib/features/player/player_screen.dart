@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -30,6 +31,14 @@ import 'widgets/scrubber.dart';
 import 'widgets/subtitle_overlay.dart';
 
 enum _Panel { none, tracks, episodes, speed, versions, cast }
+
+/// Side insets for the player. In landscape an iPhone reports its Dynamic
+/// Island inset (59 pt) on both sides, though the island only takes the
+/// first ~48 pt of one edge: capped at 32, plus each element's own margin
+/// (20 or more), nothing reaches it, and the controls use the screen's
+/// width. Android reports its cutout's real side, so its insets stay.
+EdgeInsets playerEdges(BuildContext context) =>
+    PlayerGestures.edges(MediaQuery.paddingOf(context), ios: Platform.isIOS);
 
 /// Full-screen player for streams and downloads alike.
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -448,13 +457,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                             )
                           : _Controls(
                               controller: c,
-                              // Buffering shows as the Play ring and the
-                              // top-bar chip here: one pill at most.
-                              status: _Status(
-                                controller: c,
-                                flash: _flash,
-                                buffering: false,
-                              ),
+                              // Seek/zoom feedback and buffering share the
+                              // top bar's chip slot here: never over a row.
+                              flash: _flash,
                               onSeekBy: _seekBy,
                               fill: _fill,
                               onBack: () => Navigator.of(context).maybePop(),
@@ -482,9 +487,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       alignment: Alignment.bottomRight,
                       child: Padding(
                         padding: EdgeInsets.only(
-                          right:
-                              MediaQuery.paddingOf(context).right +
-                              KSpace.margin,
+                          right: playerEdges(context).right + KSpace.margin,
                           bottom:
                               MediaQuery.paddingOf(context).bottom +
                               (_controls ? 120 : 40),
@@ -566,7 +569,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 class _Controls extends StatelessWidget {
   const _Controls({
     required this.controller,
-    required this.status,
+    required this.flash,
     required this.onSeekBy,
     required this.fill,
     required this.onBack,
@@ -578,7 +581,9 @@ class _Controls extends StatelessWidget {
   });
 
   final PlayerController controller;
-  final Widget status;
+
+  /// Seek, zoom or level feedback, shown in the top bar's chip slot.
+  final String? flash;
   final ValueChanged<int> onSeekBy;
   final bool fill;
   final VoidCallback onBack;
@@ -592,7 +597,7 @@ class _Controls extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = controller;
     final req = c.request;
-    final pad = MediaQuery.paddingOf(context);
+    final pad = playerEdges(context);
     final playing = c.player.state.playing;
     return Stack(
       fit: StackFit.expand,
@@ -655,10 +660,24 @@ class _Controls extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (c.engineStats case final es?
+                    // Its slot ends at the buttons: Cast and Lock stay at
+                    // the edge (a loose Flexible left the rest empty).
+                    if (flash != null)
+                      Flexible(
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: _FlashChip(text: flash!),
+                        ),
+                      )
+                    else if (c.engineStats case final es?
                         when (es.size > 0 && es.have >= es.size) ||
                             c.player.state.buffering)
-                      Flexible(child: _EngineChip(controller: c)),
+                      Flexible(
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: _EngineChip(controller: c),
+                        ),
+                      ),
                     const SizedBox(width: KSpace.x2),
                     GlassIconButton(
                       icon: Icons.cast_rounded,
@@ -674,62 +693,45 @@ class _Controls extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                // The status sits above the row without moving it off center.
-                Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 76 + KSpace.x3,
-                      // ~60 pt above the row in landscape: keep it short.
-                      child: MediaQuery.withClampedTextScaling(
-                        maxScaleFactor: 1.3,
-                        child: Center(child: status),
-                      ),
+                    GlassIconButton(
+                      icon: Icons.replay_10_rounded,
+                      label: 'Back 10 seconds',
+                      onPressed: () {
+                        onInteract();
+                        onSeekBy(-10);
+                      },
+                      size: 56,
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    const SizedBox(width: KSpace.section),
+                    Stack(
+                      alignment: Alignment.center,
                       children: [
+                        _BufferRing(controller: c),
                         GlassIconButton(
-                          icon: Icons.replay_10_rounded,
-                          label: 'Back 10 seconds',
+                          icon: playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          label: playing ? 'Pause' : 'Play',
                           onPressed: () {
                             onInteract();
-                            onSeekBy(-10);
+                            c.player.playOrPause();
                           },
-                          size: 56,
-                        ),
-                        const SizedBox(width: KSpace.section),
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            _BufferRing(controller: c),
-                            GlassIconButton(
-                              icon: playing
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              label: playing ? 'Pause' : 'Play',
-                              onPressed: () {
-                                onInteract();
-                                c.player.playOrPause();
-                              },
-                              size: 76,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: KSpace.section),
-                        GlassIconButton(
-                          icon: Icons.forward_10_rounded,
-                          label: 'Forward 10 seconds',
-                          onPressed: () {
-                            onInteract();
-                            onSeekBy(10);
-                          },
-                          size: 56,
+                          size: 76,
                         ),
                       ],
+                    ),
+                    const SizedBox(width: KSpace.section),
+                    GlassIconButton(
+                      icon: Icons.forward_10_rounded,
+                      label: 'Forward 10 seconds',
+                      onPressed: () {
+                        onInteract();
+                        onSeekBy(10);
+                      },
+                      size: 56,
                     ),
                   ],
                 ),
@@ -922,6 +924,26 @@ class _BufferRing extends StatelessWidget {
   );
 }
 
+/// Seek or zoom feedback in the top bar while the controls show.
+class _FlashChip extends StatelessWidget {
+  const _FlashChip({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Glass(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: KType.tabular(KType.small.copyWith(color: KColors.lamp)),
+      ),
+    ),
+  );
+}
+
 class _EngineChip extends StatelessWidget {
   const _EngineChip({required this.controller});
   final PlayerController controller;
@@ -994,20 +1016,15 @@ class _FlashLabel extends StatelessWidget {
 /// "Buffering" pill when playback stalls mid-way.
 /// Buffering and the latest seek/volume/brightness feedback, stacked.
 class _Status extends StatelessWidget {
-  const _Status({
-    required this.controller,
-    required this.flash,
-    this.buffering = true,
-  });
+  const _Status({required this.controller, required this.flash});
   final PlayerController controller;
   final String? flash;
-  final bool buffering;
 
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      if (buffering) _BufferingHint(controller: controller),
+      _BufferingHint(controller: controller),
       if (flash != null) ...[
         const SizedBox(height: KSpace.x2),
         _FlashLabel(text: flash!),
@@ -1066,7 +1083,7 @@ class _PrepareView extends StatelessWidget {
     final c = controller;
     final req = c.request;
     final failed = c.phase == PlayerPhase.failed;
-    final pad = MediaQuery.paddingOf(context);
+    final pad = playerEdges(context);
     final width = MediaQuery.sizeOf(context).width;
     final art = Artwork(
       url: req.still ?? req.background ?? req.poster,
@@ -1354,7 +1371,7 @@ class _UpNextState extends State<_UpNext> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final next = widget.controller.nextEpisode!;
-    final pad = MediaQuery.paddingOf(context);
+    final pad = playerEdges(context);
     final width = math.min(380.0, MediaQuery.sizeOf(context).width * 0.45);
     final name = next.episodeTitle ?? 'Episode ${next.episode}';
     final counting = _t?.isActive ?? false;
