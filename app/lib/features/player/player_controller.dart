@@ -883,11 +883,26 @@ class PlayerController extends ChangeNotifier {
       await _ref.read(completedStreamHandlerProvider)(src, _request);
       return;
     }
-    if (s.keepStreamsHours > 0) {
-      engine.pause(src.infoHash!);
-    } else {
-      engine.remove(src.infoHash!, deleteFiles: true);
-    }
+    // Wait a moment: the next episode is often in the same torrent (season
+    // packs); then the torrent stays and nothing is fetched twice.
+    final ih = src.infoHash!;
+    final keep = s.keepStreamsHours > 0;
+    Timer(const Duration(seconds: 30), () async {
+      if (!_disposed && source?.infoHash == ih) return;
+      final service = _ref.read(engineServiceProvider);
+      if (!service.isRunning || service.engine.status(ih) == null) return;
+      // A download of the same torrent may have started meanwhile.
+      final db = _ref.read(databaseProvider);
+      final owned = await (db.select(
+        db.downloads,
+      )..where((t) => t.infoHash.equals(ih))).get();
+      if (owned.isNotEmpty) return;
+      if (keep) {
+        service.engine.pause(ih);
+      } else {
+        service.engine.remove(ih, deleteFiles: true);
+      }
+    });
   }
 
   @override
