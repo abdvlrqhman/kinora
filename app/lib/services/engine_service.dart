@@ -98,6 +98,37 @@ final class EngineService {
     );
   }
 
+  /// Deletes stream leftovers older than [keepHours] (all of them when 0),
+  /// plus resume files that no download owns. Runs before the session
+  /// starts; [downloadHashes] are never touched.
+  static Future<void> cleanStreamCache(
+    AppPaths paths, {
+    required int keepHours,
+    required Set<String> downloadHashes,
+  }) async {
+    final cutoff = DateTime.now().subtract(Duration(hours: keepHours));
+    var removed = 0;
+    for (final dir in [paths.streams, paths.resume]) {
+      if (!dir.existsSync()) continue;
+      for (final e in dir.listSync(followLinks: false)) {
+        final name = e.uri.pathSegments.where((x) => x.isNotEmpty).last;
+        if (dir.path == paths.resume.path) {
+          final ih = name.split('.').first;
+          if (downloadHashes.contains(ih)) continue;
+        }
+        try {
+          if (keepHours == 0 || e.statSync().modified.isBefore(cutoff)) {
+            e.deleteSync(recursive: true);
+            removed++;
+          }
+        } on FileSystemException {
+          // In use or already gone.
+        }
+      }
+    }
+    if (removed > 0) Log.i('engine', 'cleaned $removed old stream files');
+  }
+
   /// Saves resume data and the DHT table (call when backgrounded).
   void checkpoint() {
     final e = _engine;

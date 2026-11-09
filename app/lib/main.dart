@@ -32,6 +32,14 @@ Future<void> main() async {
   };
   final db = AppDatabase.open(paths.support.path);
   final settings = await SettingsStore(db).load();
+  final owned = await (db.selectOnly(
+    db.downloads,
+  )..addColumns([db.downloads.infoHash])).get();
+  await EngineService.cleanStreamCache(
+    paths,
+    keepHours: settings.keepStreamsHours,
+    downloadHashes: {for (final r in owned) ?r.read(db.downloads.infoHash)},
+  );
   final container = ProviderContainer(
     overrides: appOverrides(paths: paths, db: db, settings: settings),
   );
