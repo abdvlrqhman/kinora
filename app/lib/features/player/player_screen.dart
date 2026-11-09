@@ -259,6 +259,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                             ),
                     ),
                   ),
+                  if (c.skippable case final skip? when _panel == _Panel.none)
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right:
+                              MediaQuery.paddingOf(context).right +
+                              KSpace.margin,
+                          bottom:
+                              MediaQuery.paddingOf(context).bottom +
+                              (_controls ? 120 : 40),
+                        ),
+                        child: GlassButton(
+                          label: skip.label,
+                          icon: Icons.fast_forward_rounded,
+                          prominent: true,
+                          onPressed: c.skip,
+                        ),
+                      ),
+                    ),
                   if (c.inCredits &&
                       !c.upNextDismissed &&
                       _panel == _Panel.none)

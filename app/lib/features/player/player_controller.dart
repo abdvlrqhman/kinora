@@ -73,6 +73,9 @@ class PlayerController extends ChangeNotifier {
   bool nightMode = false;
   double rate = 1;
 
+  /// Chapter markers (title, start) read from the file.
+  List<({String title, Duration start})> chapters = const [];
+
   /// Up Next is offered near the end of an episode.
   bool upNextDismissed = false;
   PlayRequest? nextEpisode;
@@ -83,6 +86,11 @@ class PlayerController extends ChangeNotifier {
   bool _tracksApplied = false;
   bool _disposed = false;
   bool _prefetchedNext = false;
+  bool _watchedHandled = false;
+
+  /// A watched download to delete when the viewer leaves it (setting).
+  String? _watchedLocalFile;
+  double? _bandwidth;
   int _generation = 0;
   Completer<void>? _cancelPrepare;
 
@@ -112,6 +120,7 @@ class PlayerController extends ChangeNotifier {
     _pending = null;
     upNextDismissed = false;
     _prefetchedNext = false;
+    _watchedHandled = false;
     subtitles = const [];
     activeSubtitleId = null;
     notifyListeners();
@@ -260,6 +269,63 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadChapters() async {
+    final p = player.platform;
+    if (p is! NativePlayer) return;
+    try {
+      final count =
+          int.tryParse(await p.getProperty('chapter-list/count')) ?? 0;
+      final out = <({String title, Duration start})>[];
+      for (var i = 0; i < count && i < 200; i++) {
+        final title = await p.getProperty('chapter-list/$i/title');
+        final time =
+            double.tryParse(await p.getProperty('chapter-list/$i/time')) ?? 0;
+        out.add((
+          title: title,
+          start: Duration(milliseconds: (time * 1000).round()),
+        ));
+      }
+      chapters = out;
+      notifyListeners();
+    } on Object catch (e) {
+      Log.d('player', 'chapters: $e');
+    }
+  }
+
+  static final _skippable = RegExp(
+    r'\b(intro|opening|op|recap|previously|cold open)\b',
+    caseSensitive: false,
+  );
+  static final _credits = RegExp(
+    r'\b(credits|ending|ed|outro|end titles)\b',
+    caseSensitive: false,
+  );
+
+  /// The intro/recap chapter playing now and where it ends, if any.
+  ({String label, Duration end})? get skippable {
+    if (!_settings.skipIntros || chapters.length < 2) return null;
+    final pos = player.state.position;
+    for (var i = 0; i < chapters.length - 1; i++) {
+      final ch = chapters[i];
+      final end = chapters[i + 1].start;
+      if (pos >= ch.start &&
+          pos < end - const Duration(seconds: 2) &&
+          _skippable.hasMatch(ch.title)) {
+        final recap = RegExp(
+          'recap|previously',
+          caseSensitive: false,
+        ).hasMatch(ch.title);
+        return (label: recap ? 'Skip recap' : 'Skip intro', end: end);
+      }
+    }
+    return null;
+  }
+
+  Future<void> skip() async {
+    final s = skippable;
+    if (s != null) await player.seek(s.end);
+  }
+
   // ------------------------------------------------------------- episodes --
 
   /// Episodes in watching order (specials last).
@@ -320,11 +386,16 @@ class PlayerController extends ChangeNotifier {
   bool get inCredits {
     final d = player.state.duration;
     if (d == Duration.zero || nextEpisode == null) return false;
-    final left = d - player.state.position;
+    final pos = player.state.position;
+    final credits = chapters
+        .where((c) => _credits.hasMatch(c.title))
+        .lastOrNull;
+    if (credits != null && credits.start > d * 0.7 && pos >= credits.start)
+      return true;
     final window = Duration(
       seconds: (d.inSeconds * 0.04).clamp(25, 90).toInt(),
     );
-    return left <= window;
+    return d - pos <= window;
   }
 
   void _onPosition(Duration pos) {
@@ -335,6 +406,15 @@ class PlayerController extends ChangeNotifier {
         nextEpisode != null) {
       _prefetchedNext = true;
       unawaited(_prefetch(nextEpisode!));
+      if (_settings.autoDownloadNext) {
+        unawaited(_ref.read(downloadActionsProvider).download(nextEpisode!));
+      }
+    }
+    if (!_watchedHandled &&
+        pos.inMilliseconds >
+            d.inMilliseconds * ProgressRepository.watchedFraction) {
+      _watchedHandled = true;
+      _watchedLocalFile = _request.localFile;
     }
   }
 
@@ -405,6 +485,7 @@ class PlayerController extends ChangeNotifier {
         tracks.video.any((v) => real(v.id));
     if (_tracksApplied || !hasTracks) return;
     _tracksApplied = true;
+    unawaited(_loadChapters());
     await _applyRemembered();
   }
 
@@ -721,6 +802,13 @@ class PlayerController extends ChangeNotifier {
       final stats = engine.streamStats(src!.streamToken!);
       final st = engine.status(src.infoHash!);
       if (stats == null) return;
+      final rate = st?.downloadRate ?? 0;
+      if (rate > 0 && stats.haveBytes < stats.size) {
+        _bandwidth = _bandwidth == null
+            ? rate.toDouble()
+            : _bandwidth! * 0.85 + rate * 0.15;
+        _ref.read(bandwidthEstimateProvider.notifier).set(_bandwidth);
+      }
       engineStats = (
         bufferedAhead: stats.bufferedAhead,
         have: stats.haveBytes,
@@ -768,6 +856,15 @@ class PlayerController extends ChangeNotifier {
   /// Ends a torrent stream: complete files are kept for Downloads (when the
   /// setting allows), unfinished data is deleted or kept per settings.
   Future<void> _releaseSource() async {
+    final watched = _watchedLocalFile;
+    _watchedLocalFile = null;
+    if (watched != null && _settings.deleteWatchedDownloads) {
+      final db = _ref.read(databaseProvider);
+      final row = await (db.select(
+        db.downloads,
+      )..where((t) => t.filePath.equals(watched))).getSingleOrNull();
+      if (row != null) await _ref.read(downloadActionsProvider).remove(row.id);
+    }
     final src = source;
     source = null;
     _statusTimer?.cancel();
