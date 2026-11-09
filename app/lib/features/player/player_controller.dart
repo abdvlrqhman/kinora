@@ -176,6 +176,7 @@ class PlayerController extends ChangeNotifier {
       _startTimers();
       notifyListeners();
       unawaited(_loadExternalSubtitles(gen));
+      unawaited(_castToTargetIfChosen(gen));
     } on PlaybackException catch (e) {
       if (gen != _generation) return;
       phase = PlayerPhase.failed;
@@ -236,6 +237,28 @@ class PlayerController extends ChangeNotifier {
     } on Object catch (e) {
       Log.d('player', 'meta unavailable: $e');
     }
+  }
+
+  /// A TV was chosen before pressing Play: start there.
+  Future<void> _castToTargetIfChosen(int gen) async {
+    final cast = _ref.read(castServiceProvider);
+    final tv = cast.target;
+    final src = source;
+    if (tv == null || src == null || cast.isCasting) return;
+    // Give external subtitles a moment so the TV gets them too.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (gen != _generation || _disposed) return;
+    final sub = await subtitleForTv();
+    await player.pause();
+    await cast.cast(
+      d: tv,
+      source: src,
+      request: _request,
+      startAt: player.state.position,
+      length: player.state.duration,
+      subtitlePath: sub?.path,
+      subtitleLanguage: sub?.language,
+    );
   }
 
   /// Saved subtitles of a download (offline) plus provider results.

@@ -50,6 +50,29 @@ final class CastService extends ChangeNotifier {
   bool get isCasting =>
       device != null && phase != CastPhase.idle && phase != CastPhase.stopped;
 
+  // -------------------------------------------------------------- target --
+
+  /// The TV chosen before playing ("Living Room TV"): versions are ranked
+  /// for it and playback starts on it. Null = this phone.
+  DlnaDevice? target;
+
+  /// Chooses where videos play. Re-ranks versions for that screen.
+  void selectTarget(DlnaDevice? d) {
+    target = d;
+    _ref
+        .read(castTargetCapsProvider.notifier)
+        .set(d == null ? null : (d.isSamsung ? samsungFullHdCaps : null));
+    _ref.invalidate(resolveProvider);
+    if (d != null) {
+      unawaited(
+        _ref
+            .read(settingsProvider.notifier)
+            .update((s) => s.copyWith(lastCastDevice: d.toJson())),
+      );
+    }
+    notifyListeners();
+  }
+
   // ----------------------------------------------------------- discovery --
 
   /// Looks for TVs: the last one used (instant), SSDP, and a subnet probe
@@ -449,7 +472,10 @@ final class CastService extends ChangeNotifier {
     _routes.clear();
     device = null;
     phase = CastPhase.idle;
-    _ref.read(castTargetCapsProvider.notifier).set(null);
+    final t = target;
+    _ref
+        .read(castTargetCapsProvider.notifier)
+        .set(t == null ? null : (t.isSamsung ? samsungFullHdCaps : null));
     if (!silent) notifyListeners();
     return at;
   }
