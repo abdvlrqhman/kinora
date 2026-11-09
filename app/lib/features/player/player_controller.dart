@@ -473,7 +473,7 @@ class PlayerController extends ChangeNotifier {
     }
     final sub = await subtitleForTv();
     await player.pause();
-    await cast.cast(
+    final ok = await cast.cast(
       d: tv,
       source: src,
       request: _request,
@@ -482,6 +482,10 @@ class PlayerController extends ChangeNotifier {
       subtitlePath: sub?.path,
       subtitleLanguage: sub?.language,
     );
+    // The TV can't be reached: carry on here (it says why).
+    if (!ok && !cast.isCasting && gen == _generation && !_disposed) {
+      await player.play();
+    }
   }
 
   /// Saved subtitles of a download (offline) plus provider results.

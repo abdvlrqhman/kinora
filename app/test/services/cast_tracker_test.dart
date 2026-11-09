@@ -25,11 +25,18 @@ void main() {
     final t = CastTracker(t0);
     expect(t.answer(stopped, pos(0), at(59)), isNull);
     expect(t.answer(stopped, pos(0), at(61)), CastEnd.neverStarted);
+    // An error lingering from before a reload gets 10 s to clear.
     final failed = CastTracker(t0);
+    expect(failed.answer(stopped, pos(0), at(1), error: true), isNull);
+    expect(failed.answer(stopped, pos(0), at(8), error: true), isNull);
     expect(
-      failed.answer(stopped, pos(0), at(3), error: true),
+      failed.answer(stopped, pos(0), at(12), error: true),
       CastEnd.neverStarted,
     );
+    final cleared = CastTracker(t0)
+      ..answer(stopped, pos(0), at(1), error: true);
+    expect(cleared.answer(playing, pos(1), at(5)), isNull);
+    expect(cleared.phase, CastPhase.playing);
   });
 
   test('a short stop mid-video is ridden out; a lasting one ends it', () {
@@ -49,6 +56,13 @@ void main() {
     final error = CastTracker(t0)..answer(playing, pos(900), at(1));
     error.answer(stopped, pos(0), at(2), error: true);
     expect(error.answer(stopped, pos(0), at(7), error: true), CastEnd.tvError);
+    // Stalling in the credits is still the end, not a failure.
+    final credits = CastTracker(t0)..answer(playing, pos(2820), at(1));
+    credits.answer(stopped, pos(0), at(2), error: true);
+    expect(
+      credits.answer(stopped, pos(0), at(7), error: true),
+      CastEnd.finished,
+    );
   });
 
   test('silence: reconnecting, then lost, back when the TV answers, over after 2 min', () {

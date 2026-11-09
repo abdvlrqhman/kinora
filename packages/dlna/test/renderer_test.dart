@@ -251,13 +251,14 @@ void main() {
   });
 
   test(
-    'each action opens a fresh connection; a dropped one is retried',
+    'each action opens a fresh connection; only a dropped read is retried',
     () async {
       tv.dropConnections = 1;
-      await renderer.play();
-      expect(tv.actions, ['Play']);
+      expect(await renderer.transportState(), TransportState.noMediaPresent);
+      expect(tv.actions, ['GetTransportInfo']);
       expect(tv.lastConnection, 'close');
-      tv.dropConnections = 2;
+      // (The TV may have played before dropping: Play isn't sent twice.)
+      tv.dropConnections = 1;
       await expectLater(
         renderer.pause(),
         throwsA(

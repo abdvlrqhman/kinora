@@ -280,7 +280,9 @@ final class CastService extends ChangeNotifier {
     final a = _last!;
     final d = a.d;
     final gen = ++_castGen;
-    final previous = _teardown(CastPhase.idle);
+    // (A reload keeps the app awake throughout: dropping it from the
+    // background can't always be undone.)
+    final previous = _teardown(CastPhase.idle, keepAwake: true);
     device = d;
     phase = CastPhase.connecting;
     message = null;
@@ -325,11 +327,20 @@ final class CastService extends ChangeNotifier {
           dlnaStreamHeaders(mimeType: mime, captionSrt: caption),
         );
       }
+      if (gen != _castGen) return false; // stopped while preparing
       final renderer = DlnaRenderer(
         d,
         httpClient: _ref.read(httpClientProvider),
       );
       _renderer = renderer;
+      // Stopped meanwhile ("Watch on this phone"): the TV mustn't keep it,
+      // unless a newer cast to the same TV took over.
+      bool superseded() {
+        if (gen == _castGen) return false;
+        if (_last?.d.udn != d.udn) unawaited(_stopQuietly(renderer));
+        return true;
+      }
+
       await renderer.load(
         media,
         title: a.request.isEpisode
@@ -344,26 +355,33 @@ final class CastService extends ChangeNotifier {
             : Uri.tryParse(a.request.poster!),
         autoplay: false,
       );
-      // Stopped meanwhile ("Watch on this phone"): don't start the TV.
-      if (gen != _castGen) return false;
+      if (superseded()) return false;
       await renderer.play();
-      if (gen != _castGen) return false;
+      if (superseded()) return false;
       // Connecting until the TV says it plays; then it seeks to [startAt].
       _tracker = CastTracker(DateTime.now(), startAt: startAt);
       // The TV pulls from this phone (except debrid links): stay alive while
       // the screen is off or Kinora is in the background.
-      if (a.source.kind != PlaybackKind.direct) {
-        unawaited(
-          BackgroundKeeper.instance.hold(
-            'cast',
-            title: 'Playing on ${d.friendlyName}',
-            text: a.request.title,
-          ),
-        );
-      }
+      unawaited(
+        a.source.kind == PlaybackKind.direct
+            ? BackgroundKeeper.instance.drop('cast')
+            : BackgroundKeeper.instance.hold(
+                'cast',
+                title: 'Playing on ${d.friendlyName}',
+                text: a.request.title,
+              ),
+      );
       _watch = renderer
           .watch(interval: const Duration(seconds: 1))
-          .listen(_onStatus, onError: (Object e) => Log.d('cast', 'poll: $e'));
+          .listen(
+            _onStatus,
+            // Faults on every poll (the TV switched to another app) count
+            // as silence, so the cast still ends.
+            onError: (Object e) {
+              Log.d('cast', 'poll: $e');
+              _onStatus(RendererUnreachable(DlnaUnreachableException('$e')));
+            },
+          );
       await _ref
           .read(settingsProvider.notifier)
           .update((s) => s.copyWith(lastCastDevice: d.toJson()));
@@ -394,7 +412,9 @@ final class CastService extends ChangeNotifier {
   }
 
   void _fail(String text) {
-    _teardown(CastPhase.stopped);
+    // The TV may have started anyway (a slow answer): don't leave it on.
+    final r = _teardown(CastPhase.stopped);
+    if (r != null) unawaited(_stopQuietly(r));
     message = text;
     notifyListeners();
   }
@@ -468,6 +488,11 @@ final class CastService extends ChangeNotifier {
       return;
     }
     _teardown(CastPhase.stopped);
+    // Stopped from the TV's remote, or the TV went away: the next episodes
+    // play on the phone until a TV is chosen again.
+    if (end == CastEnd.stoppedOnTv || end == CastEnd.lost) {
+      selectTarget(null);
+    }
     message = switch (end) {
       CastEnd.finished => null,
       CastEnd.stoppedOnTv => '$name stopped the video. It continues here.',
@@ -536,8 +561,8 @@ final class CastService extends ChangeNotifier {
 
   /// Ends the cast on this side: polling, the keep-alive and the served
   /// files. Returns the renderer, for the caller to stop the TV.
-  DlnaRenderer? _teardown(CastPhase to) {
-    unawaited(BackgroundKeeper.instance.drop('cast'));
+  DlnaRenderer? _teardown(CastPhase to, {bool keepAwake = false}) {
+    if (!keepAwake) unawaited(BackgroundKeeper.instance.drop('cast'));
     unawaited(_watch?.cancel());
     _watch = null;
     _tracker = null;

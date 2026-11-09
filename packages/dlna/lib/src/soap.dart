@@ -106,8 +106,9 @@ final class SoapClient {
     try {
       response = await send();
     } on DlnaUnreachableException catch (e) {
-      // A dropped connection (not a silent TV) gets one more try.
-      if (e.isTimeout) rethrow;
+      // A dropped connection (not a silent TV) gets one more try, for
+      // reads only: the TV may have done a Play or Seek before dropping.
+      if (e.isTimeout || !action.startsWith('Get')) rethrow;
       response = await send();
     }
     final text = bodyText(response);

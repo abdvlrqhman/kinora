@@ -35,6 +35,10 @@ final class CastTracker {
   /// How long a stop must last to count.
   static const stopConfirm = Duration(seconds: 4);
 
+  /// How long an error before the first play must last (a TV can still
+  /// report the error that made Kinora load the video again).
+  static const errorConfirm = Duration(seconds: 10);
+
   /// Silent this long: shown as lost (polling goes on).
   static const lostAfter = Duration(seconds: 20);
 
@@ -97,18 +101,20 @@ final class CastTracker {
             : CastPhase.paused;
       case TransportState.stopped || TransportState.noMediaPresent:
         if (!started) {
-          if (error) return CastEnd.neverStarted;
+          if (error && now.difference(_stoppedSince ??= now) >= errorConfirm) {
+            return CastEnd.neverStarted;
+          }
           return now.difference(startedAt) > connectLimit
               ? CastEnd.neverStarted
               : null;
         }
         final since = _stoppedSince ??= now;
         if (now.difference(since) < stopConfirm) return null;
-        if (error) return CastEnd.tvError;
         final nearEnd =
             duration > Duration.zero &&
             duration - position < const Duration(seconds: 60);
-        return nearEnd ? CastEnd.finished : CastEnd.stoppedOnTv;
+        if (nearEnd) return CastEnd.finished; // even if it stalled there
+        return error ? CastEnd.tvError : CastEnd.stoppedOnTv;
       case TransportState.transitioning || TransportState.unknown:
         _stoppedSince = null; // loading or buffering
         if (!started && now.difference(startedAt) > connectLimit) {
