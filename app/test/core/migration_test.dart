@@ -36,6 +36,8 @@ void main() {
         mediaId: 'tt1',
         type: 'series',
         name: 'Show',
+        season: 1,
+        episode: int.parse(id.split(':').last),
         position: Duration(minutes: pos),
         duration: const Duration(minutes: 40),
       );

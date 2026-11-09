@@ -123,7 +123,7 @@ class ContinueRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(continueWatchingProvider).value ?? const [];
+    final items = ref.watch(continueItemsProvider).value ?? const [];
     if (items.isEmpty) return const SizedBox.shrink();
     final scaler = MediaQuery.textScalerOf(context);
     return RowSection(
@@ -168,6 +168,8 @@ class ContinueTile extends ConsumerWidget {
         ? item.positionMs / item.durationMs
         : 0.0;
     final repo = ref.read(progressRepositoryProvider);
+    // The episode after a finished one, not started yet.
+    final fresh = item.positionMs == 0;
 
     void resume() => openPlayer(
       context,
@@ -182,16 +184,36 @@ class ContinueTile extends ConsumerWidget {
         poster: item.poster,
         background: backdrop,
         still: item.still,
-        startAt: Duration(milliseconds: item.positionMs),
+        startAt: fresh ? null : Duration(milliseconds: item.positionMs),
       ),
     );
     void goToTitle() => openTitle(context, type: item.type, id: item.mediaId);
-    void markWatched() =>
-        unawaited(repo.setWatched(item.videoId, watched: true));
+    // (The next episode has no progress yet: saved as watched through.)
+    void markWatched() => unawaited(
+      fresh
+          ? repo.save(
+              videoId: item.videoId,
+              mediaId: item.mediaId,
+              type: item.type,
+              name: item.name,
+              episodeTitle: item.episodeTitle,
+              season: item.season,
+              episode: item.episode,
+              poster: item.poster,
+              still: item.still,
+              position: const Duration(seconds: 1),
+              duration: const Duration(seconds: 1),
+            )
+          : repo.setWatched(item.videoId, watched: true),
+    );
     void remove() => unawaited(repo.dismiss(item.mediaId));
 
     return Pressable(
-      label: ['Resume ${item.name}', ?episode, '$left left'].join(', '),
+      label: [
+        '${fresh ? 'Play' : 'Resume'} ${item.name}',
+        ?episode,
+        fresh ? 'next episode' : '$left left',
+      ].join(', '),
       hint: 'Long press for more',
       onTap: resume,
       onLongPress: () => showGlassSheet<void>(
@@ -247,7 +269,7 @@ class ContinueTile extends ConsumerWidget {
             style: KType.label.copyWith(fontWeight: FontWeight.w600),
           ),
           Text(
-            [?episode, '$left left'].join('  '),
+            [?episode, fresh ? 'Next episode' : '$left left'].join('  '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: KType.tabular(KType.small),

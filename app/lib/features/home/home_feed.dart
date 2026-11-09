@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stremio/stremio.dart';
 
 import '../../app/providers.dart';
+import '../../core/db/database.dart';
 import '../../core/log.dart';
 import '../../services/library.dart';
 import '../../services/sources.dart';
@@ -130,6 +131,55 @@ final class NewEpisodes {
 
   Episode get next => episodes.first;
 }
+
+/// Continue watching: per title, the newest video you watched decides. A
+/// half-watched one resumes; after a finished episode comes the next aired
+/// one (at its own progress, else from the start). None after the last.
+final continueItemsProvider =
+    FutureProvider.autoDispose<List<WatchProgressData>>((ref) async {
+      final rows = await ref.watch(continueWatchingProvider.future);
+      final db = ref.watch(databaseProvider);
+      final now = DateTime.now();
+      Future<WatchProgressData?> after(WatchProgressData r) async {
+        try {
+          final model = TitleModel(
+            await ref.read(metaProvider((type: r.type, id: r.mediaId)).future),
+          );
+          final progress = {
+            for (final p in await (db.select(
+              db.watchProgress,
+            )..where((t) => t.mediaId.equals(r.mediaId))).get())
+              p.videoId: p,
+          };
+          final next = episodeAfter(model, r.videoId, progress, now);
+          if (next == null) return null;
+          final own = progress[next.id];
+          return WatchProgressData(
+            videoId: next.id,
+            mediaId: r.mediaId,
+            type: r.type,
+            name: r.name,
+            episodeTitle: next.title,
+            season: next.season,
+            episode: next.episode,
+            positionMs: own?.positionMs ?? 0,
+            durationMs: own?.durationMs ?? 0,
+            completed: false,
+            dismissed: false,
+            poster: r.poster,
+            still: next.thumbnail ?? r.still,
+            updatedAt: r.updatedAt,
+          );
+        } on Object {
+          return null; // No details (offline): nothing to suggest.
+        }
+      }
+
+      final items = await Future.wait([
+        for (final r in rows) r.completed ? after(r) : Future.value(r),
+      ]);
+      return [for (final i in items) ?i];
+    });
 
 /// Shows from My list and your history with new episodes, most recently
 /// watched first. Local: progress and library, plus each show's details.

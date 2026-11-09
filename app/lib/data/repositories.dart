@@ -67,21 +67,22 @@ final class ProgressRepository {
     _db.watchProgress,
   )..where((t) => t.mediaId.equals(mediaId))).watch();
 
-  /// Most recent unfinished video per title, newest first.
+  /// Per title, the video watched last, newest first: unfinished ones to
+  /// resume, and finished episodes (Home shows the episode after them).
+  /// Finished movies and videos opened for under 30 s don't count.
   Stream<List<WatchProgressData>> watchContinue({int limit = 20}) {
     final q = _db.select(_db.watchProgress)
       ..where(
         (t) =>
-            t.completed.equals(false) &
             t.dismissed.equals(false) &
-            t.positionMs.isBiggerThanValue(30000),
+            (t.completed | t.positionMs.isBiggerThanValue(30000)),
       )
       ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
     return q.watch().map((rows) {
       final seen = <String>{};
       return [
         for (final r in rows)
-          if (seen.add(r.mediaId)) r,
+          if (seen.add(r.mediaId) && (!r.completed || r.season != null)) r,
       ].take(limit).toList();
     });
   }

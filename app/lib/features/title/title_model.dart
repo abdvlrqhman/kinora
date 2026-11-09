@@ -93,6 +93,22 @@ bool _started(WatchProgressData? p) =>
 bool aired(Episode e, DateTime now) =>
     e.released == null || !e.released!.isAfter(now);
 
+/// The next aired, unwatched episode after [videoId] in watching order.
+Episode? episodeAfter(
+  TitleModel t,
+  String videoId,
+  Map<String, WatchProgressData> progress,
+  DateTime now,
+) {
+  final order = t.order;
+  final i = order.indexWhere((e) => e.id == videoId);
+  if (i < 0) return null;
+  return order
+      .skip(i + 1)
+      .where((e) => aired(e, now) && !(progress[e.id]?.completed ?? false))
+      .firstOrNull;
+}
+
 /// Resume what's half watched, else the next unwatched episode after the
 /// last one watched, else start over.
 NextUp nextUp(
@@ -136,11 +152,7 @@ NextUp nextUp(
   }
   if (lastEpisode == null) return at(first());
   if (_started(last)) return at(lastEpisode);
-  final next = order
-      .skip(order.indexOf(lastEpisode) + 1)
-      .where((e) => aired(e, now) && !(progress[e.id]?.completed ?? false))
-      .firstOrNull;
-  return at(next ?? first());
+  return at(episodeAfter(t, lastEpisode.id, progress, now) ?? first());
 }
 
 /// The title page's model, derived synchronously from its details.
