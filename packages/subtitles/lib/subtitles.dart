@@ -6,6 +6,7 @@
 /// it: every provider takes the user's own credentials.
 library;
 
+export 'src/ads.dart' show removeAds;
 export 'src/archive.dart'
     show SubtitleFile, archiveKind, extractSubtitle, languageFromFileName;
 export 'src/cache.dart' show SubtitleCache;

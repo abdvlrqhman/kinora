@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 
+import 'ads.dart';
 import 'archive.dart';
 import 'cache.dart';
 import 'cancel.dart';
@@ -331,7 +332,9 @@ final class SubtitleSearch {
       parser: matcher.parser,
     );
     final decoded = decodeSubtitleBytes(file.bytes, language: result.language);
-    final doc = parseSubtitle(decoded.text, fps: result.fps ?? query?.fps);
+    final doc = removeAds(
+      parseSubtitle(decoded.text, fps: result.fps ?? query?.fps),
+    );
     final seconds = query?.durationSec;
     return LoadedSubtitle(
       result: result,
