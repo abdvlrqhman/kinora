@@ -1,6 +1,10 @@
 package io.github.abdvlrqhman.kinora
 
+import android.app.PictureInPictureParams
 import android.content.Context
+import android.content.res.Configuration
+import android.os.Build
+import android.util.Rational
 import android.net.wifi.WifiManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -8,6 +12,9 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
+    private var pipAllowed = false
+    private var pipAspect = Rational(16, 9)
+    private var pipChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -34,6 +41,45 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Picture-in-picture while a video plays.
+        pipChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kinora/pip").also { ch ->
+            ch.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setAllowed" -> {
+                        pipAllowed = call.argument<Boolean>("allowed") ?: false
+                        val w = call.argument<Int>("width") ?: 16
+                        val h = call.argument<Int>("height") ?: 9
+                        // Android accepts ratios between 1:2.39 and 2.39:1.
+                        val r = (w.toDouble() / h.coerceAtLeast(1)).coerceIn(0.42, 2.39)
+                        pipAspect = Rational((r * 1000).toInt(), 1000)
+                        setPictureInPictureParams(pipParams())
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+    }
+
+    private fun pipParams(): PictureInPictureParams {
+        val b = PictureInPictureParams.Builder().setAspectRatio(pipAspect)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            b.setAutoEnterEnabled(pipAllowed).setSeamlessResizeEnabled(true)
+        }
+        return b.build()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Android 12+ enters automatically (setAutoEnterEnabled); older needs this.
+        if (pipAllowed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            enterPictureInPictureMode(pipParams())
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(inPip: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(inPip, newConfig)
+        pipChannel?.invokeMethod("changed", inPip)
     }
 
     override fun onDestroy() {

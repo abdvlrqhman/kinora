@@ -9,6 +9,7 @@ import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/format.dart';
+import '../../services/pip.dart';
 import '../../services/play_request.dart';
 import '../../services/resolver.dart';
 import '../../ui/glass.dart';
@@ -37,6 +38,9 @@ class PlayerScreen extends ConsumerStatefulWidget {
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late final PlayerController c;
   late final CastService _cast;
+  bool _inPip = false;
+  StreamSubscription<bool>? _pipSub;
+  bool _pipAllowed = false;
   bool _controls = true;
   bool _locked = false;
   bool _scrubbing = false;
@@ -66,6 +70,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ]),
     );
     _scheduleHide();
+    _pipSub = Pip.instance.changes.listen((v) {
+      if (mounted) setState(() => _inPip = v);
+    });
+  }
+
+  /// PiP is offered only while something is actually playing.
+  void _syncPip() {
+    final allow =
+        c.phase == PlayerPhase.playing &&
+        c.player.state.playing &&
+        !_cast.isCasting;
+    if (allow == _pipAllowed) return;
+    _pipAllowed = allow;
+    unawaited(
+      Pip.instance.setAllowed(
+        allowed: allow,
+        width: c.player.state.width,
+        height: c.player.state.height,
+      ),
+    );
   }
 
   void _onChange() {
@@ -75,6 +99,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       c.notice = null;
       _showFlash(notice);
     }
+    _syncPip();
     setState(() {});
   }
 
@@ -83,6 +108,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _hide?.cancel();
     _flashTimer?.cancel();
     _cast.removeListener(_onChange);
+    unawaited(_pipSub?.cancel());
+    unawaited(Pip.instance.setAllowed(allowed: false));
     // The stream route closes with the player, so the TV would stall: stop it.
     if (_cast.isCasting) unawaited(_cast.stop());
     c
@@ -202,128 +229,134 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     visible: false,
                   ),
                 ),
-                SubtitleOverlay(player: c.player, lift: _controls ? 96 : 0),
-                // Gesture layer.
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _locked
-                      ? () => setState(() => _controls = !_controls)
-                      : _toggleControls,
-                  onDoubleTapDown: (d) => lastDown = d,
-                  onDoubleTap: _locked
-                      ? null
-                      : () => _doubleTap(lastDown!, box.maxWidth),
-                  onVerticalDragStart: _locked
-                      ? null
-                      : (d) => _verticalStart(d, box.maxWidth),
-                  onVerticalDragUpdate: _locked
-                      ? null
-                      : (d) => _verticalUpdate(d, box.maxHeight),
-                  onScaleUpdate: null,
+                SubtitleOverlay(
+                  player: c.player,
+                  lift: _controls && !_inPip ? 96 : 0,
                 ),
-                if (c.phase != PlayerPhase.playing)
-                  _PrepareView(
-                    controller: c,
-                    onBack: () => Navigator.of(context).maybePop(),
-                    onVersions: () => _open(_Panel.versions),
-                  ),
-                if (c.phase == PlayerPhase.playing && _cast.isCasting)
-                  CastingView(controller: c)
-                else if (c.phase == PlayerPhase.playing) ...[
-                  _BufferingHint(controller: c),
-                  if (_flash != null) Center(child: _FlashLabel(text: _flash!)),
-                  AnimatedOpacity(
-                    opacity: _controls ? 1 : 0,
-                    duration: KMotion.base,
-                    child: IgnorePointer(
-                      ignoring: !_controls,
-                      child: _locked
-                          ? _LockedControls(
-                              onUnlock: () => setState(() => _locked = false),
-                            )
-                          : _Controls(
-                              controller: c,
-                              fill: _fill,
-                              onBack: () => Navigator.of(context).maybePop(),
-                              onPanel: _open,
-                              onLock: () => setState(() {
-                                _locked = true;
-                                _controls = false;
-                              }),
-                              onFill: () => setState(() => _fill = !_fill),
-                              onScrubbing: (s) {
-                                _scrubbing = s;
-                                if (!s) _scheduleHide();
-                              },
-                              onInteract: _scheduleHide,
-                            ),
-                    ),
-                  ),
-                  if (c.skippable case final skip? when _panel == _Panel.none)
-                    Align(
-                      alignment: Alignment.bottomRight,
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right:
-                              MediaQuery.paddingOf(context).right +
-                              KSpace.margin,
-                          bottom:
-                              MediaQuery.paddingOf(context).bottom +
-                              (_controls ? 120 : 40),
-                        ),
-                        child: GlassButton(
-                          label: skip.label,
-                          icon: Icons.fast_forward_rounded,
-                          prominent: true,
-                          onPressed: c.skip,
-                        ),
-                      ),
-                    ),
-                  if (c.inCredits &&
-                      !c.upNextDismissed &&
-                      _panel == _Panel.none)
-                    _UpNext(controller: c),
-                ],
-                if (_panel != _Panel.none)
+                if (!_inPip) ...[
+                  // Gesture layer.
                   GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _closePanel,
-                    child: const ColoredBox(color: Color(0x66000000)),
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _locked
+                        ? () => setState(() => _controls = !_controls)
+                        : _toggleControls,
+                    onDoubleTapDown: (d) => lastDown = d,
+                    onDoubleTap: _locked
+                        ? null
+                        : () => _doubleTap(lastDown!, box.maxWidth),
+                    onVerticalDragStart: _locked
+                        ? null
+                        : (d) => _verticalStart(d, box.maxWidth),
+                    onVerticalDragUpdate: _locked
+                        ? null
+                        : (d) => _verticalUpdate(d, box.maxHeight),
+                    onScaleUpdate: null,
                   ),
-                AnimatedSlide(
-                  offset: _panel == _Panel.none
-                      ? const Offset(1.1, 0)
-                      : Offset.zero,
-                  duration: KMotion.base,
-                  curve: KMotion.curve,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: switch (_panel) {
-                      _Panel.tracks => TracksPanel(
-                        controller: c,
-                        onClose: _closePanel,
+                  if (c.phase != PlayerPhase.playing)
+                    _PrepareView(
+                      controller: c,
+                      onBack: () => Navigator.of(context).maybePop(),
+                      onVersions: () => _open(_Panel.versions),
+                    ),
+                  if (c.phase == PlayerPhase.playing && _cast.isCasting)
+                    CastingView(controller: c)
+                  else if (c.phase == PlayerPhase.playing) ...[
+                    _BufferingHint(controller: c),
+                    if (_flash != null)
+                      Center(child: _FlashLabel(text: _flash!)),
+                    AnimatedOpacity(
+                      opacity: _controls ? 1 : 0,
+                      duration: KMotion.base,
+                      child: IgnorePointer(
+                        ignoring: !_controls,
+                        child: _locked
+                            ? _LockedControls(
+                                onUnlock: () => setState(() => _locked = false),
+                              )
+                            : _Controls(
+                                controller: c,
+                                fill: _fill,
+                                onBack: () => Navigator.of(context).maybePop(),
+                                onPanel: _open,
+                                onLock: () => setState(() {
+                                  _locked = true;
+                                  _controls = false;
+                                }),
+                                onFill: () => setState(() => _fill = !_fill),
+                                onScrubbing: (s) {
+                                  _scrubbing = s;
+                                  if (!s) _scheduleHide();
+                                },
+                                onInteract: _scheduleHide,
+                              ),
                       ),
-                      _Panel.episodes => EpisodesPanel(
-                        controller: c,
-                        onClose: _closePanel,
+                    ),
+                    if (c.skippable case final skip? when _panel == _Panel.none)
+                      Align(
+                        alignment: Alignment.bottomRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            right:
+                                MediaQuery.paddingOf(context).right +
+                                KSpace.margin,
+                            bottom:
+                                MediaQuery.paddingOf(context).bottom +
+                                (_controls ? 120 : 40),
+                          ),
+                          child: GlassButton(
+                            label: skip.label,
+                            icon: Icons.fast_forward_rounded,
+                            prominent: true,
+                            onPressed: c.skip,
+                          ),
+                        ),
                       ),
-                      _Panel.speed => SpeedPanel(
-                        controller: c,
-                        onClose: _closePanel,
-                      ),
-                      _Panel.cast => CastPanel(
-                        controller: c,
-                        onClose: _closePanel,
-                        onVersions: () => _open(_Panel.versions),
-                      ),
-                      _Panel.versions => _VersionsPanel(
-                        controller: c,
-                        onClose: _closePanel,
-                      ),
-                      _Panel.none => const SizedBox.shrink(),
-                    },
+                    if (c.inCredits &&
+                        !c.upNextDismissed &&
+                        _panel == _Panel.none)
+                      _UpNext(controller: c),
+                  ],
+                  if (_panel != _Panel.none)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _closePanel,
+                      child: const ColoredBox(color: Color(0x66000000)),
+                    ),
+                  AnimatedSlide(
+                    offset: _panel == _Panel.none
+                        ? const Offset(1.1, 0)
+                        : Offset.zero,
+                    duration: KMotion.base,
+                    curve: KMotion.curve,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: switch (_panel) {
+                        _Panel.tracks => TracksPanel(
+                          controller: c,
+                          onClose: _closePanel,
+                        ),
+                        _Panel.episodes => EpisodesPanel(
+                          controller: c,
+                          onClose: _closePanel,
+                        ),
+                        _Panel.speed => SpeedPanel(
+                          controller: c,
+                          onClose: _closePanel,
+                        ),
+                        _Panel.cast => CastPanel(
+                          controller: c,
+                          onClose: _closePanel,
+                          onVersions: () => _open(_Panel.versions),
+                        ),
+                        _Panel.versions => _VersionsPanel(
+                          controller: c,
+                          onClose: _closePanel,
+                        ),
+                        _Panel.none => const SizedBox.shrink(),
+                      },
+                    ),
                   ),
-                ),
+                ],
               ],
             );
           },
