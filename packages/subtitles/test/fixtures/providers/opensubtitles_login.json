@@ -1,0 +1,13 @@
+{
+ "user": {
+  "allowed_downloads": 100,
+  "allowed_translations": 5,
+  "level": "Sub leecher",
+  "user_id": 66,
+  "ext_installed": false,
+  "vip": false
+ },
+ "base_url": "vip-api.opensubtitles.com",
+ "token": "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.c2lnbmF0dXJl",
+ "status": 200
+}

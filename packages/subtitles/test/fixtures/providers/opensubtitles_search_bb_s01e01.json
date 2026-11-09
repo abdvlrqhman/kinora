@@ -1,0 +1,284 @@
+{
+ "total_pages": 1,
+ "total_count": 5,
+ "per_page": 60,
+ "page": 1,
+ "data": [
+  {
+   "id": "3165201",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "3165201",
+    "language": "ar",
+    "download_count": 52000,
+    "new_download_count": 5200,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 1,
+    "ratings": 8.5,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2019-06-25T07:02:57Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "breaking-bad-s01e01-720p-bluray-x264-demand",
+    "machine_translated": false,
+    "release": "Breaking.Bad.S01E01.720p.BluRay.x264-DEMAND",
+    "comments": "",
+    "legacy_subtitle_id": 4165201,
+    "legacy_uploader_id": 1,
+    "uploader": {
+     "uploader_id": null,
+     "name": "Anonymous",
+     "rank": "anonymous"
+    },
+    "feature_details": {
+     "feature_id": 805,
+     "feature_type": "Episode",
+     "year": 2008,
+     "title": "Pilot",
+     "movie_name": "Breaking Bad - S01E01  Pilot",
+     "imdb_id": 959621,
+     "tmdb_id": 62085,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 903747,
+     "parent_title": "Breaking Bad",
+     "parent_tmdb_id": 1396,
+     "parent_feature_id": 107
+    },
+    "url": "https://www.opensubtitles.com/en/subtitles/3165201",
+    "related_links": [],
+    "files": [
+     {
+      "file_id": 3227001,
+      "cd_number": 1,
+      "file_name": "Breaking.Bad.S01E01.720p.BluRay.x264-DEMAND.ar.srt"
+     }
+    ],
+    "moviehash_match": true
+   }
+  },
+  {
+   "id": "3165202",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "3165202",
+    "language": "en",
+    "download_count": 91000,
+    "new_download_count": 9100,
+    "hearing_impaired": true,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 1,
+    "ratings": 0.0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2019-06-25T07:02:57Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "breaking-bad-s01e01-pilot-1080p-web-dl-dd5-1-h-264-ntb",
+    "machine_translated": false,
+    "release": "Breaking.Bad.S01E01.Pilot.1080p.WEB-DL.DD5.1.H.264-NTb",
+    "comments": "",
+    "legacy_subtitle_id": 4165202,
+    "legacy_uploader_id": 1,
+    "uploader": {
+     "uploader_id": null,
+     "name": "Anonymous",
+     "rank": "anonymous"
+    },
+    "feature_details": {
+     "feature_id": 805,
+     "feature_type": "Episode",
+     "year": 2008,
+     "title": "Pilot",
+     "movie_name": "Breaking Bad - S01E01  Pilot",
+     "imdb_id": 959621,
+     "tmdb_id": 62085,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 903747,
+     "parent_title": "Breaking Bad",
+     "parent_tmdb_id": 1396,
+     "parent_feature_id": 107
+    },
+    "url": "https://www.opensubtitles.com/en/subtitles/3165202",
+    "related_links": [],
+    "files": [
+     {
+      "file_id": 3227002,
+      "cd_number": 1,
+      "file_name": "Breaking.Bad.S01E01.Pilot.1080p.WEB-DL.DD5.1.H.264-NTb.srt"
+     }
+    ]
+   }
+  },
+  {
+   "id": "3165203",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "3165203",
+    "language": "pt-BR",
+    "download_count": 12000,
+    "new_download_count": 1200,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 1,
+    "ratings": 0.0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2019-06-25T07:02:57Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "breaking bad s01e01 pilot",
+    "machine_translated": false,
+    "release": "Breaking Bad S01E01 Pilot",
+    "comments": "",
+    "legacy_subtitle_id": 4165203,
+    "legacy_uploader_id": 1,
+    "uploader": {
+     "uploader_id": null,
+     "name": "Anonymous",
+     "rank": "anonymous"
+    },
+    "feature_details": {
+     "feature_id": 805,
+     "feature_type": "Episode",
+     "year": 2008,
+     "title": "Pilot",
+     "movie_name": "Breaking Bad - S01E01  Pilot",
+     "imdb_id": 959621,
+     "tmdb_id": 62085,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 903747,
+     "parent_title": "Breaking Bad",
+     "parent_tmdb_id": 1396,
+     "parent_feature_id": 107
+    },
+    "url": "https://www.opensubtitles.com/en/subtitles/3165203",
+    "related_links": [],
+    "files": [
+     {
+      "file_id": 3227003,
+      "cd_number": 1,
+      "file_name": "breaking.bad.s01e01.pob.srt"
+     }
+    ]
+   }
+  },
+  {
+   "id": "3165204",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "3165204",
+    "language": "en",
+    "download_count": 10,
+    "new_download_count": 1,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 1,
+    "ratings": 0.0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2019-06-25T07:02:57Z",
+    "ai_translated": true,
+    "nb_cd": 1,
+    "slug": "breaking-bad-s01e01-720p-hdtv",
+    "machine_translated": false,
+    "release": "Breaking.Bad.S01E01.720p.HDTV",
+    "comments": "",
+    "legacy_subtitle_id": 4165204,
+    "legacy_uploader_id": 1,
+    "uploader": {
+     "uploader_id": null,
+     "name": "Anonymous",
+     "rank": "anonymous"
+    },
+    "feature_details": {
+     "feature_id": 805,
+     "feature_type": "Episode",
+     "year": 2008,
+     "title": "Pilot",
+     "movie_name": "Breaking Bad - S01E01  Pilot",
+     "imdb_id": 959621,
+     "tmdb_id": 62085,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 903747,
+     "parent_title": "Breaking Bad",
+     "parent_tmdb_id": 1396,
+     "parent_feature_id": 107
+    },
+    "url": "https://www.opensubtitles.com/en/subtitles/3165204",
+    "related_links": [],
+    "files": [
+     {
+      "file_id": 3227004,
+      "cd_number": 1,
+      "file_name": "bb101.srt"
+     }
+    ]
+   }
+  },
+  {
+   "id": "3165205",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "3165205",
+    "language": "zh-TW",
+    "download_count": 300,
+    "new_download_count": 30,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 1,
+    "ratings": 0.0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2019-06-25T07:02:57Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "breaking-bad-s01e01-bdrip",
+    "machine_translated": false,
+    "release": "Breaking.Bad.S01E01.BDRip",
+    "comments": "",
+    "legacy_subtitle_id": 4165205,
+    "legacy_uploader_id": 1,
+    "uploader": {
+     "uploader_id": null,
+     "name": "Anonymous",
+     "rank": "anonymous"
+    },
+    "feature_details": {
+     "feature_id": 805,
+     "feature_type": "Episode",
+     "year": 2008,
+     "title": "Pilot",
+     "movie_name": "Breaking Bad - S01E01  Pilot",
+     "imdb_id": 959621,
+     "tmdb_id": 62085,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 903747,
+     "parent_title": "Breaking Bad",
+     "parent_tmdb_id": 1396,
+     "parent_feature_id": 107
+    },
+    "url": "https://www.opensubtitles.com/en/subtitles/3165205",
+    "related_links": [],
+    "files": [
+     {
+      "file_id": 3227005,
+      "cd_number": 1,
+      "file_name": "bb101.cht.srt"
+     }
+    ]
+   }
+  }
+ ]
+}

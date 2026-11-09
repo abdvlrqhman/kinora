@@ -1,0 +1,127 @@
+{
+ "all_pages": 1,
+ "page": 1,
+ "per_page": 50,
+ "status": "ok",
+ "data": [
+  {
+   "audited": true,
+   "created": "2014-09-07T07:06:05+00:00",
+   "custom_releases": [
+    "the.big.bang.theory.s07e05.1080p.bluray.x264-rovers"
+   ],
+   "download": "/en/subtitles/en-the-big-bang-theory-2007-S07E05-O/2581/download",
+   "flags": [
+    "hearing_impaired",
+    "high_definition"
+   ],
+   "fps": "",
+   "id": "2581",
+   "language": "en",
+   "movie": {
+    "aliases": [
+     "Veliki pokovci"
+    ],
+    "episode_info": {
+     "episode": 5,
+     "id": null,
+     "season": 7,
+     "slug": "S07E05-O",
+     "title": "",
+     "type": "ordinary",
+     "year": null
+    },
+    "id": "uJE",
+    "providers": [
+     "omdb:sY0G"
+    ],
+    "slug": "the-big-bang-theory-2007-S07E05-O",
+    "title": "The Big Bang Theory",
+    "type": "tv-series",
+    "year": 2007
+   },
+   "notes": "",
+   "num_cds": 1,
+   "rejected": null,
+   "releases": [],
+   "state": "migration",
+   "stats": {
+    "downloads": 33406,
+    "lines": 348
+   },
+   "url": "/en/subtitles/en-the-big-bang-theory-2007-S07E05-O/2581"
+  },
+  {
+   "audited": true,
+   "created": "2013-10-18T19:40:52+00:00",
+   "custom_releases": [],
+   "download": "/en/subtitles/en-the-big-bang-theory-2007-S07E05-O/GMso/download",
+   "flags": [],
+   "fps": "23.976",
+   "id": "GMso",
+   "language": "en",
+   "movie": {
+    "aliases": [],
+    "episode_info": {
+     "episode": 5,
+     "id": null,
+     "season": 7,
+     "slug": "S07E05-O",
+     "title": "",
+     "type": "ordinary",
+     "year": null
+    },
+    "id": "uJE",
+    "providers": [],
+    "slug": "the-big-bang-theory-2007-S07E05-O",
+    "title": "The Big Bang Theory",
+    "type": "tv-series",
+    "year": 2007
+   },
+   "notes": "",
+   "num_cds": 1,
+   "rejected": null,
+   "releases": [
+    "The.Big.Bang.Theory.S07E05.720p.HDTV.X264-DIMENSION",
+    "The.Big.Bang.Theory.S07E05.HDTV.x264-LOL"
+   ],
+   "state": "published",
+   "stats": {
+    "downloads": 11000,
+    "lines": 340
+   },
+   "url": "/en/subtitles/en-the-big-bang-theory-2007-S07E05-O/GMso"
+  },
+  {
+   "audited": false,
+   "created": "2013-10-18T19:40:52+00:00",
+   "custom_releases": [],
+   "download": "/x/download",
+   "flags": [],
+   "fps": "",
+   "id": "MOV1",
+   "language": "en",
+   "movie": {
+    "aliases": [],
+    "episode_info": null,
+    "id": "zz",
+    "providers": [],
+    "slug": "x",
+    "title": "The Big Bang",
+    "type": "movie",
+    "year": 2007
+   },
+   "notes": "",
+   "num_cds": 1,
+   "rejected": null,
+   "releases": [
+    "The.Big.Bang.2007.DVDRip"
+   ],
+   "state": "published",
+   "stats": {
+    "downloads": 5
+   },
+   "url": "/x"
+  }
+ ]
+}

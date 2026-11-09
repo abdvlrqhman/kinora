@@ -1,0 +1,10 @@
+name: release_parser
+description: Parses torrent and Stremio addon release names into structured metadata.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dev_dependencies:
+  test: ^1.31.1

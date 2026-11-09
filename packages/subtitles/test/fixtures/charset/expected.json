@@ -1,0 +1,107 @@
+{
+ "arabic_1256.srt": {
+  "language": "ar",
+  "encoding": "cp1256",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nمرحباً بكم في البرنامج.\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nهل أنت متأكد؟ لا أعرف ماذا أقول...\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\n- لماذا تأخرت؟\r\n- كان الطريق مزدحماً جداً.\r\n\r\n4\r\n00:00:10,000 --> 00:00:12,500\r\nسنلتقي غداً في المدرسة، إن شاء الله.\r\n"
+ },
+ "persian_1256.srt": {
+  "language": "fa",
+  "encoding": "cp1256",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nسلام، حال شما چطور است؟\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nمن امروز به کتابخانه رفتم و يک کتاب گرفتم.\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\nپدرم ژاکت گرم پوشيد.\r\n"
+ },
+ "russian_1251.srt": {
+  "language": "ru",
+  "encoding": "cp1251",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nПривет! Как у тебя дела?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nМы встретимся завтра утром у вокзала.\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\nЭто очень интересная история, правда?\r\n"
+ },
+ "ukrainian_1251.srt": {
+  "language": "uk",
+  "encoding": "cp1251",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nПривіт! Як справи?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nМи зустрінемося завтра біля їдальні.\r\n"
+ },
+ "greek_1253.srt": {
+  "language": "el",
+  "encoding": "cp1253",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nΓεια σου! Τι κάνεις σήμερα;\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nΘα συναντηθούμε αύριο το πρωί στο σταθμό.\r\n"
+ },
+ "hebrew_1255.srt": {
+  "language": "he",
+  "encoding": "cp1255",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nשלום! מה שלומך היום?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nנפגש מחר בבוקר ליד התחנה המרכזית.\r\n"
+ },
+ "turkish_1254.srt": {
+  "language": "tr",
+  "encoding": "cp1254",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nMerhaba! Bugün nasılsın?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nYarın sabah istasyonda buluşacağız, değil mi?\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\nŞimdi gitmem gerekiyor.\r\n"
+ },
+ "polish_1250.srt": {
+  "language": "pl",
+  "encoding": "cp1250",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nCześć! Jak się dzisiaj czujesz?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nSpotkamy się jutro rano na dworcu.\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\nŹle się stało, że żółw uciekł.\r\n"
+ },
+ "czech_1250.srt": {
+  "language": "cs",
+  "encoding": "cp1250",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nAhoj! Jak se dnes máš?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nUvidíme se zítra ráno na nádraží.\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\nPříliš žluťoučký kůň úpěl ďábelské ódy.\r\n"
+ },
+ "french_1252.srt": {
+  "language": "fr",
+  "encoding": "cp1252",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nBonjour ! Comment ça va aujourd'hui ?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nOn se retrouve demain matin à la gare.\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\nC'était très intéressant, n'est-ce pas ?\r\n"
+ },
+ "lithuanian_1257.srt": {
+  "language": "lt",
+  "encoding": "cp1257",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nLabas! Kaip šiandien sekasi?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nSusitiksime rytoj ryte prie stoties, ačiū.\r\n"
+ },
+ "thai_874.srt": {
+  "language": "th",
+  "encoding": "cp874",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nสวัสดีครับ วันนี้เป็นอย่างไรบ้าง\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nพรุ่งนี้เช้าเราจะพบกันที่สถานี\r\n"
+ },
+ "chinese_gbk.srt": {
+  "language": "zh-Hans",
+  "encoding": "gbk",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\n你好！你今天怎么样？\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\n我们明天早上在车站见面。\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\n这是一个非常有意思的故事，对吧？\r\n"
+ },
+ "chinese_big5.srt": {
+  "language": "zh-Hant",
+  "encoding": "big5",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\n你好！你今天怎麼樣？\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\n我們明天早上在車站見面。\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\n這是一個非常有意思的故事，對吧？\r\n"
+ },
+ "japanese_sjis.srt": {
+  "language": "ja",
+  "encoding": "cp932",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nこんにちは！今日はどうですか？\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\n明日の朝、駅で会いましょう。\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\nこれはとても面白い話ですね。\r\n"
+ },
+ "korean_cp949.srt": {
+  "language": "ko",
+  "encoding": "cp949",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\n안녕하세요! 오늘 어떠세요?\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\n내일 아침에 역에서 만나요.\r\n\r\n3\r\n00:00:07,000 --> 00:00:09,500\r\n이것은 정말 재미있는 이야기예요.\r\n"
+ },
+ "utf8_bom.srt": {
+  "language": "ar",
+  "encoding": "utf-8-sig",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nمرحباً بكم\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nHello there\r\n"
+ },
+ "utf8_plain.srt": {
+  "language": null,
+  "encoding": "utf-8",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nÇa marche très bien — merci !\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nÑandú\r\n"
+ },
+ "utf16le_bom.srt": {
+  "language": "ru",
+  "encoding": "utf-16-le",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nПривет, мир!\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nHello world\r\n"
+ },
+ "utf16be_bom.srt": {
+  "language": "he",
+  "encoding": "utf-16-be",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nשלום עולם\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nHello world\r\n"
+ },
+ "utf16le_nobom.srt": {
+  "language": null,
+  "encoding": "utf-16-le",
+  "text": "1\r\n00:00:01,000 --> 00:00:03,500\r\nHello without a byte order mark\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,500\r\nSecond line here\r\n"
+ }
+}

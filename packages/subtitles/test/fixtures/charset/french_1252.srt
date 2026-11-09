@@ -1,0 +1,11 @@
+1
+00:00:01,000 --> 00:00:03,500
+Bonjour ! Comment ça va aujourd'hui ?
+
+2
+00:00:04,000 --> 00:00:06,500
+On se retrouve demain matin à la gare.
+
+3
+00:00:07,000 --> 00:00:09,500
+C'était très intéressant, n'est-ce pas ?

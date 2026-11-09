@@ -90,7 +90,7 @@ final class AppSettings {
     this.subtitleMode = SubtitleMode.auto,
     this.preferHearingImpaired = false,
     this.subtitleStyle = const SubtitleStyle(),
-    this.maxResolution = 2160,
+    this.maxResolution = 1080,
     this.dataSaver = false,
     this.autoplayNext = true,
     this.skipIntros = true,
@@ -118,7 +118,7 @@ final class AppSettings {
     subtitleStyle: j['subtitleStyle'] is Map<String, Object?>
         ? SubtitleStyle.fromJson(j['subtitleStyle']! as Map<String, Object?>)
         : const SubtitleStyle(),
-    maxResolution: (j['maxResolution'] as num? ?? 2160).toInt(),
+    maxResolution: (j['maxResolution'] as num? ?? 1080).toInt(),
     dataSaver: j['dataSaver'] as bool? ?? false,
     autoplayNext: j['autoplayNext'] as bool? ?? true,
     skipIntros: j['skipIntros'] as bool? ?? true,

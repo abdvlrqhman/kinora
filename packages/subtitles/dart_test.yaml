@@ -1,0 +1,13 @@
+# `live` tests hit real providers and are skipped unless the preset is used:
+#   dart test -P live     (keys come from the environment)
+tags:
+  live:
+    timeout: 3x
+    skip: "live provider test; run with: dart test -P live"
+
+presets:
+  live:
+    include_tags: live
+    tags:
+      live:
+        skip: false

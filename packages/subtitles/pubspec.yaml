@@ -1,0 +1,18 @@
+name: subtitles
+description: >-
+  Subtitle providers, language normalization, charset decoding, format
+  conversion, release matching and timing checks for Kinora. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  archive: ^4.6.0
+  collection: ^1.19.0
+  enough_convert: ^1.7.1
+  http: ^1.6.0
+
+dev_dependencies:
+  test: ^1.31.0

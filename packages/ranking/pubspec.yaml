@@ -1,0 +1,14 @@
+name: ranking
+description: Scores stream candidates for one movie or episode and explains the best pick.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  release_parser:
+    path: ../release_parser
+
+dev_dependencies:
+  test: ^1.31.1

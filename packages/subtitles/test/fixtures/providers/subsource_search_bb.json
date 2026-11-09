@@ -1,0 +1,23 @@
+{
+ "success": true,
+ "data": [
+  {
+   "movieId": 26604,
+   "subsourceLink": "https://subsource.net/subtitles/breaking-bad/season-1",
+   "title": "Breaking Bad",
+   "alternateTitle": null,
+   "type": "tvseries",
+   "releaseYear": 2008,
+   "imdbId": "tt0903747",
+   "tmdbId": null,
+   "season": 1,
+   "subtitleCount": 338,
+   "posters": {
+    "small": "https://cdn.subsource.net/posters/26604/9d7d10a9ff545215c53890594442f430-small.jpg",
+    "medium": "https://cdn.subsource.net/posters/26604/9d7d10a9ff545215c53890594442f430-medium.jpg",
+    "large": "https://cdn.subsource.net/posters/26604/9d7d10a9ff545215c53890594442f430-large.jpg",
+    "original": "https://cdn.subsource.net/posters/26604/9d7d10a9ff545215c53890594442f430-original.jpg"
+   }
+  }
+ ]
+}
