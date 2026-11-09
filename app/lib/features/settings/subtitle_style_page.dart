@@ -33,14 +33,28 @@ String styleSummary(SubtitleStyle s) => [
 
 /// Settings › Languages and subtitles › Subtitle style, with a live preview
 /// over a sample frame. Sliders preview while dragging and save on release.
-class SubtitleStylePage extends ConsumerStatefulWidget {
+class SubtitleStylePage extends StatelessWidget {
   const SubtitleStylePage({super.key});
 
   @override
-  ConsumerState<SubtitleStylePage> createState() => _SubtitleStylePageState();
+  Widget build(BuildContext context) => const SettingsPage(
+    title: 'Subtitle style',
+    children: [SubtitleStyleControls()],
+  );
 }
 
-class _SubtitleStylePageState extends ConsumerState<SubtitleStylePage> {
+/// The subtitle look (size, color, box, outline, bold, height) with a live
+/// preview. One style for everything you watch: used by Settings and by the
+/// player's Audio and subtitles panel.
+class SubtitleStyleControls extends ConsumerStatefulWidget {
+  const SubtitleStyleControls({super.key});
+
+  @override
+  ConsumerState<SubtitleStyleControls> createState() =>
+      _SubtitleStyleControlsState();
+}
+
+class _SubtitleStyleControlsState extends ConsumerState<SubtitleStyleControls> {
   late SubtitleStyle _style = ref.read(settingsProvider).subtitleStyle;
 
   void _preview(SubtitleStyle s) => setState(() => _style = s);
@@ -60,8 +74,8 @@ class _SubtitleStylePageState extends ConsumerState<SubtitleStylePage> {
     final first = ref.watch(settingsProvider).primaryLanguage;
     final rtl =
         first != null && (Language.parse(first)?.isRightToLeft ?? false);
-    return SettingsPage(
-      title: 'Subtitle style',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -323,6 +337,8 @@ class SubtitlePreview extends StatelessWidget {
         );
         final scale = c.maxWidth / cropWidth;
         return Semantics(
+          // Its own node: read as one image, not merged with the controls.
+          container: true,
           label: 'Preview of your subtitle style',
           image: true,
           excludeSemantics: true,

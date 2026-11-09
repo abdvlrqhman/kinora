@@ -15,6 +15,7 @@ import '../../../ui/widgets/artwork.dart';
 import '../../../ui/widgets/media.dart';
 import '../../settings/languages.dart';
 import '../../settings/subtitle_sites.dart';
+import '../../settings/subtitle_style_page.dart';
 import '../../title/episodes.dart';
 import '../../../services/subtitle_option.dart';
 import '../player_controller.dart';
@@ -111,6 +112,9 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
   /// The setting open in place of the list, when fixing "no subtitles".
   SubtitleFix? _fixing;
 
+  /// The subtitle look is open in place of the list.
+  bool _styling = false;
+
   /// Settings stay inside the player; closing them searches again.
   Widget _fixPanel(SubtitleFix fix) => SidePanel(
     title: fix == SubtitleFix.sites ? 'Subtitle sites' : 'Languages',
@@ -124,18 +128,6 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
     ),
   );
 
-  /// Subtitle size in tenths, 60% to 200%.
-  void _resize(double by) {
-    unawaited(
-      ref.read(settingsProvider.notifier).update((s) {
-        final next = (((s.subtitleStyle.scale + by) * 10).round() / 10)
-            .clamp(0.6, 2.0)
-            .toDouble();
-        return s.copyWith(subtitleStyle: s.subtitleStyle.copyWith(scale: next));
-      }),
-    );
-  }
-
   void _step(int ms) {
     final c = widget.controller;
     unawaited(c.setSubtitleDelay(c.subtitleDelay + Duration(milliseconds: ms)));
@@ -145,6 +137,16 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
   Widget build(BuildContext context) {
     final c = widget.controller;
     if (_fixing case final fix?) return _fixPanel(fix);
+    if (_styling) {
+      return SidePanel(
+        title: 'Subtitle style',
+        onClose: () => setState(() => _styling = false),
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: KSpace.x4),
+          children: const [SubtitleStyleControls()],
+        ),
+      );
+    }
     return ListenableBuilder(
       listenable: c,
       builder: (context, _) {
@@ -291,38 +293,15 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
                     ],
                   ),
                 ),
-              if (active != null) ...[
-                // Saved like Settings › Subtitle style: every video after.
-                const _Heading('Subtitle size'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: KSpace.margin,
-                  ),
-                  child: Row(
-                    children: [
-                      _Step(
-                        label: 'Smaller',
-                        icon: Icons.text_decrease_rounded,
-                        onTap: () => _resize(-0.1),
-                        onLongPress: () => _resize(-0.3),
-                      ),
-                      Expanded(
-                        child: Text(
-                          '${(ref.watch(settingsProvider.select((s) => s.subtitleStyle.scale)) * 100).round()}%',
-                          textAlign: TextAlign.center,
-                          style: KType.tabular(KType.title),
-                        ),
-                      ),
-                      _Step(
-                        label: 'Larger',
-                        icon: Icons.text_increase_rounded,
-                        onTap: () => _resize(0.1),
-                        onLongPress: () => _resize(0.3),
-                      ),
-                    ],
-                  ),
+              // One look for every video (saved like Settings › Subtitle
+              // style); which track plays stays remembered per show.
+              _Entry(
+                label: 'Subtitle style',
+                detail: styleSummary(
+                  ref.watch(settingsProvider.select((s) => s.subtitleStyle)),
                 ),
-              ],
+                onTap: () => setState(() => _styling = true),
+              ),
               const _Heading('Sound'),
               _Choice(
                 label: 'Night mode',
@@ -551,8 +530,56 @@ class _Note extends StatelessWidget {
   );
 }
 
-/// One choice with a Spill check when chosen. [toggle] makes it an on/off
+/// One choice with an accent check when chosen. [toggle] makes it an on/off
 /// row (Night mode) instead of one of several.
+/// Opens a page inside the panel.
+class _Entry extends StatelessWidget {
+  const _Entry({
+    required this.label,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final String label;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: '$label. $detail',
+    excludeSemantics: true,
+    child: InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(KSpace.margin, 10, KSpace.x3, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: KType.title),
+                    Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: KType.small,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: KColors.haze),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _Choice extends StatelessWidget {
   const _Choice({
     required this.label,

@@ -22,8 +22,7 @@ it. That is the one bold thing. Everything else stays quiet.
 | Lamp | `#F5EEE4` | Primary text and icons: warm projector white, not pure white. |
 | Haze | `#B3ABB5` | Secondary text. |
 | Reel | `#77707A` | Tertiary text, disabled. |
-| Spill | dynamic | Accent extracted from the current title's artwork (vivid, contrast-checked against Lamp). |
-| Marquee | `#B48CFF` | Brand accent (icon, intro) and the fallback when there's no artwork: violet marquee light. |
+| Marquee | `#B48CFF` | The one accent: lit buttons, glass tint, toggles, icon and intro. Violet marquee light. |
 | Caution | `#FFC15E` | Warnings and things that need attention (few seeds, waiting for Wi-Fi, can't play on the TV). Never the brand color, so a warning can't read as selected. |
 | Go | `#7EE2B8` | Ready / downloaded / best match. |
 | Cut | `#FF6B6B` | Errors and destructive actions. |
@@ -78,8 +77,9 @@ weight, not middle dots.
 
 ## Review against generic defaults
 
-- Near-black with one acid accent: avoided. Base is real black and the accent
-  isn't fixed; it is taken from each film, with violet only as a fallback.
+- Near-black with one accent: chosen on purpose (the owner asked for violet
+  over per-film colors). Base is real black; the violet is the only accent,
+  amber marks warnings, and the artwork itself carries each film's color.
 - Card kit with one radius and grey shadows: avoided. No cards; radii follow
   hierarchy.
 - All-caps eyebrows, dot-joined meta, mono labels, arrow-suffixed buttons:

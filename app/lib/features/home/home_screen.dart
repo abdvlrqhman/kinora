@@ -7,9 +7,7 @@ import '../../app/shell.dart';
 import '../../services/sources.dart';
 import '../../services/tmdb.dart';
 import '../../ui/glass.dart';
-import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
-import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/states.dart';
 import '../cast/cast_picker.dart';
@@ -105,46 +103,43 @@ class _FeedState extends ConsumerState<_Feed> {
         : ref.watch(richMetaProvider((type: pick.type, id: pick.id))).value ??
               pick;
     final pad = MediaQuery.paddingOf(context);
-    return ArtworkTintScope(
-      image: artworkProvider(featured?.background ?? featured?.poster),
-      child: Stack(
-        children: [
-          RefreshIndicator.adaptive(
-            onRefresh: _refresh,
-            edgeOffset: pad.top,
-            color: KColors.lamp,
-            backgroundColor: KColors.seat,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: featured != null
-                      ? Billboard(meta: featured)
-                      : rows.isLoading ||
-                            (rows.value?.complete == false) ||
-                            fresh.isLoading
-                      ? const BillboardSkeleton()
-                      : SizedBox(height: pad.top + 56),
-                ),
-                const SliverToBoxAdapter(child: ContinueRow()),
-                const SliverToBoxAdapter(child: NewEpisodesRow()),
-                const SliverToBoxAdapter(child: MyListRow()),
-                ..._rows(rows),
-                SliverToBoxAdapter(
-                  child: SizedBox(height: AppShell.bottomInset(context)),
-                ),
-              ],
-            ),
+    return Stack(
+      children: [
+        RefreshIndicator.adaptive(
+          onRefresh: _refresh,
+          edgeOffset: pad.top,
+          color: KColors.lamp,
+          backgroundColor: KColors.seat,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: featured != null
+                    ? Billboard(meta: featured)
+                    : rows.isLoading ||
+                          (rows.value?.complete == false) ||
+                          fresh.isLoading
+                    ? const BillboardSkeleton()
+                    : SizedBox(height: pad.top + 56),
+              ),
+              const SliverToBoxAdapter(child: ContinueRow()),
+              const SliverToBoxAdapter(child: NewEpisodesRow()),
+              const SliverToBoxAdapter(child: MyListRow()),
+              ..._rows(rows),
+              SliverToBoxAdapter(
+                child: SizedBox(height: AppShell.bottomInset(context)),
+              ),
+            ],
           ),
-          // Fixed: scrolled content fades under the status bar and Cast.
-          const TopShade(),
-          Positioned(
-            top: pad.top + KSpace.x1,
-            right: KSpace.margin,
-            child: const GlassGroup(child: CastButton()),
-          ),
-        ],
-      ),
+        ),
+        // Fixed: scrolled content fades under the status bar and Cast.
+        const TopShade(),
+        Positioned(
+          top: pad.top + KSpace.x1,
+          right: KSpace.margin,
+          child: const GlassGroup(child: CastButton()),
+        ),
+      ],
     );
   }
 

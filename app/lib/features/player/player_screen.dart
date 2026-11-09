@@ -361,207 +361,201 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final req = c.request;
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final motion = reduce ? Duration.zero : KMotion.base;
-    return ArtworkTintScope(
-      image: artworkProvider(req.still ?? req.background ?? req.poster),
-      child: Scaffold(
-        backgroundColor: KColors.blackout,
-        body: LayoutBuilder(
-          builder: (context, box) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Transform.scale(
-                  // The floating window always shows the whole picture.
-                  scale: _inPip ? 1 : _zoom,
-                  child: Video(
-                    controller: c.video,
-                    controls: null,
-                    fit: _fill ? BoxFit.cover : BoxFit.contain,
-                    subtitleViewConfiguration: const SubtitleViewConfiguration(
-                      visible: false,
-                    ),
+    return Scaffold(
+      backgroundColor: KColors.blackout,
+      body: LayoutBuilder(
+        builder: (context, box) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Transform.scale(
+                // The floating window always shows the whole picture.
+                scale: _inPip ? 1 : _zoom,
+                child: Video(
+                  controller: c.video,
+                  controls: null,
+                  fit: _fill ? BoxFit.cover : BoxFit.contain,
+                  subtitleViewConfiguration: const SubtitleViewConfiguration(
+                    visible: false,
                   ),
                 ),
-                SubtitleOverlay(
-                  player: c.player,
-                  clearance: _controls && !_inPip
-                      ? _controlsHeight(context)
-                      : 0,
-                  // Play row (76) and its buffering ring (86), plus a gap.
-                  belowCenter: _controls && !_inPip && !_locked ? 52 : 0,
-                ),
-                if (!_inPip) ...[
-                  // Gesture layer. The Listener counts fingers for the
-                  // whole touch (see TouchSession).
-                  Listener(
+              ),
+              SubtitleOverlay(
+                player: c.player,
+                clearance: _controls && !_inPip ? _controlsHeight(context) : 0,
+                // Play row (76) and its buffering ring (86), plus a gap.
+                belowCenter: _controls && !_inPip && !_locked ? 52 : 0,
+              ),
+              if (!_inPip) ...[
+                // Gesture layer. The Listener counts fingers for the
+                // whole touch (see TouchSession).
+                Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (_) => _touch.fingerDown(),
+                  onPointerUp: (_) {
+                    if (_touch.fingerUp()) _touchEnd();
+                  },
+                  onPointerCancel: (_) {
+                    if (_touch.fingerUp()) _touchEnd();
+                  },
+                  child: GestureDetector(
                     behavior: HitTestBehavior.translucent,
-                    onPointerDown: (_) => _touch.fingerDown(),
-                    onPointerUp: (_) {
-                      if (_touch.fingerUp()) _touchEnd();
-                    },
-                    onPointerCancel: (_) {
-                      if (_touch.fingerUp()) _touchEnd();
-                    },
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: _locked
-                          ? () => setState(() => _controls = !_controls)
-                          : _toggleControls,
-                      onDoubleTapDown: (d) => _lastDown = d,
-                      onDoubleTap: _locked
-                          ? null
-                          : () {
-                              if (_lastDown case final d?) {
-                                _doubleTap(d, box.maxWidth);
-                              }
-                            },
-                      onScaleStart: _locked
-                          ? null
-                          : (d) => _gestureStart(d, box.maxWidth),
-                      onScaleUpdate: _locked
-                          ? null
-                          : (d) => unawaited(_gestureUpdate(d, box.maxHeight)),
-                    ),
+                    onTap: _locked
+                        ? () => setState(() => _controls = !_controls)
+                        : _toggleControls,
+                    onDoubleTapDown: (d) => _lastDown = d,
+                    onDoubleTap: _locked
+                        ? null
+                        : () {
+                            if (_lastDown case final d?) {
+                              _doubleTap(d, box.maxWidth);
+                            }
+                          },
+                    onScaleStart: _locked
+                        ? null
+                        : (d) => _gestureStart(d, box.maxWidth),
+                    onScaleUpdate: _locked
+                        ? null
+                        : (d) => unawaited(_gestureUpdate(d, box.maxHeight)),
                   ),
-                  if (c.phase != PlayerPhase.playing)
-                    _PrepareView(
-                      controller: c,
-                      onBack: () => Navigator.of(context).maybePop(),
-                      onVersions: () => _open(_Panel.versions),
+                ),
+                if (c.phase != PlayerPhase.playing)
+                  _PrepareView(
+                    controller: c,
+                    onBack: () => Navigator.of(context).maybePop(),
+                    onVersions: () => _open(_Panel.versions),
+                  ),
+                if (c.phase == PlayerPhase.playing && _cast.isCasting)
+                  CastingView(controller: c)
+                else if (c.phase == PlayerPhase.playing) ...[
+                  // Buffering and seek/volume feedback: centered while the
+                  // controls are hidden, above the play row while they
+                  // show, so nothing covers it.
+                  if (!_controls || _locked)
+                    Center(
+                      child: _Status(controller: c, flash: _flash),
                     ),
-                  if (c.phase == PlayerPhase.playing && _cast.isCasting)
-                    CastingView(controller: c)
-                  else if (c.phase == PlayerPhase.playing) ...[
-                    // Buffering and seek/volume feedback: centered while the
-                    // controls are hidden, above the play row while they
-                    // show, so nothing covers it.
-                    if (!_controls || _locked)
-                      Center(
-                        child: _Status(controller: c, flash: _flash),
-                      ),
-                    AnimatedOpacity(
-                      opacity: _controls ? 1 : 0,
-                      duration: motion,
-                      child: IgnorePointer(
-                        ignoring: !_controls,
-                        child: _locked
-                            ? _LockedControls(
-                                onUnlock: () => setState(() => _locked = false),
-                              )
-                            : _Controls(
-                                controller: c,
-                                // Buffering shows as the Play ring and the
-                                // top-bar chip here: one pill at most.
-                                status: _Status(
-                                  controller: c,
-                                  flash: _flash,
-                                  buffering: false,
-                                ),
-                                onSeekBy: _seekBy,
-                                fill: _fill,
-                                onBack: () => Navigator.of(context).maybePop(),
-                                onPanel: _open,
-                                onLock: () => setState(() {
-                                  _locked = true;
-                                  _controls = false;
-                                }),
-                                onFill: () => setState(() {
-                                  _fill = !_fill;
-                                  _zoom = 1;
-                                }),
-                                onScrubbing: (s) {
-                                  _scrubbing = s;
-                                  if (!s) _scheduleHide();
-                                },
-                                onInteract: _scheduleHide,
-                              ),
-                      ),
-                    ),
-                    if (_levelShown case final l?)
-                      _LevelIndicator(brightness: l.brightness, value: l.value),
-                    if (c.skippable case final skip? when _panel == _Panel.none)
-                      Align(
-                        alignment: Alignment.bottomRight,
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            right:
-                                MediaQuery.paddingOf(context).right +
-                                KSpace.margin,
-                            bottom:
-                                MediaQuery.paddingOf(context).bottom +
-                                (_controls ? 120 : 40),
-                          ),
-                          child: GlassButton(
-                            label: skip.label,
-                            icon: Icons.fast_forward_rounded,
-                            prominent: true,
-                            onPressed: c.skip,
-                          ),
-                        ),
-                      ),
-                    if (c.inCredits &&
-                        !c.upNextDismissed &&
-                        _panel == _Panel.none)
-                      // Under the controls it would cover Play and +10; the
-                      // bar has Next episode then. Kept, so it resumes.
-                      // (With a screen reader the controls never hide, so
-                      // it stays reachable there.)
-                      Offstage(
-                        offstage: _controls && !_locked && !_accessible,
-                        child: _UpNext(
-                          controller: c,
-                          paused: _controls && !_locked && !_accessible,
-                        ),
-                      ),
-                  ],
-                  if (_panel != _Panel.none)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _closePanel,
-                      child: const ColoredBox(color: Color(0x66000000)),
-                    ),
-                  AnimatedSlide(
-                    offset: _panel == _Panel.none
-                        ? const Offset(1.1, 0)
-                        : Offset.zero,
+                  AnimatedOpacity(
+                    opacity: _controls ? 1 : 0,
                     duration: motion,
-                    curve: KMotion.curve,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: switch (_panel) {
-                        _Panel.tracks => TracksPanel(
-                          controller: c,
-                          onClose: _closePanel,
-                        ),
-                        _Panel.episodes => EpisodesPanel(
-                          controller: c,
-                          onClose: _closePanel,
-                        ),
-                        _Panel.speed => SpeedPanel(
-                          controller: c,
-                          onClose: _closePanel,
-                        ),
-                        _Panel.cast => CastPanel(
-                          controller: c,
-                          onClose: _closePanel,
-                          onVersions: () => _open(_Panel.versions),
-                        ),
-                        _Panel.versions => _VersionsPanel(
-                          controller: c,
-                          onClose: _closePanel,
-                        ),
-                        _Panel.none => const SizedBox.shrink(),
-                      },
+                    child: IgnorePointer(
+                      ignoring: !_controls,
+                      child: _locked
+                          ? _LockedControls(
+                              onUnlock: () => setState(() => _locked = false),
+                            )
+                          : _Controls(
+                              controller: c,
+                              // Buffering shows as the Play ring and the
+                              // top-bar chip here: one pill at most.
+                              status: _Status(
+                                controller: c,
+                                flash: _flash,
+                                buffering: false,
+                              ),
+                              onSeekBy: _seekBy,
+                              fill: _fill,
+                              onBack: () => Navigator.of(context).maybePop(),
+                              onPanel: _open,
+                              onLock: () => setState(() {
+                                _locked = true;
+                                _controls = false;
+                              }),
+                              onFill: () => setState(() {
+                                _fill = !_fill;
+                                _zoom = 1;
+                              }),
+                              onScrubbing: (s) {
+                                _scrubbing = s;
+                                if (!s) _scheduleHide();
+                              },
+                              onInteract: _scheduleHide,
+                            ),
                     ),
                   ),
+                  if (_levelShown case final l?)
+                    _LevelIndicator(brightness: l.brightness, value: l.value),
+                  if (c.skippable case final skip? when _panel == _Panel.none)
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right:
+                              MediaQuery.paddingOf(context).right +
+                              KSpace.margin,
+                          bottom:
+                              MediaQuery.paddingOf(context).bottom +
+                              (_controls ? 120 : 40),
+                        ),
+                        child: GlassButton(
+                          label: skip.label,
+                          icon: Icons.fast_forward_rounded,
+                          prominent: true,
+                          onPressed: c.skip,
+                        ),
+                      ),
+                    ),
+                  if (c.inCredits &&
+                      !c.upNextDismissed &&
+                      _panel == _Panel.none)
+                    // Under the controls it would cover Play and +10; the
+                    // bar has Next episode then. Kept, so it resumes.
+                    // (With a screen reader the controls never hide, so
+                    // it stays reachable there.)
+                    Offstage(
+                      offstage: _controls && !_locked && !_accessible,
+                      child: _UpNext(
+                        controller: c,
+                        paused: _controls && !_locked && !_accessible,
+                      ),
+                    ),
                 ],
+                if (_panel != _Panel.none)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _closePanel,
+                    child: const ColoredBox(color: Color(0x66000000)),
+                  ),
+                AnimatedSlide(
+                  offset: _panel == _Panel.none
+                      ? const Offset(1.1, 0)
+                      : Offset.zero,
+                  duration: motion,
+                  curve: KMotion.curve,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: switch (_panel) {
+                      _Panel.tracks => TracksPanel(
+                        controller: c,
+                        onClose: _closePanel,
+                      ),
+                      _Panel.episodes => EpisodesPanel(
+                        controller: c,
+                        onClose: _closePanel,
+                      ),
+                      _Panel.speed => SpeedPanel(
+                        controller: c,
+                        onClose: _closePanel,
+                      ),
+                      _Panel.cast => CastPanel(
+                        controller: c,
+                        onClose: _closePanel,
+                        onVersions: () => _open(_Panel.versions),
+                      ),
+                      _Panel.versions => _VersionsPanel(
+                        controller: c,
+                        onClose: _closePanel,
+                      ),
+                      _Panel.none => const SizedBox.shrink(),
+                    },
+                  ),
+                ),
               ],
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -794,16 +788,21 @@ class _Controls extends StatelessWidget {
                       label: fill ? 'Fit to screen' : 'Fill screen',
                       onPressed: onFill,
                     ),
-                    const Spacer(),
-                    if (c.nextEpisode != null)
-                      Flexible(
-                        child: GlassButton(
-                          label: 'Next episode',
-                          icon: Icons.skip_next_rounded,
-                          prominent: true,
-                          onPressed: c.playNext,
-                        ),
+                    // All the room that's left, button at its right edge
+                    // (a Spacer beside a Flexible split it in half).
+                    Expanded(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: c.nextEpisode == null
+                            ? null
+                            : GlassButton(
+                                label: 'Next episode',
+                                icon: Icons.skip_next_rounded,
+                                prominent: true,
+                                onPressed: c.playNext,
+                              ),
                       ),
+                    ),
                   ],
                 ),
               ],

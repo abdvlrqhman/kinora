@@ -10,7 +10,6 @@ import '../../app/router.dart';
 import '../../services/sources.dart';
 import '../../services/tmdb.dart';
 import '../../ui/glass.dart';
-import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
@@ -39,11 +38,7 @@ class TitleScreen extends ConsumerWidget {
     final title = ref.watch(titleProvider(key));
     return Scaffold(
       body: switch (title) {
-        // The page sits under the tint so its sheets inherit the accent.
-        AsyncValue(:final value?) => ArtworkTintScope(
-          image: artworkProvider(value.meta.background ?? value.meta.poster),
-          child: _TitlePage(titleKey: key, model: value),
-        ),
+        AsyncValue(:final value?) => _TitlePage(titleKey: key, model: value),
         // No installed source describes this title: adding one fixes it.
         AsyncError(:final error)
             when error is StateError ||

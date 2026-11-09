@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kinora/ui/tint.dart';
-import 'package:kinora/ui/widgets/artwork.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 /// Loads every font in the app's FontManifest (BigShoulders, Figtree and
@@ -32,15 +30,10 @@ String art(String name) =>
 void phoneInsets(WidgetTester tester) =>
     tester.view.padding = const FakeViewPadding(top: 141, bottom: 102);
 
-/// Loads glass shaders and artwork accents for real (outside fake async),
-/// before the screen mounts.
-Future<void> warmUp(WidgetTester tester, List<String> tintArt) =>
-    tester.runAsync(() async {
-      await LiquidGlass.precache();
-      for (final url in tintArt) {
-        await ArtworkTint.of(artworkProvider(url)!);
-      }
-    });
+/// Loads glass shaders for real (outside fake async), before the screen
+/// mounts.
+Future<void> warmUp(WidgetTester tester) =>
+    tester.runAsync(LiquidGlass.precache);
 
 /// Lets every image on screen load and decode for real, then settles.
 /// Loads start inside the test's fake-async zone, so their callbacks only

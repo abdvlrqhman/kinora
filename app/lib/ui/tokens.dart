@@ -1,8 +1,7 @@
 import 'package:flutter/animation.dart';
 import 'package:flutter/painting.dart';
 
-/// Kinora palette (see DESIGN.md). The accent ("Spill") is dynamic and
-/// comes from artwork; [marquee] is its fallback.
+/// Kinora palette (see DESIGN.md). [marquee] (violet) is the one accent.
 abstract final class KColors {
   /// Base: a dark theater.
   static const blackout = Color(0xFF000000);

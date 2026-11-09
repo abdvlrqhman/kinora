@@ -71,8 +71,8 @@ ThemeData kinoraTheme() {
       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
       overlayShape: SliderComponentShape.noOverlay,
     ),
-    // On: Lamp thumb on the accent (Marquee here; SwitchRow passes the
-    // title's Spill). Go stays reserved for ready and downloaded.
+    // On: Lamp thumb on the brand accent (Marquee). Go stays reserved for
+    // ready and downloaded.
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected) ? KColors.lamp : KColors.haze,
