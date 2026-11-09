@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stremio/stremio.dart';
 
@@ -129,6 +132,22 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                                 : DownloadAction(request: primary),
                           ),
                           Expanded(child: MyListAction(meta: meta)),
+                          if (meta.trailerYouTubeIds.isNotEmpty)
+                            Expanded(
+                              child: ActionTile(
+                                icon: Icons.movie_creation_outlined,
+                                label: 'Trailer',
+                                semanticLabel: 'Watch the trailer on YouTube',
+                                onPressed: () => unawaited(
+                                  launchUrl(
+                                    Uri.https('www.youtube.com', '/watch', {
+                                      'v': meta.trailerYouTubeIds.first,
+                                    }),
+                                    mode: LaunchMode.externalApplication,
+                                  ),
+                                ),
+                              ),
+                            ),
                           Expanded(
                             child: ActionTile(
                               icon: Icons.tune_rounded,
