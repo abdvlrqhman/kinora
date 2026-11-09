@@ -22,6 +22,7 @@ import '../../ui/widgets/media.dart';
 import '../../ui/widgets/states.dart';
 import '../../services/cast_service.dart';
 import '../title/versions_sheet.dart';
+import 'gestures.dart';
 import 'player_controller.dart';
 import 'widgets/cast_panel.dart';
 import 'widgets/panels.dart';
@@ -153,6 +154,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // After the return flight; listeners can't rebuild while the tree is locked.
     scheduleMicrotask(() => launchingArt.value = null);
     _hide?.cancel();
+    _levelHide?.cancel();
     _flashTimer?.cancel();
     _seekReset?.cancel();
     _cast.removeListener(_onChange);
@@ -217,29 +219,76 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   // -------------------------------------------------------------- gestures --
 
-  double? _dragStartValue;
-  bool _dragLeft = false;
+  // One finger, vertical: brightness on the left half, volume on the
+  // right. Two fingers: pinch to zoom the picture.
 
-  Future<void> _verticalStart(DragStartDetails d, double width) async {
-    _dragLeft = d.localPosition.dx < width / 2;
-    _dragStartValue = _dragLeft
-        ? await ScreenBrightness.instance.application
-        : await VolumeController.instance.getVolume();
+  /// Picture zoom, on top of fit/fill (1× to 3×).
+  double _zoom = 1;
+  double _zoomStart = 1;
+
+  /// Most fingers seen in the current gesture: a pinch never turns into a
+  /// swipe when one finger lifts first.
+  int _fingers = 0;
+  bool _swipeLeftSide = false;
+  bool _swiping = false;
+  Offset _travel = Offset.zero;
+
+  /// The brightness or volume being set (null until it's been read).
+  double? _level;
+
+  /// Shown on the side being adjusted while swiping.
+  ({bool brightness, double value})? _levelShown;
+  Timer? _levelHide;
+
+  void _gestureStart(ScaleStartDetails d, double width) {
+    _fingers = d.pointerCount;
+    _zoomStart = _zoom;
+    _swipeLeftSide = d.localFocalPoint.dx < width / 2;
+    _swiping = false;
+    _travel = Offset.zero;
+    _level = null;
   }
 
-  Future<void> _verticalUpdate(DragUpdateDetails d, double height) async {
-    final start = _dragStartValue;
-    if (start == null) return;
-    final next = (start - d.delta.dy / height * 1.2).clamp(0.0, 1.0);
-    _dragStartValue = next;
-    if (_dragLeft) {
+  Future<void> _gestureUpdate(ScaleUpdateDetails d, double height) async {
+    _fingers = math.max(_fingers, d.pointerCount);
+    if (_fingers >= 2) {
+      if (d.pointerCount < 2) return;
+      final z = PlayerGestures.zoom(_zoomStart, d.scale);
+      if (z != _zoom) setState(() => _zoom = z);
+      _showFlash('Zoom ${(z * 100).round()}%');
+      return;
+    }
+    _travel += d.focalPointDelta;
+    if (!_swiping) {
+      if (!PlayerGestures.isVerticalSwipe(_travel.dx, _travel.dy)) return;
+      _swiping = true;
+      _level = _swipeLeftSide
+          ? await ScreenBrightness.instance.application
+          : await VolumeController.instance.getVolume();
+      return;
+    }
+    final from = _level;
+    if (from == null) return; // still reading the current level
+    final next = PlayerGestures.level(from, d.focalPointDelta.dy, height);
+    _level = next;
+    _levelHide?.cancel();
+    setState(() => _levelShown = (brightness: _swipeLeftSide, value: next));
+    if (_swipeLeftSide) {
       await ScreenBrightness.instance.setApplicationScreenBrightness(next);
-      _showFlash('Brightness ${(next * 100).round()}%');
     } else {
       VolumeController.instance.showSystemUI = false;
       await VolumeController.instance.setVolume(next);
-      _showFlash('Volume ${(next * 100).round()}%');
     }
+  }
+
+  void _gestureEnd(ScaleEndDetails d) {
+    final settled = PlayerGestures.settle(_zoom);
+    if (settled != _zoom) setState(() => _zoom = settled);
+    _swiping = false;
+    _levelHide?.cancel();
+    _levelHide = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _levelShown = null);
+    });
   }
 
   void _doubleTap(TapDownDetails d, double width) {
@@ -290,12 +339,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             return Stack(
               fit: StackFit.expand,
               children: [
-                Video(
-                  controller: c.video,
-                  controls: null,
-                  fit: _fill ? BoxFit.cover : BoxFit.contain,
-                  subtitleViewConfiguration: const SubtitleViewConfiguration(
-                    visible: false,
+                Transform.scale(
+                  scale: _zoom,
+                  child: Video(
+                    controller: c.video,
+                    controls: null,
+                    fit: _fill ? BoxFit.cover : BoxFit.contain,
+                    subtitleViewConfiguration: const SubtitleViewConfiguration(
+                      visible: false,
+                    ),
                   ),
                 ),
                 SubtitleOverlay(
@@ -315,13 +367,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     onDoubleTap: _locked
                         ? null
                         : () => _doubleTap(lastDown!, box.maxWidth),
-                    onVerticalDragStart: _locked
+                    onScaleStart: _locked
                         ? null
-                        : (d) => _verticalStart(d, box.maxWidth),
-                    onVerticalDragUpdate: _locked
+                        : (d) => _gestureStart(d, box.maxWidth),
+                    onScaleUpdate: _locked
                         ? null
-                        : (d) => _verticalUpdate(d, box.maxHeight),
-                    onScaleUpdate: null,
+                        : (d) => unawaited(_gestureUpdate(d, box.maxHeight)),
+                    onScaleEnd: _locked ? null : _gestureEnd,
                   ),
                   if (c.phase != PlayerPhase.playing)
                     _PrepareView(
@@ -359,7 +411,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                   _locked = true;
                                   _controls = false;
                                 }),
-                                onFill: () => setState(() => _fill = !_fill),
+                                onFill: () => setState(() {
+                                  _fill = !_fill;
+                                  _zoom = 1;
+                                }),
                                 onScrubbing: (s) {
                                   _scrubbing = s;
                                   if (!s) _scheduleHide();
@@ -368,6 +423,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                               ),
                       ),
                     ),
+                    if (_levelShown case final l?)
+                      _LevelIndicator(brightness: l.brightness, value: l.value),
                     if (c.skippable case final skip? when _panel == _Panel.none)
                       Align(
                         alignment: Alignment.bottomRight,
@@ -476,194 +533,283 @@ class _Controls extends StatelessWidget {
     final req = c.request;
     final pad = MediaQuery.paddingOf(context);
     final playing = c.player.state.playing;
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: [0, 0.22, 0.7, 1],
-          colors: [
-            Color(0x99000000),
-            Color(0x00000000),
-            Color(0x00000000),
-            Color(0xB3000000),
-          ],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // The shade takes no touches: swipes and taps on empty space reach
+        // the gesture layer below while the controls show.
+        const IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0, 0.22, 0.7, 1],
+                colors: [
+                  Color(0x99000000),
+                  Color(0x00000000),
+                  Color(0x00000000),
+                  Color(0xB3000000),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          pad.left + KSpace.margin,
-          pad.top + KSpace.x3,
-          pad.right + KSpace.margin,
-          pad.bottom + KSpace.x3,
-        ),
-        child: GlassGroup(
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  GlassIconButton(
-                    icon: Icons.chevron_left_rounded,
-                    label: 'Close player',
-                    onPressed: onBack,
-                  ),
-                  const SizedBox(width: KSpace.x3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          req.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textDirection: contentDir(req.title),
-                          style: KType.title,
-                        ),
-                        if (req.isEpisode)
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            pad.left + KSpace.margin,
+            pad.top + KSpace.x3,
+            pad.right + KSpace.margin,
+            pad.bottom + KSpace.x3,
+          ),
+          child: GlassGroup(
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    GlassIconButton(
+                      icon: Icons.chevron_left_rounded,
+                      label: 'Close player',
+                      onPressed: onBack,
+                    ),
+                    const SizedBox(width: KSpace.x3),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            _episodeLine(req),
+                            req.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: KType.small,
+                            textDirection: contentDir(req.title),
+                            style: KType.title,
                           ),
-                      ],
+                          if (req.isEpisode)
+                            Text(
+                              _episodeLine(req),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: KType.small,
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (c.engineStats case final es?
-                      when es.size > 0 && es.have >= es.size)
-                    _EngineChip(controller: c),
-                  const SizedBox(width: KSpace.x2),
-                  GlassIconButton(
-                    icon: Icons.cast_rounded,
-                    label: 'Cast to a TV',
-                    onPressed: () => onPanel(_Panel.cast),
-                  ),
-                  const SizedBox(width: KSpace.x2),
-                  GlassIconButton(
-                    icon: Icons.lock_outline_rounded,
-                    label: 'Lock controls',
-                    onPressed: onLock,
-                  ),
-                ],
-              ),
-              const Spacer(),
-              // The status sits above the row without moving it off center.
-              Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 76 + KSpace.x3,
-                    child: Center(child: status),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      GlassIconButton(
-                        icon: Icons.replay_10_rounded,
-                        label: 'Back 10 seconds',
-                        onPressed: () {
-                          onInteract();
-                          onSeekBy(-10);
-                        },
-                        size: 56,
-                      ),
-                      const SizedBox(width: KSpace.section),
-                      GlassIconButton(
-                        icon: playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        label: playing ? 'Pause' : 'Play',
-                        onPressed: () {
-                          onInteract();
-                          c.player.playOrPause();
-                        },
-                        size: 76,
-                      ),
-                      const SizedBox(width: KSpace.section),
-                      GlassIconButton(
-                        icon: Icons.forward_10_rounded,
-                        label: 'Forward 10 seconds',
-                        onPressed: () {
-                          onInteract();
-                          onSeekBy(10);
-                        },
-                        size: 56,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const Spacer(),
-              StreamBuilder<Duration>(
-                stream: c.player.stream.position,
-                builder: (context, _) {
-                  final st = c.player.state;
-                  final es = c.engineStats;
-                  return Scrubber(
-                    position: st.position,
-                    duration: st.duration,
-                    buffered: st.buffer,
-                    downloaded: es == null || es.size == 0
-                        ? null
-                        : es.have / es.size,
-                    onSeek: c.player.seek,
-                    onScrubbing: onScrubbing,
-                  );
-                },
-              ),
-              const SizedBox(height: KSpace.x2),
-              Row(
-                children: [
-                  if (req.isEpisode) ...[
+                    if (c.engineStats case final es?
+                        when es.size > 0 && es.have >= es.size)
+                      _EngineChip(controller: c),
+                    const SizedBox(width: KSpace.x2),
                     GlassIconButton(
-                      icon: Icons.video_library_rounded,
-                      label: 'Episodes',
-                      onPressed: () => onPanel(_Panel.episodes),
+                      icon: Icons.cast_rounded,
+                      label: 'Cast to a TV',
+                      onPressed: () => onPanel(_Panel.cast),
                     ),
                     const SizedBox(width: KSpace.x2),
-                  ],
-                  GlassIconButton(
-                    icon: Icons.subtitles_rounded,
-                    label: 'Audio and subtitles',
-                    onPressed: () => onPanel(_Panel.tracks),
-                  ),
-                  const SizedBox(width: KSpace.x2),
-                  if (c.rate == 1)
                     GlassIconButton(
-                      icon: Icons.speed_rounded,
-                      label: 'Playback speed',
-                      onPressed: () => onPanel(_Panel.speed),
-                    )
-                  else
-                    GlassButton(
-                      label: '${c.rate}×',
-                      semanticLabel: 'Playback speed ${c.rate} times',
-                      onPressed: () => onPanel(_Panel.speed),
+                      icon: Icons.lock_outline_rounded,
+                      label: 'Lock controls',
+                      onPressed: onLock,
                     ),
-                  const SizedBox(width: KSpace.x2),
-                  GlassIconButton(
-                    icon: fill
-                        ? Icons.fit_screen_rounded
-                        : Icons.fullscreen_rounded,
-                    label: fill ? 'Fit to screen' : 'Fill screen',
-                    onPressed: onFill,
-                  ),
-                  const Spacer(),
-                  if (c.nextEpisode != null)
-                    Flexible(
-                      child: GlassButton(
-                        label: 'Next episode',
-                        icon: Icons.skip_next_rounded,
-                        prominent: true,
-                        onPressed: c.playNext,
+                  ],
+                ),
+                const Spacer(),
+                // The status sits above the row without moving it off center.
+                Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 76 + KSpace.x3,
+                      child: Center(child: status),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        GlassIconButton(
+                          icon: Icons.replay_10_rounded,
+                          label: 'Back 10 seconds',
+                          onPressed: () {
+                            onInteract();
+                            onSeekBy(-10);
+                          },
+                          size: 56,
+                        ),
+                        const SizedBox(width: KSpace.section),
+                        GlassIconButton(
+                          icon: playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          label: playing ? 'Pause' : 'Play',
+                          onPressed: () {
+                            onInteract();
+                            c.player.playOrPause();
+                          },
+                          size: 76,
+                        ),
+                        const SizedBox(width: KSpace.section),
+                        GlassIconButton(
+                          icon: Icons.forward_10_rounded,
+                          label: 'Forward 10 seconds',
+                          onPressed: () {
+                            onInteract();
+                            onSeekBy(10);
+                          },
+                          size: 56,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                StreamBuilder<Duration>(
+                  stream: c.player.stream.position,
+                  builder: (context, _) {
+                    final st = c.player.state;
+                    final es = c.engineStats;
+                    return Scrubber(
+                      position: st.position,
+                      duration: st.duration,
+                      buffered: st.buffer,
+                      downloaded: es == null || es.size == 0
+                          ? null
+                          : es.have / es.size,
+                      onSeek: c.player.seek,
+                      onScrubbing: onScrubbing,
+                    );
+                  },
+                ),
+                const SizedBox(height: KSpace.x2),
+                Row(
+                  children: [
+                    if (req.isEpisode) ...[
+                      GlassIconButton(
+                        icon: Icons.video_library_rounded,
+                        label: 'Episodes',
+                        onPressed: () => onPanel(_Panel.episodes),
+                      ),
+                      const SizedBox(width: KSpace.x2),
+                    ],
+                    GlassIconButton(
+                      icon: Icons.subtitles_rounded,
+                      label: 'Audio and subtitles',
+                      onPressed: () => onPanel(_Panel.tracks),
+                    ),
+                    const SizedBox(width: KSpace.x2),
+                    if (c.rate == 1)
+                      GlassIconButton(
+                        icon: Icons.speed_rounded,
+                        label: 'Playback speed',
+                        onPressed: () => onPanel(_Panel.speed),
+                      )
+                    else
+                      GlassButton(
+                        label: '${c.rate}×',
+                        semanticLabel: 'Playback speed ${c.rate} times',
+                        onPressed: () => onPanel(_Panel.speed),
+                      ),
+                    const SizedBox(width: KSpace.x2),
+                    GlassIconButton(
+                      icon: fill
+                          ? Icons.fit_screen_rounded
+                          : Icons.fullscreen_rounded,
+                      label: fill ? 'Fit to screen' : 'Fill screen',
+                      onPressed: onFill,
+                    ),
+                    const Spacer(),
+                    if (c.nextEpisode != null)
+                      Flexible(
+                        child: GlassButton(
+                          label: 'Next episode',
+                          icon: Icons.skip_next_rounded,
+                          prominent: true,
+                          onPressed: c.playNext,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Brightness (left) or volume (right) while swiping: an icon over a
+/// level bar, on the side being adjusted.
+class _LevelIndicator extends StatelessWidget {
+  const _LevelIndicator({required this.brightness, required this.value});
+
+  final bool brightness;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    final pad = MediaQuery.paddingOf(context);
+    final icon = brightness
+        ? Icons.light_mode_rounded
+        : value == 0
+        ? Icons.volume_off_rounded
+        : Icons.volume_up_rounded;
+    final label =
+        '${brightness ? 'Brightness' : 'Volume'} ${(value * 100).round()}%';
+    return Align(
+      alignment: brightness ? Alignment.centerLeft : Alignment.centerRight,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: pad.left + KSpace.section,
+          right: pad.right + KSpace.section,
+        ),
+        child: IgnorePointer(
+          child: Semantics(
+            liveRegion: true,
+            label: label,
+            excludeSemantics: true,
+            child: Glass(
+              radius: KRadius.sheet,
+              padding: const EdgeInsets.symmetric(
+                horizontal: KSpace.x3,
+                vertical: KSpace.x4,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 22, color: KColors.lamp),
+                  const SizedBox(height: KSpace.x3),
+                  SizedBox(
+                    width: 6,
+                    height: 120,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Stack(
+                        children: [
+                          const Positioned.fill(
+                            child: ColoredBox(color: Color(0x33F5EEE4)),
+                          ),
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: FractionallySizedBox(
+                              heightFactor: value,
+                              widthFactor: 1,
+                              child: const ColoredBox(color: KColors.lamp),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
+                  const SizedBox(height: KSpace.x2),
+                  Text(
+                    '${(value * 100).round()}',
+                    style: KType.tabular(
+                      KType.small.copyWith(color: KColors.lamp),
+                    ),
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
