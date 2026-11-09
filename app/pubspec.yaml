@@ -49,6 +49,7 @@ dev_dependencies:
   build_runner: ^2.17.1
   crypto: ^3.0.8
   drift_dev: ^2.35.3
+  flutter_launcher_icons: ^0.14.4
   flutter_test:
     sdk: flutter
   integration_test:
@@ -63,3 +64,13 @@ flutter:
     - family: Figtree
       fonts:
         - asset: assets/fonts/Figtree.ttf
+
+# Generated from assets/icon/*.png (tool/render_icon_test.dart).
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon/foreground.png"
+  remove_alpha_ios: true
+  min_sdk_android: 26
