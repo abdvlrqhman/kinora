@@ -18,6 +18,7 @@ import 'package:kinora/features/search/search_screen.dart';
 import 'package:kinora/features/title/title_screen.dart';
 import 'package:kinora/services/cast_service.dart';
 import 'package:kinora/services/sources.dart';
+import 'package:kinora/services/tmdb.dart';
 import 'package:stremio/stremio.dart';
 
 import '../features/harness.dart';
@@ -251,6 +252,57 @@ void main() {
     await expectLater(
       find.byType(TitleScreen),
       matchesGoldenFile('screens/title_series.png'),
+    );
+  });
+
+  // With a TMDB key: tagline, age rating, cast photos, More like this.
+  testScreen('title, series with TMDB', (tester) async {
+    tester.view
+      ..physicalSize = const Size(390, 1700) * 3
+      ..devicePixelRatio = 3;
+    final db = testDb();
+    await seedSeries(db);
+    await warmUp(tester, [art('harbor_backdrop')]);
+    await pumpScreen(
+      tester,
+      const TitleScreen(type: 'series', id: 'tt200'),
+      db: db,
+      size: const Size(390, 1700),
+      overrides: [
+        ...withSource(),
+        metaProvider.overrideWith((ref, key) async => series()),
+        resolveWith(fakeReleases),
+        tmdbTitleProvider.overrideWith(
+          (ref, key) async => TmdbTitle(
+            id: 1,
+            series: true,
+            tagline: 'Every light hides a harbor.',
+            certification: 'TV-MA',
+            cast: [
+              (name: 'Ines Duarte', role: 'Mara Lind', photo: art('still_3')),
+              (name: 'Kai Morrow', role: 'Teo Vass', photo: art('still_4')),
+              (name: 'Sela Voss', role: 'The Pilot', photo: null),
+              (name: 'Arno Pike', role: null, photo: art('harbor_poster')),
+            ],
+            similar: [
+              for (final n in ['tide', 'ember', 'glacier', 'neon'])
+                (
+                  id: n.length,
+                  type: 'series',
+                  name: n,
+                  poster: art('${n}_poster'),
+                  year: '2024',
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+    phoneInsets(tester);
+    await settleImages(tester);
+    await expectLater(
+      find.byType(TitleScreen),
+      matchesGoldenFile('screens/title_tmdb.png'),
     );
   });
 

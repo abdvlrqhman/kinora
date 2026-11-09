@@ -34,11 +34,27 @@ class CastRow extends StatelessWidget {
             ClipOval(
               child: SizedBox.square(
                 dimension: _photo,
-                child: Artwork(
-                  url: p.photo,
-                  fallbackText: p.name,
-                  memCacheWidth: decodeWidth(context, _photo),
-                ),
+                child: p.photo == null
+                    // No photo: their initials, centered.
+                    ? ColoredBox(
+                        color: KColors.seat,
+                        child: Center(
+                          child: Text(
+                            p.name
+                                .split(RegExp(r'\s+'))
+                                .where((w) => w.isNotEmpty)
+                                .take(2)
+                                .map((w) => w[0])
+                                .join(),
+                            style: KType.h2.copyWith(color: KColors.haze),
+                          ),
+                        ),
+                      )
+                    : Artwork(
+                        url: p.photo,
+                        fallbackText: p.name,
+                        memCacheWidth: decodeWidth(context, _photo),
+                      ),
               ),
             ),
             const SizedBox(height: KSpace.x2),
