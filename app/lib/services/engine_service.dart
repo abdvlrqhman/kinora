@@ -187,11 +187,27 @@ final class EngineService {
     final e = _engine;
     if (e == null || e.status(infoHash) == null) return;
     final files = e.files(infoHash);
-    if (files == null)
-      return; // applied again when an owner claims after metadata
     final wanted = {
       for (final i in _claims[infoHash]?.values ?? const <int>[]) i,
     };
+    if (files == null) {
+      // No metadata yet. Hand libtorrent the claimed files now (it keeps
+      // them for when the file list arrives): otherwise the torrent looks
+      // finished for a moment once metadata is in, and seeds drop a peer
+      // that says it wants nothing.
+      final top = wanted.fold(-1, (a, b) => b > a ? b : a);
+      if (top < 0) return; // metadata only: everything stays off
+      Log.d('engine', 'priorities ${_short(infoHash)}: files $wanted, early');
+      try {
+        e.setFilePriorities(infoHash, [
+          for (var i = 0; i < (top < 1024 ? 1024 : top + 1); i++)
+            wanted.contains(i) ? 4 : 0,
+        ]);
+      } on EngineException catch (err) {
+        Log.d('engine', 'priorities for $infoHash: $err');
+      }
+      return;
+    }
     Log.d(
       'engine',
       'priorities ${_short(infoHash)}: files $wanted of ${files.length}',

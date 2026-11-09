@@ -615,6 +615,9 @@ void apply_config(lt::settings_pack& sp, const lt::bdecode_node& c, bool initial
       sp.set_bool(lt::settings_pack::enable_upnp, false);
       sp.set_bool(lt::settings_pack::enable_natpmp, false);
       sp.set_bool(lt::settings_pack::allow_multiple_connections_per_ip, true);
+      // Behave like the stock libtorrent seeds out there, which drop a
+      // peer that says it has nothing left to download.
+      sp.set_bool(lt::settings_pack::close_redundant_connections, true);
     }
   }
 

@@ -80,11 +80,16 @@ void main() {
             // Public trackers the app appends; unreachable here.
             for (var i = 1; i <= 20; i++) 'udp://192.0.2.$i:6969/announce',
           ],
-          // Like the app: nothing wanted until it knows which file to claim.
+          // Like the app: nothing wanted until a file is claimed.
           filePriorities: List.filled(1024, 0),
         ),
       );
-      while (!(leecher.status(ih)?.isComplete ?? false)) {
+      // Like the app: the claimed file is set before metadata arrives, so
+      // the torrent never looks finished (seeds drop peers that do).
+      leecher.setFilePriorities(ih, [4, for (var i = 1; i < 1024; i++) 0]);
+      // Every byte of the file on disk ("finished" alone also means
+      // "nothing wanted").
+      while ((leecher.fileProgress(ih)?.firstOrNull ?? 0) < data.length) {
         if (watch.elapsed > const Duration(seconds: 90)) {
           fail('not finished after 90 s: ${leecher.status(ih)}');
         }
@@ -92,7 +97,6 @@ void main() {
           if (e is MetadataReceived) {
             // ignore: avoid_print
             print('metadata in ${watch.elapsedMilliseconds} ms');
-            leecher.setFilePriorities(ih, const [4]);
           }
         }
         await Future<void>.delayed(const Duration(milliseconds: 100));
