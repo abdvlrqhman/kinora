@@ -1,0 +1,88 @@
+name: glass
+
+# Informational: does Kinora's real liquid glass (Impeller + Flutter GPU)
+# draw on an iPhone simulator? Runs the small probe in tools/glass_probe and
+# keeps screenshots. Never part of a release.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['tools/glass_probe/**', '.github/workflows/glass.yml']
+
+concurrency:
+  group: glass-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.7
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: tools/glass_probe
+    steps:
+      - uses: actions/checkout@v7
+      - uses: maxim-lobanov/setup-xcode@v1.7.0
+        with:
+          xcode-version: latest-stable
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: iPhone project files, with Flutter GPU on like Kinora
+        run: |
+          flutter create --platforms=ios --project-name glass_probe --org net.spacie "$RUNNER_TEMP/shell"
+          cp -R "$RUNNER_TEMP/shell/ios" .
+          /usr/libexec/PlistBuddy -c "Add :FLTEnableFlutterGPU bool true" ios/Runner/Info.plist
+      - name: Boot an iPhone simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          ios = sorted((r for r in d if "iOS" in r), reverse=True)
+          print(next(x["udid"] for r in ios for x in d[r] if x["name"].startswith("iPhone")))')
+          xcrun simctl list devices | grep "$udid"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Draw the glass
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/glass-shots"
+          udid=${{ steps.sim.outputs.udid }}
+          log="$GITHUB_WORKSPACE/glass.log"
+          : > "$log"
+          # The simulator's own screen, once the scene is up.
+          ( until grep -q 'GLASS ready' "$log"; do sleep 1; done
+            for i in 1 2 3; do
+              sleep 4
+              xcrun simctl io "$udid" screenshot "$GITHUB_WORKSPACE/glass-shots/simulator-$i.png"
+            done ) &
+          flutter test integration_test/glass_probe_test.dart -d "$udid" --reporter expanded 2>&1 | tee "$log"
+      - name: Screenshots
+        if: always()
+        working-directory: .
+        run: |
+          grep -E 'GLASS (impeller|frames)' glass.log || true
+          python3 - <<'PY'
+          import base64, os, re
+          parts, total = {}, 0
+          for line in open('glass.log', errors='replace'):
+              m = re.search(r'GLASS-SHOT probe (\d+)/(\d+) (\S+)', line)
+              if m:
+                  parts[int(m[1])], total = m[3], int(m[2])
+          if total and len(parts) == total:
+              with open('glass-shots/probe.png', 'wb') as f:
+                  f.write(base64.b64decode(''.join(parts[i] for i in range(1, total + 1))))
+          print('screenshots:', sorted(os.listdir('glass-shots')))
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: glass-simulator
+          path: glass-shots
+          if-no-files-found: ignore
+          retention-days: 14
