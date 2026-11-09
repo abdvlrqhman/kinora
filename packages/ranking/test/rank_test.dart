@@ -171,7 +171,10 @@ void main() {
       final best = ranked.first;
       expect(best.candidate.id, 'best');
       expect(best.isRejected, isFalse);
-      expect(best.summary, '1080p WEB-DL · 214 seeds · Arabic subtitles match');
+      expect(
+        best.summary,
+        '1080p WEB-DL · 214 seeds · Arabic subtitles in sync',
+      );
       expect(best.warnings, isEmpty);
     });
 
@@ -371,7 +374,7 @@ void main() {
       ], RankPrefs(device: _phone));
       expect(ranked.first.candidate.id, 'http');
       expect(ranked.first.summary, contains('Direct link'));
-      expect(_labels(ranked.last), contains('Few seeds'));
+      expect(_labels(ranked.last), contains('Few people sharing'));
     });
 
     test('live seeds beat bigger stale addon numbers', () {
@@ -386,7 +389,7 @@ void main() {
         _c('fresh', 'Movie.2020.1080p.WEB-DL.H.264-B', live: 80),
       ], RankPrefs(device: _phone));
       expect(ranked.first.candidate.id, 'fresh');
-      expect(_labels(ranked.last), contains('Few seeds'));
+      expect(_labels(ranked.last), contains('Few people sharing'));
     });
   });
 
@@ -529,8 +532,8 @@ void main() {
         ),
       ], RankPrefs(device: _phone, subtitleLanguages: ['ar', 'en']));
       expect(ranked.first.candidate.id, 'ar');
-      expect(ranked.first.summary, contains('Arabic subtitles match'));
-      expect(ranked.last.summary, contains('English subtitles match'));
+      expect(ranked.first.summary, contains('Arabic subtitles in sync'));
+      expect(ranked.last.summary, contains('English subtitles in sync'));
     });
 
     test('embedded subtitles count; unwanted hardsubs are penalised', () {
@@ -638,19 +641,28 @@ void main() {
         const RankReason(RankReasonKind.availability, '5 seeds').hashCode,
       );
       expect(reason.toString(), '5 seeds');
-      const warning = RankWarning(RankWarningKind.fewSeeds, 'Few seeds');
-      expect(warning, const RankWarning(RankWarningKind.fewSeeds, 'Few seeds'));
+      const warning = RankWarning(
+        RankWarningKind.fewSeeds,
+        'Few people sharing',
+      );
+      expect(
+        warning,
+        const RankWarning(RankWarningKind.fewSeeds, 'Few people sharing'),
+      );
       expect(
         warning.hashCode,
-        const RankWarning(RankWarningKind.fewSeeds, 'Few seeds').hashCode,
+        const RankWarning(
+          RankWarningKind.fewSeeds,
+          'Few people sharing',
+        ).hashCode,
       );
-      expect(warning.toString(), 'Few seeds');
+      expect(warning.toString(), 'Few people sharing');
 
       final r1 = rank([a], RankPrefs(device: _phone)).single;
       final r2 = rank([b], RankPrefs(device: _phone)).single;
       expect(r1, r2);
       expect(r1.hashCode, r2.hashCode);
-      expect(r1.toString(), contains('warn: Few seeds'));
+      expect(r1.toString(), contains('warn: Few people sharing'));
       final rejected = RankedCandidate(
         candidate: a,
         score: 0,

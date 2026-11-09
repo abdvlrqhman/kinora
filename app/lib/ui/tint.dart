@@ -57,10 +57,14 @@ final class ArtworkTint {
   ArtworkTint._();
 
   static final _cache = <Object, Future<Color>>{};
+  static final _known = <Object, Color>{};
 
   /// Accent for [image] (decoded at 24 px wide), or [KColors.marquee].
   static Future<Color> of(ImageProvider image) =>
-      _cache[image] ??= _extract(image);
+      _cache[image] ??= _extract(image).then((c) => _known[image] = c);
+
+  /// The accent already worked out for [image], if any (no waiting).
+  static Color? known(ImageProvider image) => _known[image];
 
   static Future<Color> _extract(ImageProvider image) async {
     try {
@@ -132,7 +136,10 @@ class ArtworkTintScope extends StatefulWidget {
 }
 
 class _ArtworkTintScopeState extends State<ArtworkTintScope> {
-  Color? _accent;
+  // Known at once when this art was seen before.
+  late Color? _accent = widget.image == null
+      ? null
+      : ArtworkTint.known(widget.image!);
 
   @override
   void initState() {
@@ -158,7 +165,11 @@ class _ArtworkTintScopeState extends State<ArtworkTintScope> {
 
   @override
   Widget build(BuildContext context) {
-    final target = _accent ?? KinoraTint.of(context);
+    // While the art's own color is worked out: neutral projector white, not
+    // the brand violet (which would flash before a warm poster's orange).
+    final target =
+        _accent ??
+        (widget.image == null ? KinoraTint.of(context) : KColors.lamp);
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return TweenAnimationBuilder<Color?>(
       tween: ColorTween(end: target),

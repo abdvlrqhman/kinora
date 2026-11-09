@@ -65,10 +65,10 @@ final class ResolvedRelease {
   /// Short summary for under a Play button ("1080p WEB-DL, 214 seeds").
   final String headline;
 
-  /// Why it ranks where it does ("Arabic subtitles match", "Plays on TV").
+  /// Why it ranks where it does ("Arabic subtitles in sync", "Plays on TV").
   final List<String> reasons;
 
-  /// Things to know ("Few seeds", "DTS audio won't play on TV").
+  /// Things to know ("Few people sharing", "DTS audio won't play on TV").
   final List<String> warnings;
   final double score;
   final int? sizeBytes;

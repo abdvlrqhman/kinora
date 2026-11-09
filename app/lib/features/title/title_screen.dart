@@ -254,13 +254,23 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                         ),
                       ),
                       const SizedBox(height: KSpace.section),
-                      if (extra?.tagline case final tagline?) ...[
-                        Text(
-                          tagline,
-                          style: KType.title.copyWith(color: KColors.haze),
-                        ),
-                        const SizedBox(height: KSpace.x2),
-                      ],
+                      // TMDB's extras arrive after the page: they grow in
+                      // instead of pushing the text down in one jump.
+                      _Grow(
+                        child: extra?.tagline == null
+                            ? null
+                            : Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: KSpace.x2,
+                                ),
+                                child: Text(
+                                  extra!.tagline!,
+                                  style: KType.title.copyWith(
+                                    color: KColors.haze,
+                                  ),
+                                ),
+                              ),
+                      ),
                       if (meta.description?.trim().isNotEmpty ?? false)
                         ExpandableText(
                           meta.description!.trim(),
@@ -275,11 +285,21 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                   ),
                 ),
               ),
-              if (extra?.cast case final cast? when cast.isNotEmpty)
-                SliverToBoxAdapter(child: CastRow(people: cast)),
+              SliverToBoxAdapter(
+                child: _Grow(
+                  child: (extra?.cast.isNotEmpty ?? false)
+                      ? CastRow(people: extra!.cast)
+                      : null,
+                ),
+              ),
               if (!t.isSeries)
-                if (extra?.similar case final s? when s.isNotEmpty)
-                  SliverToBoxAdapter(child: SimilarRow(titles: s)),
+                SliverToBoxAdapter(
+                  child: _Grow(
+                    child: (extra?.similar.isNotEmpty ?? false)
+                        ? SimilarRow(titles: extra!.similar)
+                        : null,
+                  ),
+                ),
               if (t.isSeries) ...[
                 SliverPadding(
                   padding: const EdgeInsets.only(
@@ -317,8 +337,13 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                 ),
               ],
               if (t.isSeries)
-                if (extra?.similar case final s? when s.isNotEmpty)
-                  SliverToBoxAdapter(child: SimilarRow(titles: s)),
+                SliverToBoxAdapter(
+                  child: _Grow(
+                    child: (extra?.similar.isNotEmpty ?? false)
+                        ? SimilarRow(titles: extra!.similar)
+                        : null,
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: SizedBox(
                   height: MediaQuery.paddingOf(context).bottom + KSpace.section,
@@ -605,6 +630,21 @@ class _ParallaxDelegate extends FlowDelegate {
   @override
   bool shouldRepaint(_ParallaxDelegate oldDelegate) =>
       oldDelegate.position != position;
+}
+
+/// Content that may arrive late, growing into place (instant with reduced
+/// motion).
+class _Grow extends StatelessWidget {
+  const _Grow({required this.child});
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSize(
+    duration: reduceMotion(context) ? Duration.zero : KMotion.base,
+    curve: KMotion.curve,
+    alignment: Alignment.topCenter,
+    child: child ?? const SizedBox(width: double.infinity),
+  );
 }
 
 class _Credits extends StatelessWidget {

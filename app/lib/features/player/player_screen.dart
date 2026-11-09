@@ -390,6 +390,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   clearance: _controls && !_inPip
                       ? _controlsHeight(context)
                       : 0,
+                  // Play row (76) and its buffering ring (86), plus a gap.
+                  belowCenter: _controls && !_inPip && !_locked ? 52 : 0,
                 ),
                 if (!_inPip) ...[
                   // Gesture layer. The Listener counts fingers for the

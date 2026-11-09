@@ -435,7 +435,7 @@ final class RankedCandidate {
   /// Whether [rejected] is set.
   bool get isRejected => rejected != null;
 
-  /// One-line summary: `1080p WEB-DL · 214 seeds · Arabic subtitles match`.
+  /// One-line summary: `1080p WEB-DL · 214 seeds · Arabic subtitles in sync`.
   String get summary => reasons.map((r) => r.label).join(' · ');
 
   List<Object?> get _fields => [candidate, score, reasons, warnings, rejected];

@@ -267,8 +267,12 @@ class ReleaseLine extends ConsumerWidget {
                 text: '   ${extra!.replaceAll(' ', '\u00A0')}',
                 style: KType.tabular(quiet),
               ),
+            // Kept whole: it moves to the next line together, or trims.
             if (best.reasons.isNotEmpty)
-              TextSpan(text: '   ${best.reasons.first}', style: quiet),
+              TextSpan(
+                text: '   ${best.reasons.first.replaceAll(' ', '\u00A0')}',
+                style: quiet,
+              ),
           ],
         ),
         maxLines: maxLines,

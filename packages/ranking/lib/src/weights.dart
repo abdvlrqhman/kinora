@@ -104,7 +104,7 @@ final class RankWeights {
   /// Availability when no seed count is known at all.
   final double unknownSeedsAvailability;
 
-  /// Below this many seeds a "Few seeds" warning is shown.
+  /// Below this many seeds a "Few people sharing" warning is shown.
   final int fewSeeds;
 
   /// Share of Q given to resolution (the rest goes to source).
@@ -134,7 +134,7 @@ final class RankWeights {
   /// Subtitle fit credited to subtitles named in the release itself.
   final double embeddedSubtitleFit;
 
-  /// Fit from which a "subtitles match" reason is shown.
+  /// Fit from which a "subtitles in sync" reason is shown.
   final double subtitleMatchThreshold;
 
   /// Bonus for PROPER / REPACK.

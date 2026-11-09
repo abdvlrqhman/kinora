@@ -56,7 +56,11 @@ void main() {
       expect(find.text('2h 10m'), findsOneWidget);
       expect(find.text('Drama, Mystery'), findsOneWidget);
       expect(find.textContaining('1080p WEB-DL, 214 seeds'), findsOneWidget);
-      expect(find.textContaining('Arabic subtitles match'), findsOneWidget);
+      // (No-break spaces keep the reason on one line.)
+      expect(
+        find.textContaining(RegExp(r'Arabic\ssubtitles\sin\ssync')),
+        findsOneWidget,
+      );
       expect(playLabel(tester), 'Play');
 
       await tester.tap(find.byKey(const ValueKey('play')));
@@ -253,7 +257,7 @@ void main() {
       expect(find.text('Instant'), findsWidgets);
       expect(find.text('Starts instantly'), findsNothing);
       expect(find.text('Best'), findsOneWidget);
-      expect(find.textContaining('Few seeds'), findsOneWidget);
+      expect(find.textContaining('Few people sharing'), findsOneWidget);
       expect(find.text('2 GB'), findsOneWidget);
 
       await tester.tap(find.bySemanticsLabel('4K, 1 versions'));

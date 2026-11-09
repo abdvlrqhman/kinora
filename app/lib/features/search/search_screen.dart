@@ -464,9 +464,10 @@ class _ResultsState extends ConsumerState<_Results> {
         slivers: [
           for (final g in value) ...[
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
+              // The first heading gets room from the search field above.
+              padding: EdgeInsets.fromLTRB(
                 KSpace.margin,
-                0,
+                identical(g, value.first) ? KSpace.x3 : 0,
                 KSpace.margin,
                 KSpace.x3,
               ),

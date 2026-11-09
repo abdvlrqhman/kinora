@@ -161,7 +161,7 @@ final class _Eval {
         if (seeds <= 0) {
           _warn(RankWarningKind.noSeeds, 'No seeds');
         } else if (seeds < w.fewSeeds) {
-          _warn(RankWarningKind.fewSeeds, 'Few seeds');
+          _warn(RankWarningKind.fewSeeds, 'Few people sharing');
         } else {
           _reason(RankReasonKind.availability, '$seeds seeds');
         }
@@ -273,7 +273,7 @@ final class _Eval {
     if (bestLang != null && bestFit >= w.subtitleMatchThreshold) {
       _reason(
         RankReasonKind.subtitles,
-        '${languageName(bestLang)} subtitles ${bestEmbedded ? 'included' : 'match'}',
+        '${languageName(bestLang)} subtitles ${bestEmbedded ? 'included' : 'in sync'}',
       );
     }
     if (r.hardcodedSubs &&

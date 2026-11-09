@@ -124,6 +124,18 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
     ),
   );
 
+  /// Subtitle size in tenths, 60% to 200%.
+  void _resize(double by) {
+    unawaited(
+      ref.read(settingsProvider.notifier).update((s) {
+        final next = (((s.subtitleStyle.scale + by) * 10).round() / 10)
+            .clamp(0.6, 2.0)
+            .toDouble();
+        return s.copyWith(subtitleStyle: s.subtitleStyle.copyWith(scale: next));
+      }),
+    );
+  }
+
   void _step(int ms) {
     final c = widget.controller;
     unawaited(c.setSubtitleDelay(c.subtitleDelay + Duration(milliseconds: ms)));
@@ -279,6 +291,38 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
                     ],
                   ),
                 ),
+              if (active != null) ...[
+                // Saved like Settings › Subtitle style: every video after.
+                const _Heading('Subtitle size'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: KSpace.margin,
+                  ),
+                  child: Row(
+                    children: [
+                      _Step(
+                        label: 'Smaller',
+                        icon: Icons.text_decrease_rounded,
+                        onTap: () => _resize(-0.1),
+                        onLongPress: () => _resize(-0.3),
+                      ),
+                      Expanded(
+                        child: Text(
+                          '${(ref.watch(settingsProvider.select((s) => s.subtitleStyle.scale)) * 100).round()}%',
+                          textAlign: TextAlign.center,
+                          style: KType.tabular(KType.title),
+                        ),
+                      ),
+                      _Step(
+                        label: 'Larger',
+                        icon: Icons.text_increase_rounded,
+                        onTap: () => _resize(0.1),
+                        onLongPress: () => _resize(0.3),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const _Heading('Sound'),
               _Choice(
                 label: 'Night mode',

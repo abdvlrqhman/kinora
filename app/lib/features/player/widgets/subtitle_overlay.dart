@@ -17,12 +17,18 @@ class SubtitleOverlay extends ConsumerWidget {
     super.key,
     required this.player,
     required this.clearance,
+    this.belowCenter = 0,
   });
 
   final Player player;
 
   /// Space the controls take at the bottom while visible; lines stay above.
   final double clearance;
+
+  /// While the controls show: how far below the screen's middle the lines
+  /// must stay (the play row's half-height). Large lines scale down to fit
+  /// instead of sliding behind it.
+  final double belowCenter;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,20 +46,33 @@ class SubtitleOverlay extends ConsumerWidget {
         return LayoutBuilder(
           builder: (context, c) {
             final size = (c.maxHeight * 0.052).clamp(15.0, 44.0) * style.scale;
+            final bottom = math.max(
+              c.maxHeight * style.bottomMargin,
+              clearance,
+            );
+            Widget text = MediaQuery.withNoTextScaling(
+              child: _Lines(lines: lines, style: style, fontSize: size),
+            );
+            // Only where a full line fits (tablets, tall windows): on a
+            // landscape phone the gap is a few points, and unreadably small
+            // lines would be worse than the controls (which hide in 3 s)
+            // briefly covering them.
+            final room = c.maxHeight / 2 - belowCenter - bottom;
+            if (belowCenter > 0 && room >= size * 1.4) {
+              text = ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: room),
+                child: FittedBox(fit: BoxFit.scaleDown, child: text),
+              );
+            }
             return Padding(
               padding: EdgeInsets.only(
                 left: c.maxWidth * 0.08,
                 right: c.maxWidth * 0.08,
-                bottom: math.max(c.maxHeight * style.bottomMargin, clearance),
+                bottom: bottom,
               ),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                // The style sets the size (as in its preview), not the
-                // system text size.
-                child: MediaQuery.withNoTextScaling(
-                  child: _Lines(lines: lines, style: style, fontSize: size),
-                ),
-              ),
+              // The style sets the size (as in its preview), not the system
+              // text size.
+              child: Align(alignment: Alignment.bottomCenter, child: text),
             );
           },
         );
