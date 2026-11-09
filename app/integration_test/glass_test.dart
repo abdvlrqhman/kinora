@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:kinora/ui/glass.dart';
+import 'package:kinora/ui/glass_mode.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('glass renders frames', (tester) async {
+    realGlass = true; // the renderer itself, whatever the launch check says
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

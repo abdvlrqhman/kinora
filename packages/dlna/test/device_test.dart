@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:dlna/dlna.dart';
 import 'package:test/test.dart';
 
-import 'support/fake_samsung_dmr.dart';
+import 'package:dlna/testing.dart';
 
 void main() {
   final location = Uri.parse('http://192.168.1.50:9197/dmr');

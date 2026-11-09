@@ -1,7 +1,7 @@
 import 'package:dlna/dlna.dart';
 import 'package:test/test.dart';
 
-import 'support/fake_samsung_dmr.dart';
+import 'package:dlna/testing.dart';
 
 void main() {
   test('parses a Sink list', () {

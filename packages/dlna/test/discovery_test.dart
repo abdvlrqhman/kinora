@@ -5,7 +5,7 @@ import 'package:dlna/dlna.dart';
 import 'package:dlna/src/discovery.dart' show subnetHosts;
 import 'package:test/test.dart';
 
-import 'support/fake_samsung_dmr.dart';
+import 'package:dlna/testing.dart';
 
 void main() {
   late FakeSamsungDmr tv;

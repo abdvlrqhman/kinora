@@ -165,13 +165,21 @@ Built and verified in CI on every push:
 | Sources (Stremio addons), resolver (live scrape, subtitle fit, ranking) | done | unit tests + emulator E2E |
 | Player (mpv, own RTL subtitle rendering, tracks by language, sync, speed, night mode, chapters skip, next/prev/Up Next, versions, PiP on Android, audio focus/interruptions) | done | emulator E2E (plays from a live swarm, subtitles render, next episode) |
 | Subtitles (SubDL, SubSource, Wyzie, OpenSubtitles, Jimaku, Stremio addons; charset, ads, RTL, matching) | done | 287 package tests, live provider tests run once with real keys |
-| Downloads (torrent + debrid, background, claims for season packs, free-space guard, completed streams kept) | done | emulator E2E (both streamed episodes kept) |
-| Casting (DLNA, Samsung profile, captions, pick a TV before playing, keep-alive) | done | fake-Samsung tests; real TV not yet tried |
+| Downloads (torrent + debrid, background, claims for season packs, free-space guard, completed streams kept) | done | emulator E2E (both streamed episodes kept; an explicit download of its own torrent lands in Downloads and plays offline) |
+| Casting (DLNA, Samsung profile, captions, pick a TV before playing, keep-alive) | done | emulator E2E: a fake Samsung TV on :9197 is added by address, receives the stream URL, pulls the whole video over the Wi-Fi address with DLNA headers, and fetches the captions; real TV not yet tried |
+| Liquid glass | done | real glass only with Vulkan/Metal; a launch that draws nothing switches to frosted (unit test); the emulator E2E runs the same launch check |
 | UI (Home, Search, Title, Onboarding, Settings, Downloads, Player) | done, polishing | widget tests + golden screenshots reviewed by a design judge |
 
 Reviews applied: code review (25 findings), QA journeys (30), UX (30).
 
-Deferred, by decision:
-- Profiles / kids mode: no reliable maturity data from sources, single household user for now.
-- Trakt sync, AI subtitle translation, iOS picture-in-picture (needs AVPlayer, not mpv).
-- Auto-resume after reboot (sideloaded Android can't start the download service at boot without a visible reason; documented in README).
+Decided against:
+- Trakt sync: needs an account, and Kinora has none by design (everything local).
+
+Not built yet (not requested; candidates for later):
+- Profiles / kids mode: sources carry no reliable maturity ratings to filter by.
+- AI subtitle translation: needs a cloud key or a large on-device model.
+- iOS picture-in-picture: needs AVPlayer; mpv renders into a Flutter texture.
+
+After a restart: torrent downloads continue when Kinora opens (they need the
+app running). On Android a notification says how many are waiting; HTTP
+downloads continue on their own through the system download services.

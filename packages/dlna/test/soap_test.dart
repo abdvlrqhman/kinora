@@ -4,7 +4,7 @@ import 'package:dlna/src/soap.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 
-import 'support/fake_samsung_dmr.dart';
+import 'package:dlna/testing.dart';
 
 void main() {
   test('Play envelope golden', () {

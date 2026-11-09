@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dlna/dlna.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 
-import 'support/fake_samsung_dmr.dart';
+import 'package:dlna/testing.dart';
 
 void main() {
   late FakeSamsungDmr tv;
@@ -23,6 +24,33 @@ void main() {
 
   final media = Uri.parse('http://192.168.1.20:8090/s/abc/0.mkv?x=1&y=2');
   final srt = Uri.parse('http://192.168.1.20:8090/sub/1.srt');
+
+  test('the fake TV pulls the media and its captions on Play', () async {
+    final pullingTv = await FakeSamsungDmr.start(pullOnPlay: true);
+    addTearDown(pullingTv.close);
+    final phone = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => phone.close(force: true));
+    final base = 'http://127.0.0.1:${phone.port}';
+    phone.listen((req) async {
+      if (req.uri.path == '/sub.srt') {
+        req.response.write('1\n00:00:01,000 --> 00:00:02,000\nHello\n');
+      } else {
+        req.response.headers.set('CaptionInfo.sec', '$base/sub.srt');
+        req.response.add(List.filled(5000, 7));
+      }
+      await req.response.close();
+    });
+    final r = DlnaRenderer(
+      DlnaDevice.fromDescription(samsungDescription, pullingTv.location),
+      timeout: const Duration(seconds: 2),
+    );
+    addTearDown(r.close);
+    await r.load(Uri.parse('$base/v.mkv'), title: 'T', mimeType: 'video/mp4');
+    await pullingTv.pulling;
+    expect(pullingTv.pullError, isNull);
+    expect(pullingTv.pulled.length, 5000);
+    expect(pullingTv.pulledCaption, contains('Hello'));
+  });
 
   test(
     'load sends SetAVTransportURI with Samsung captions, then Play',

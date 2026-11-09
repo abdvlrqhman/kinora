@@ -16,6 +16,7 @@ final class FakeWorld {
     this._addon,
     this._tracker,
     this.infoHash,
+    this.infoHash3,
     this.videoBytes,
   );
 
@@ -28,7 +29,13 @@ final class FakeWorld {
   final HttpServer _addon;
   final HttpServer _tracker;
   final String infoHash;
+
+  /// Episode 3 has a torrent of its own (the explicit-download test).
+  final String infoHash3;
   final Uint8List videoBytes;
+
+  static String fileFor(int episode) =>
+      fileName.replaceFirst('E01', 'E0$episode');
 
   String get manifestUrl => 'http://127.0.0.1:${_addon.port}/manifest.json';
 
@@ -38,20 +45,20 @@ final class FakeWorld {
     final seedDir = await Directory('${root.path}/seed').create();
     await File('${seedDir.path}/$fileName').writeAsBytes(video);
 
+    await File('${seedDir.path}/${fileFor(3)}').writeAsBytes(video);
     final torrent = _torrent(fileName, video);
+    final torrent3 = _torrent(fileFor(3), video);
     final seeder = KinoraEngine.start(
       EngineConfig(
         testMode: true,
         resumeDir: (await Directory('${root.path}/seed-resume').create()).path,
       ),
     );
-    seeder.add(
-      AddTorrent.torrentFile(
-        torrent.bytes,
-        savePath: seedDir.path,
-        seedMode: true,
-      ),
-    );
+    for (final t in [torrent, torrent3]) {
+      seeder.add(
+        AddTorrent.torrentFile(t.bytes, savePath: seedDir.path, seedMode: true),
+      );
+    }
     for (var i = 0; i < 100 && seeder.listenPort == 0; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
@@ -81,6 +88,7 @@ final class FakeWorld {
       addon,
       tracker,
       torrent.infoHash,
+      torrent3.infoHash,
       video,
     );
     addon.listen(world._serve);
@@ -121,22 +129,20 @@ final class FakeWorld {
           'videos': [
             {'id': '$imdb:1:1', 'season': 1, 'episode': 1, 'title': 'Pilot'},
             {'id': '$imdb:1:2', 'season': 1, 'episode': 2, 'title': 'Second'},
+            {'id': '$imdb:1:3', 'season': 1, 'episode': 3, 'title': 'Third'},
           ],
         },
       };
     } else if (path.startsWith('/stream/series/$imdb:1:')) {
-      final ep = path.contains(':1:2') ? 2 : 1;
+      final ep = int.parse(RegExp(r':1:(\d+)').firstMatch(path)!.group(1)!);
       json = {
         'streams': [
           {
             'name': 'E2E\n1080p',
-            'title':
-                '${fileName.replaceFirst('E01', 'E0$ep')}\n👤 5 💾 80 KB ⚙️ E2E',
-            'infoHash': infoHash,
+            'title': '${fileFor(ep)}\n👤 5 💾 80 KB ⚙️ E2E',
+            'infoHash': ep == 3 ? infoHash3 : infoHash,
             'fileIdx': 0,
-            'behaviorHints': {
-              'filename': fileName.replaceFirst('E01', 'E0$ep'),
-            },
+            'behaviorHints': {'filename': fileFor(ep)},
             'sources': ['tracker:http://127.0.0.1:${_tracker.port}/announce'],
           },
         ],

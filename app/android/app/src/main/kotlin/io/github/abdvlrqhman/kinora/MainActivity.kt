@@ -2,6 +2,7 @@ package io.github.abdvlrqhman.kinora
 
 import android.app.PictureInPictureParams
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.util.Rational
@@ -38,6 +39,15 @@ class MainActivity : FlutterActivity() {
                         multicastLock = null
                         result.success(true)
                     }
+                    // Real liquid glass needs Impeller on Vulkan; Flutter falls
+                    // back to OpenGL ES without Vulkan 1.1 (and on emulators),
+                    // where the glass renderer can stall frames.
+                    "vulkanRendering" -> result.success(
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                            packageManager.hasSystemFeature(
+                                PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, 0x401000
+                            ) && !isEmulator()
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -60,6 +70,11 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+
+    private fun isEmulator(): Boolean =
+        Build.HARDWARE in setOf("goldfish", "ranchu") ||
+            Build.FINGERPRINT.startsWith("generic") ||
+            Build.PRODUCT.contains("sdk")
 
     private fun pipParams(): PictureInPictureParams {
         val b = PictureInPictureParams.Builder().setAspectRatio(pipAspect)

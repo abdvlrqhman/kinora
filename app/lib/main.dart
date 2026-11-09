@@ -18,6 +18,7 @@ import 'services/downloads.dart';
 import 'services/downloads_service.dart';
 import 'services/engine_service.dart';
 import 'services/subtitles_service.dart';
+import 'ui/glass_mode.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,8 @@ Future<void> main() async {
     return true;
   };
   final db = AppDatabase.open(paths.support.path);
+  await decideGlass(db);
+  Log.i('glass', glassReason);
   final settings = await SettingsStore(db).load();
   final owned = await (db.selectOnly(
     db.downloads,

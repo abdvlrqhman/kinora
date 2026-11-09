@@ -688,6 +688,7 @@ final class DownloadsService implements DownloadActions {
       if (have >= r.totalBytes) await _complete(r);
     }
     final progress = total == 0 ? null : done / total;
+    await _markPending(rows.length);
     await BackgroundKeeper.instance.hold(
       'downloads',
       title: rows.length == 1
@@ -867,6 +868,26 @@ final class DownloadsService implements DownloadActions {
 
   // ------------------------------------------------------------- helpers --
 
+  int? _pendingMarked;
+
+  /// How many torrent downloads are unfinished, for Android's boot receiver
+  /// (MainActivity.kt › DownloadsBootReceiver): after a restart it says they
+  /// wait for Kinora to open, since torrents need the app running.
+  Future<void> _markPending(int count) async {
+    if (count == _pendingMarked) return;
+    _pendingMarked = count;
+    final f = File(p.join(_paths.support.path, 'pending_downloads'));
+    try {
+      if (count == 0) {
+        if (f.existsSync()) await f.delete();
+      } else {
+        await f.writeAsString('$count');
+      }
+    } on FileSystemException catch (e) {
+      Log.w('downloads', 'pending marker: $e');
+    }
+  }
+
   Future<void> _refreshKeepAlive() async {
     final rows = await (_db.select(
       _db.downloads,
@@ -877,6 +898,7 @@ final class DownloadsService implements DownloadActions {
     final waiting = rows
         .where((r) => r.state == 'paused' && r.error == 'Waiting for Wi-Fi')
         .length;
+    await _markPending(active + waiting);
     if (active == 0 && waiting == 0) {
       await BackgroundKeeper.instance.drop('downloads');
     } else if (active == 0) {

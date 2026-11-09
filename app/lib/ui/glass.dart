@@ -2,12 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
+import 'glass_mode.dart';
 import 'tint.dart';
 import 'tokens.dart';
-
-/// Build with `--dart-define=KINORA_FAKE_GLASS=true` to use the frosted
-/// fallback everywhere (emulators without GPU support, functional tests).
-const kForceFakeGlass = bool.fromEnvironment('KINORA_FAKE_GLASS');
 
 /// Shares one backdrop sample among the [Glass] widgets below it (cheaper
 /// than one layer per control). Use it around rows of controls.
@@ -20,7 +17,7 @@ class GlassGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LiquidGlassLayer(
     settings: LiquidGlassSettings.ios27RegularDark(),
-    fake: kForceFakeGlass,
+    fake: !realGlass,
     child: child,
   );
 }
@@ -53,7 +50,7 @@ class Glass extends StatelessWidget {
     return LiquidGlass.auto(
       shape: LiquidRoundedSuperellipse(borderRadius: radius ?? 999),
       settings: LiquidGlassSettings.ios27RegularDark(),
-      fake: kForceFakeGlass,
+      fake: !realGlass,
       appearance: LiquidGlassAppearance.ios27RegularDark(
         tint: accent.withValues(alpha: tintStrength),
       ),

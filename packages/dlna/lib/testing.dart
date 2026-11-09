@@ -1,6 +1,11 @@
+/// Test doubles of a Samsung TV for this package's tests and the app's
+/// end-to-end test: a DMR (description + SOAP) and an SSDP responder.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dlna/src/xml_util.dart';
 import 'package:xml/xml.dart';
@@ -103,8 +108,28 @@ final class FakeSamsungDmr {
     _server.listen(_handle);
   }
 
-  static Future<FakeSamsungDmr> start() async =>
-      FakeSamsungDmr._(await HttpServer.bind(InternetAddress.loopbackIPv4, 0));
+  /// Listens on 127.0.0.1:[port] (any free port by default; a real Tizen
+  /// TV uses 9197). With [pullOnPlay], Play makes it fetch the media (and
+  /// the `CaptionInfo.sec` subtitles) the way a TV does.
+  static Future<FakeSamsungDmr> start({
+    int port = 0,
+    bool pullOnPlay = false,
+  }) async => FakeSamsungDmr._(
+    await HttpServer.bind(InternetAddress.loopbackIPv4, port),
+  )..pullOnPlay = pullOnPlay;
+
+  bool pullOnPlay = false;
+
+  /// What the TV fetched on Play: the media's response headers and bytes,
+  /// and the subtitle text named by its `CaptionInfo.sec` header.
+  HttpHeaders? pulledHeaders;
+  final pulled = BytesBuilder(copy: false);
+  String? pulledCaption;
+  Object? pullError;
+  Future<void>? _pull;
+
+  /// Completes when the fetch started by the last Play has finished.
+  Future<void> get pulling => _pull ?? Future.value();
 
   final HttpServer _server;
   final calls = <SoapCall>[];
@@ -193,6 +218,7 @@ final class FakeSamsungDmr {
         return {};
       case 'Play':
         state = 'PLAYING';
+        if (pullOnPlay && uri.isNotEmpty) _pull ??= _fetch(Uri.parse(uri));
         return {};
       case 'Pause':
         state = 'PAUSED_PLAYBACK';
@@ -234,6 +260,30 @@ final class FakeSamsungDmr {
         return {'Source': '', 'Sink': samsungSink};
     }
     return null;
+  }
+
+  Future<void> _fetch(Uri media) async {
+    final client = HttpClient();
+    try {
+      // Headers a Samsung TV sends when it starts a DLNA stream.
+      final req = await client.getUrl(media)
+        ..headers.set('getcontentFeatures.dlna.org', '1')
+        ..headers.set('getCaptionInfo.sec', '1')
+        ..headers.set('transferMode.dlna.org', 'Streaming')
+        ..headers.set(HttpHeaders.rangeHeader, 'bytes=0-');
+      final res = await req.close();
+      pulledHeaders = res.headers;
+      await res.forEach(pulled.add);
+      final caption = res.headers.value('CaptionInfo.sec');
+      if (caption != null) {
+        final c = await (await client.getUrl(Uri.parse(caption))).close();
+        pulledCaption = await utf8.decodeStream(c);
+      }
+    } on Object catch (e) {
+      pullError = e;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   Future<void> _fault(HttpResponse response, int code) {
