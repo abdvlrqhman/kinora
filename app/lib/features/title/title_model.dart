@@ -102,7 +102,9 @@ Episode? episodeAfter(
 ) {
   final order = t.order;
   final i = order.indexWhere((e) => e.id == videoId);
-  if (i < 0) return null;
+  // A special isn't in the order: then the first episode not watched yet.
+  // (An id the show doesn't have says nothing.)
+  if (i < 0 && !t.meta.videos.any((v) => v.id == videoId)) return null;
   return order
       .skip(i + 1)
       .where((e) => aired(e, now) && !(progress[e.id]?.completed ?? false))

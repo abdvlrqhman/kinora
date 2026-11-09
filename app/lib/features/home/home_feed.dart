@@ -143,7 +143,10 @@ final continueItemsProvider =
       Future<WatchProgressData?> after(WatchProgressData r) async {
         try {
           final model = TitleModel(
-            await ref.read(metaProvider((type: r.type, id: r.mediaId)).future),
+            // (Watched: a provider nobody listens to is paused, so a failed
+            // fetch would never finish its retries. Pull to refresh asks
+            // again.)
+            await ref.watch(metaProvider((type: r.type, id: r.mediaId)).future),
           );
           final progress = {
             for (final p in await (db.select(
@@ -171,15 +174,53 @@ final continueItemsProvider =
             updatedAt: r.updatedAt,
           );
         } on Object {
-          return null; // No details (offline): nothing to suggest.
+          return _nextDownloaded(db, r); // offline: what's on the phone
         }
       }
 
       final items = await Future.wait([
         for (final r in rows) r.completed ? after(r) : Future.value(r),
       ]);
-      return [for (final i in items) ?i];
+      return [for (final i in items) ?i].take(20).toList();
     });
+
+/// Without the show's details: the next episode downloaded on this phone.
+Future<WatchProgressData?> _nextDownloaded(
+  AppDatabase db,
+  WatchProgressData r,
+) async {
+  final s = r.season, e = r.episode;
+  if (s == null || e == null) return null;
+  final rows =
+      await (db.select(db.downloads)..where(
+            (t) => t.mediaId.equals(r.mediaId) & t.state.equals('completed'),
+          ))
+          .get();
+  final later = [
+    for (final d in rows)
+      if (d.season case final ds? when ds > 0)
+        if (d.episode case final de?)
+          if (ds > s || (ds == s && de > e)) (d, ds, de),
+  ]..sort((a, b) => a.$2 != b.$2 ? a.$2 - b.$2 : a.$3 - b.$3);
+  final d = later.firstOrNull?.$1;
+  if (d == null) return null;
+  return WatchProgressData(
+    videoId: d.videoId,
+    mediaId: r.mediaId,
+    type: r.type,
+    name: r.name,
+    episodeTitle: d.episodeTitle,
+    season: d.season,
+    episode: d.episode,
+    positionMs: 0,
+    durationMs: 0,
+    completed: false,
+    dismissed: false,
+    poster: r.poster,
+    still: d.still ?? r.still,
+    updatedAt: r.updatedAt,
+  );
+}
 
 /// Shows from My list and your history with new episodes, most recently
 /// watched first. Local: progress and library, plus each show's details.

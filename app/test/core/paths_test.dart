@@ -36,4 +36,17 @@ void main() {
       isNull,
     );
   });
+
+  test('a moved app folder is noticed once', () {
+    final support = Directory.systemTemp.createTempSync('kinora-root');
+    addTearDown(() => support.deleteSync(recursive: true));
+    expect(
+      AppPaths.noteRoot(support, '/A/Documents'),
+      isTrue,
+      reason: 'unknown',
+    );
+    expect(AppPaths.noteRoot(support, '/A/Documents'), isFalse);
+    expect(AppPaths.noteRoot(support, '/B/Documents'), isTrue);
+    expect(AppPaths.noteRoot(support, '/B/Documents'), isFalse);
+  });
 }

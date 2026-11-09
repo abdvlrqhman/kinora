@@ -70,7 +70,7 @@ final class ProgressRepository {
   /// Per title, the video watched last, newest first: unfinished ones to
   /// resume, and finished episodes (Home shows the episode after them).
   /// Finished movies and videos opened for under 30 s don't count.
-  Stream<List<WatchProgressData>> watchContinue({int limit = 20}) {
+  Stream<List<WatchProgressData>> watchContinue({int limit = 60}) {
     final q = _db.select(_db.watchProgress)
       ..where(
         (t) =>
@@ -82,7 +82,9 @@ final class ProgressRepository {
       final seen = <String>{};
       return [
         for (final r in rows)
-          if (seen.add(r.mediaId) && (!r.completed || r.season != null)) r,
+          // (An episode's id isn't its show's; some have no season.)
+          if (seen.add(r.mediaId) && (!r.completed || r.videoId != r.mediaId))
+            r,
       ].take(limit).toList();
     });
   }

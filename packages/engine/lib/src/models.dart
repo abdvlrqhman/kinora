@@ -107,9 +107,11 @@ final class AddTorrent {
     this.maxConnections,
     this.downloadLimit,
     this.uploadLimit,
+    this.forceSavePath = false,
   });
 
-  /// Adds a magnet link. [resumePath] wins when that file exists.
+  /// Adds a magnet link. [resumePath] wins when that file exists (its save
+  /// path too, unless [forceSavePath]).
   const AddTorrent.magnet(
     String uri, {
     required String savePath,
@@ -122,6 +124,7 @@ final class AddTorrent {
     bool sequential = false,
     int? maxConnections,
     int? uploadLimit,
+    bool forceSavePath = false,
   }) : this._(
          magnet: uri,
          savePath: savePath,
@@ -134,6 +137,7 @@ final class AddTorrent {
          sequential: sequential,
          maxConnections: maxConnections,
          uploadLimit: uploadLimit,
+         forceSavePath: forceSavePath,
        );
 
   /// Adds a `.torrent` file's bytes.
@@ -174,9 +178,13 @@ final class AddTorrent {
   final int? downloadLimit;
   final int? uploadLimit;
 
+  /// [savePath] over the one saved in the resume file.
+  final bool forceSavePath;
+
   /// The bencodable form the native side reads.
   Map<String, Object?> toMap() => {
     'save_path': savePath,
+    if (forceSavePath) 'force_save_path': 1,
     'magnet': magnet,
     'torrent': torrentBytes,
     'resume_path': resumePath,

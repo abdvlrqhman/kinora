@@ -509,6 +509,7 @@ final class DownloadsService implements DownloadActions {
   /// After an iOS update the files are where they were, under a new
   /// folder path: saved paths follow, so downloads keep playing offline.
   Future<void> _rebaseMovedPaths() async {
+    if (!_paths.moved) return;
     String? moved(String? path) {
       if (path == null ||
           FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound) {
@@ -545,6 +546,25 @@ final class DownloadsService implements DownloadActions {
           subtitlesJson: subs == null ? const Value.absent() : Value(subs),
         ),
       );
+    }
+    // Deletions waiting for their torrent: the files moved with the folder.
+    final deferred = await _readDeferred();
+    var rebased = false;
+    for (final paths in deferred.values) {
+      for (var k = 0; k < paths.length; k++) {
+        final to = moved(paths[k]);
+        if (to != null) {
+          paths[k] = to;
+          rebased = true;
+        }
+      }
+    }
+    if (rebased) {
+      await _db
+          .into(_db.keyValues)
+          .insertOnConflictUpdate(
+            KeyValue(key: _deferredKey, value: jsonEncode(deferred)),
+          );
     }
   }
 

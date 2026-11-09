@@ -1396,7 +1396,19 @@ class PlayerController extends ChangeNotifier {
       final owned = await (db.select(
         db.downloads,
       )..where((t) => t.infoHash.equals(ih))).get();
-      if (owned.isNotEmpty || service.isClaimed(ih)) return;
+      if (service.isClaimed(ih)) return;
+      if (owned.isNotEmpty) {
+        // A paused (or Wi-Fi-only) download, resumed for this stream: it
+        // stops again, not seeding on for the rest of the session.
+        if (!owned.any((r) => r.state == 'downloading')) {
+          try {
+            service.engine.pause(ih);
+          } on Object {
+            // Gone already.
+          }
+        }
+        return;
+      }
       if (keep) {
         try {
           service.engine.pause(ih);

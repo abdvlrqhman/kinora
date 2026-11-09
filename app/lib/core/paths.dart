@@ -25,6 +25,20 @@ final class AppPaths {
 
   Directory get downloads => Directory(p.join(downloadsRoot.path, 'Kinora'));
 
+  /// The app's folder moved since the last launch (iOS, after an update):
+  /// paths saved before need [rebased].
+  bool moved = false;
+
+  /// Notes where the app's folder is; true when it was elsewhere last time,
+  /// or when no launch noted it yet (an update from a version that didn't:
+  /// checking costs little).
+  static bool noteRoot(Directory support, String root) {
+    final f = File(p.join(support.path, 'root.txt'));
+    final before = f.existsSync() ? f.readAsStringSync() : null;
+    if (before != root) f.writeAsStringSync(root);
+    return before != root;
+  }
+
   /// iOS gives the app's data folder a new path after an update
   /// (…/Data/Application/<id>/…), so a path saved before points at the old
   /// one. Returns [saved] inside today's folder, or null when it isn't such
@@ -67,6 +81,7 @@ final class AppPaths {
       cache: cache,
     );
     await paths.ensure();
+    paths.moved = noteRoot(support, downloads.path);
     return paths;
   }
 

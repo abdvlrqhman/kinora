@@ -62,7 +62,8 @@ class _FeedState extends ConsumerState<_Feed> {
     ref
       ..invalidate(addonsProvider)
       ..invalidate(homeRowsProvider)
-      ..invalidate(newEpisodesProvider);
+      ..invalidate(newEpisodesProvider)
+      ..invalidate(continueItemsProvider);
   }
 
   Future<void> _refresh() async {

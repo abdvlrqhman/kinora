@@ -244,7 +244,13 @@ final metaProvider =
         }
       }
       throw lastError ?? StateError('No source has details for this title.');
-    });
+    }, retry: quickRetry);
+
+/// Two quick tries after a failure, then the error shows (with its Retry
+/// button). Riverpod's default keeps trying for ~40 s, and offline every
+/// screen waiting on it would show a spinner that long.
+Duration? quickRetry(int count, Object error) =>
+    ProviderContainer.defaultRetry(count, error, maxRetries: 2);
 
 /// Search across every addon catalog that supports it. Not cached past its
 /// screen, and when every source failed it says so (offline) instead of

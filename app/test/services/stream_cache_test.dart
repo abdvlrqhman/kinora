@@ -59,4 +59,18 @@ void main() {
     expect(old.existsSync(), isFalse);
     expect(recent.existsSync(), isTrue);
   });
+
+  test('only stream buffers are deleted with their torrent', () {
+    expect(EngineService.isStreamData(paths, paths.streams.path), isTrue);
+    expect(
+      EngineService.isStreamData(paths, '${paths.streams.path}/Show.S01'),
+      isTrue,
+    );
+    // A season pack that downloads share lives in Downloads: kept.
+    expect(EngineService.isStreamData(paths, paths.downloads.path), isFalse);
+    expect(
+      EngineService.isStreamData(paths, '${paths.downloads.path}/Lupin'),
+      isFalse,
+    );
+  });
 }

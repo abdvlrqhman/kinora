@@ -106,6 +106,9 @@ final class EngineService {
             savePath ??
             (forDownload ? _paths.downloads.path : _paths.streams.path),
         resumePath: resume.existsSync() ? resume.path : null,
+        // iOS moved the app folder since the resume file was written: the
+        // save path in it is gone, this one is where the files are now.
+        forceSavePath: _paths.moved,
         name: name,
         // Nothing downloads until an owner claims its file (see [claim]).
         filePriorities: existed ? null : List.filled(1024, 0),
@@ -224,13 +227,25 @@ final class EngineService {
     }
   }
 
+  /// Whether a torrent saved at [savePath] is stream buffer (deletable with
+  /// its torrent), not a download's files.
+  static bool isStreamData(AppPaths paths, String savePath) {
+    final streams = paths.streams.path;
+    return p.equals(streams, savePath) || p.isWithin(streams, savePath);
+  }
+
   /// Removes [infoHash] if nobody claims it. [deleteFiles] for stream
-  /// leftovers; downloads keep their files.
+  /// leftovers: files outside the stream cache (a download's, a season pack
+  /// shared with downloads) are never deleted here.
   void removeIfUnclaimed(String infoHash, {required bool deleteFiles}) {
     final e = _engine;
-    if (e == null || isClaimed(infoHash) || e.status(infoHash) == null) return;
+    final st = e?.status(infoHash);
+    if (e == null || isClaimed(infoHash) || st == null) return;
     try {
-      e.remove(infoHash, deleteFiles: deleteFiles);
+      e.remove(
+        infoHash,
+        deleteFiles: deleteFiles && isStreamData(_paths, st.savePath),
+      );
     } on EngineException catch (err) {
       Log.d('engine', 'remove $infoHash: $err');
     }
