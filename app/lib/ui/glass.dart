@@ -70,6 +70,7 @@ class GlassButton extends StatefulWidget {
     this.icon,
     this.prominent = false,
     this.semanticLabel,
+    this.compact = false,
   });
 
   final String label;
@@ -79,6 +80,9 @@ class GlassButton extends StatefulWidget {
   /// Stronger accent tint for the primary action on a screen.
   final bool prominent;
   final String? semanticLabel;
+
+  /// Smaller (the player's controls): 44 pt tall, still a full touch target.
+  final bool compact;
 
   @override
   State<GlassButton> createState() => _GlassButtonState();
@@ -98,14 +102,16 @@ class _GlassButtonState extends State<GlassButton> {
         : enabled
         ? KColors.lamp
         : KColors.reel;
-    const padding = EdgeInsets.symmetric(horizontal: 20, vertical: 13);
+    final padding = widget.compact
+        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
+        : const EdgeInsets.symmetric(horizontal: 20, vertical: 13);
     final content = Row(
       mainAxisSize: MainAxisSize.min,
       // Centers the label when the button is stretched full width.
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (widget.icon != null) ...[
-          Icon(widget.icon, size: 20, color: fg),
+          Icon(widget.icon, size: widget.compact ? 18 : 20, color: fg),
           if (widget.label.isNotEmpty) const SizedBox(width: KSpace.x2),
         ],
         if (widget.label.isNotEmpty)
@@ -114,9 +120,9 @@ class _GlassButtonState extends State<GlassButton> {
               widget.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: KType.title.copyWith(
+              style: (widget.compact ? KType.body : KType.title).copyWith(
                 color: fg,
-                fontWeight: lit ? FontWeight.w700 : null,
+                fontWeight: lit ? FontWeight.w700 : FontWeight.w600,
                 fontVariations: lit ? const [FontVariation.weight(700)] : null,
               ),
             ),
@@ -144,7 +150,10 @@ class _GlassButtonState extends State<GlassButton> {
           duration: KMotion.fast,
           curve: KMotion.curve,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            constraints: BoxConstraints(
+              minHeight: widget.compact ? 44 : 48,
+              minWidth: widget.compact ? 44 : 48,
+            ),
             child: lit
                 ? LitCapsule(padding: padding, child: content)
                 : Glass(tintStrength: 0.14, padding: padding, child: content),

@@ -353,7 +353,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         KSpace.x3 +
         math.max(44, scaler.scale(18)) +
         KSpace.x2 +
-        math.max(48, scaler.scale(22) + 26) +
+        math.max(44, scaler.scale(22) + 20) +
         KSpace.x2;
   }
 
@@ -385,8 +385,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               SubtitleOverlay(
                 player: c.player,
                 clearance: _controls && !_inPip ? _controlsHeight(context) : 0,
-                // Play row (76) and its buffering ring (86), plus a gap.
-                belowCenter: _controls && !_inPip && !_locked ? 52 : 0,
+                // Play row (64) and its buffering ring (72), plus a gap.
+                belowCenter: _controls && !_inPip && !_locked ? 46 : 0,
                 rightCover: _panel == _Panel.none || _inPip
                     ? 0
                     : SidePanel.coverOf(context),
@@ -631,6 +631,7 @@ class _Controls extends StatelessWidget {
                       icon: Icons.chevron_left_rounded,
                       label: 'Close player',
                       onPressed: onBack,
+                      size: 44,
                     ),
                     const SizedBox(width: KSpace.x3),
                     Expanded(
@@ -677,12 +678,14 @@ class _Controls extends StatelessWidget {
                       icon: Icons.cast_rounded,
                       label: 'Cast to a TV',
                       onPressed: () => onPanel(_Panel.cast),
+                      size: 44,
                     ),
                     const SizedBox(width: KSpace.x2),
                     GlassIconButton(
                       icon: Icons.lock_outline_rounded,
                       label: 'Lock controls',
                       onPressed: onLock,
+                      size: 44,
                     ),
                   ],
                 ),
@@ -699,7 +702,7 @@ class _Controls extends StatelessWidget {
                         onInteract();
                         onSeekBy(-10);
                       },
-                      size: 56,
+                      size: 48,
                     ),
                     const SizedBox(width: KSpace.section),
                     Stack(
@@ -715,7 +718,7 @@ class _Controls extends StatelessWidget {
                             onInteract();
                             c.player.playOrPause();
                           },
-                          size: 76,
+                          size: 64,
                         ),
                       ],
                     ),
@@ -727,7 +730,7 @@ class _Controls extends StatelessWidget {
                         onInteract();
                         onSeekBy(10);
                       },
-                      size: 56,
+                      size: 48,
                     ),
                   ],
                 ),
@@ -757,6 +760,7 @@ class _Controls extends StatelessWidget {
                         icon: Icons.video_library_rounded,
                         label: 'Episodes',
                         onPressed: () => onPanel(_Panel.episodes),
+                        size: 44,
                       ),
                       const SizedBox(width: KSpace.x2),
                     ],
@@ -764,6 +768,7 @@ class _Controls extends StatelessWidget {
                       icon: Icons.subtitles_rounded,
                       label: 'Audio and subtitles',
                       onPressed: () => onPanel(_Panel.tracks),
+                      size: 44,
                     ),
                     const SizedBox(width: KSpace.x2),
                     if (c.rate == 1)
@@ -771,6 +776,7 @@ class _Controls extends StatelessWidget {
                         icon: Icons.speed_rounded,
                         label: 'Playback speed',
                         onPressed: () => onPanel(_Panel.speed),
+                        size: 44,
                       )
                     else
                       GlassButton(
@@ -787,6 +793,7 @@ class _Controls extends StatelessWidget {
                           : Icons.aspect_ratio_rounded,
                       label: fill ? 'Fit to screen' : 'Fill screen',
                       onPressed: onFill,
+                      size: 44,
                     ),
                     // All the room that's left, button at its right edge
                     // (a Spacer beside a Flexible split it in half).
@@ -798,6 +805,7 @@ class _Controls extends StatelessWidget {
                             : GlassButton(
                                 label: 'Next episode',
                                 icon: Icons.skip_next_rounded,
+                                compact: true,
                                 // Quiet glass until the credits: during the
                                 // episode Play leads, and a stray thumb in
                                 // this corner shouldn't land on a lit button.
@@ -912,7 +920,7 @@ class _BufferRing extends StatelessWidget {
       final ready = controller.engineStats?.ready;
       return IgnorePointer(
         child: SizedBox.square(
-          dimension: 86,
+          dimension: 72,
           child: CircularProgressIndicator(
             value: ready == null ? null : ready / 100,
             strokeWidth: 3,
@@ -1123,6 +1131,7 @@ class _PrepareView extends StatelessWidget {
               icon: Icons.chevron_left_rounded,
               label: 'Close player',
               onPressed: onBack,
+              size: 44,
             ),
           ),
           bottom: Column(
