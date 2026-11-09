@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -58,4 +59,26 @@ Future<String?> completedDownloadFile(AppDatabase db, String videoId) async {
           .getSingleOrNull();
   final path = row?.filePath;
   return path != null && File(path).existsSync() ? path : null;
+}
+
+/// Subtitle files saved next to a download: [{lang, path, label}].
+Future<List<Map<String, String>>> savedDownloadSubtitles(
+  AppDatabase db,
+  String videoId,
+) async {
+  final row = await (db.select(
+    db.downloads,
+  )..where((t) => t.videoId.equals(videoId))).getSingleOrNull();
+  if (row == null) return const [];
+  try {
+    return [
+      for (final e in jsonDecode(row.subtitlesJson) as List<Object?>)
+        if (e is Map<String, Object?> &&
+            e['path'] is String &&
+            File(e['path']! as String).existsSync())
+          {for (final kv in e.entries) kv.key: '${kv.value}'},
+    ];
+  } on FormatException {
+    return const [];
+  }
 }

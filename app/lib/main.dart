@@ -11,7 +11,11 @@ import 'core/db/database.dart';
 import 'core/log.dart';
 import 'core/paths.dart';
 import 'data/settings_store.dart';
+import 'features/player/player_controller.dart';
+import 'services/downloads.dart';
+import 'services/downloads_service.dart';
 import 'services/engine_service.dart';
+import 'services/subtitles_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +35,13 @@ Future<void> main() async {
       pathsProvider.overrideWithValue(paths),
       databaseProvider.overrideWithValue(db),
       initialSettingsProvider.overrideWithValue(settings),
+      subtitleFitOverride,
+      downloadActionsProvider.overrideWith(
+        (ref) => ref.watch(downloadsServiceProvider),
+      ),
+      completedStreamHandlerProvider.overrideWith(
+        (ref) => ref.watch(downloadsServiceProvider).adoptCompletedStream,
+      ),
     ],
   );
   AppLifecycleListener(

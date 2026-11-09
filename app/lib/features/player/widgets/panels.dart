@@ -6,6 +6,7 @@ import '../../../ui/glass.dart';
 import '../../../ui/tint.dart';
 import '../../../ui/tokens.dart';
 import '../../../ui/widgets/artwork.dart';
+import '../../../services/subtitle_option.dart';
 import '../player_controller.dart';
 
 /// A glass panel that slides in from the right edge.

@@ -62,7 +62,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _onChange() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final notice = c.notice;
+    if (notice != null) {
+      c.notice = null;
+      _showFlash(notice);
+    }
+    setState(() {});
   }
 
   @override
@@ -99,9 +105,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _showFlash(String text) {
     _flashTimer?.cancel();
     setState(() => _flash = text);
-    _flashTimer = Timer(const Duration(milliseconds: 900), () {
-      if (mounted) setState(() => _flash = null);
-    });
+    _flashTimer = Timer(
+      Duration(milliseconds: text.length > 24 ? 2600 : 900),
+      () {
+        if (mounted) setState(() => _flash = null);
+      },
+    );
   }
 
   void _open(_Panel p) {

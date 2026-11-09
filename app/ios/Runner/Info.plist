@@ -16,6 +16,29 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>Kinora</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>io.github.abdvlrqhman.kinora.downloads.*</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Kinora finds your TV on this network so you can cast to it, and serves the video to it.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>FLTEnableFlutterGPU</key>
 	<true/>
 	<key>CFBundlePackageType</key>

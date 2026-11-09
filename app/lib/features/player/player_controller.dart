@@ -18,46 +18,10 @@ import '../../services/playback.dart';
 import '../../services/downloads.dart';
 import '../../services/resolver.dart';
 import '../../services/sources.dart';
+import '../../services/subtitle_option.dart';
+import '../../services/subtitles_service.dart';
 
 enum PlayerPhase { preparing, playing, failed }
-
-/// A subtitle the viewer can pick: embedded track or external file.
-final class SubtitleOption {
-  const SubtitleOption({
-    required this.id,
-    required this.language,
-    required this.label,
-    this.track,
-    this.uri,
-    this.hearingImpaired = false,
-    this.forced = false,
-    this.detail,
-    this.fit,
-  });
-
-  final String id;
-
-  /// Normalized code ("ar"), null when unknown.
-  final String? language;
-  final String label;
-
-  /// Embedded track.
-  final SubtitleTrack? track;
-
-  /// External file or URL.
-  final String? uri;
-  final bool hearingImpaired;
-  final bool forced;
-
-  /// Provider / release name line.
-  final String? detail;
-
-  /// 0..1 how well it fits this release (external only).
-  final double? fit;
-
-  String get variant =>
-      forced ? 'forced' : (hearingImpaired ? 'sdh' : 'normal');
-}
 
 /// Drives one playback session (and the episodes after it).
 class PlayerController extends ChangeNotifier {
@@ -178,6 +142,7 @@ class PlayerController extends ChangeNotifier {
       phase = PlayerPhase.playing;
       _startTimers();
       notifyListeners();
+      unawaited(_loadExternalSubtitles(gen));
     } on PlaybackException catch (e) {
       if (gen != _generation) return;
       phase = PlayerPhase.failed;
@@ -242,6 +207,49 @@ class PlayerController extends ChangeNotifier {
       notifyListeners();
     } on Object catch (e) {
       Log.d('player', 'meta unavailable: $e');
+    }
+  }
+
+  /// Saved subtitles of a download (offline) plus provider results.
+  Future<void> _loadExternalSubtitles(int gen) async {
+    final req = _request;
+    final saved = await savedDownloadSubtitles(
+      _ref.read(databaseProvider),
+      req.videoId,
+    );
+    if (gen != _generation || _disposed) return;
+    if (saved.isNotEmpty) {
+      addExternalSubtitles([
+        for (final s in saved)
+          SubtitleOption(
+            id: 'saved:${s['path']}',
+            language: normalizeLang(s['lang']),
+            label: s['label'] ?? langName(s['lang']),
+            uri: s['path'],
+            detail: 'Saved with the download',
+            fit: 0.95,
+          ),
+      ]);
+    }
+    if (req.videoId.startsWith('magnet:') || req.videoId.startsWith('http'))
+      return;
+    try {
+      final options = await _ref
+          .read(playerSubtitlesProvider)
+          .optionsFor(
+            VideoRef(
+              type: req.type,
+              mediaId: req.mediaId,
+              videoId: req.videoId,
+              season: req.season,
+              episode: req.episode,
+            ),
+            releaseName: source?.release?.releaseName ?? source?.fileName,
+          );
+      if (gen != _generation || _disposed) return;
+      addExternalSubtitles(options);
+    } on Object catch (e) {
+      Log.w('player', 'subtitles unavailable: $e');
     }
   }
 
@@ -381,7 +389,7 @@ class PlayerController extends ChangeNotifier {
             detail: 'In the video file',
           ),
     ];
-    final external = subtitles.where((s) => s.uri != null);
+    final external = subtitles.where((s) => s.track == null);
     subtitles = [...embedded, ...external];
     notifyListeners();
     bool real(String id) => id != 'auto' && id != 'no';
@@ -554,6 +562,11 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
+  final _loaded = <String, String>{};
+
+  /// A short message for the viewer (shown briefly by the screen).
+  String? notice;
+
   Future<void> selectSubtitle(SubtitleOption? option) {
     _pending = null;
     return _activate(option, remember: true);
@@ -569,13 +582,18 @@ class PlayerController extends ChangeNotifier {
       await player.setSubtitleTrack(SubtitleTrack.no());
     } else if (option.track != null) {
       await player.setSubtitleTrack(option.track!);
-    } else if (option.uri != null) {
+    } else {
+      final path =
+          option.uri ?? _loaded[option.id] ?? await option.load?.call();
+      if (path == null) {
+        activeSubtitleId = null;
+        notice = 'That subtitle couldn’t be loaded. Pick another one.';
+        notifyListeners();
+        return;
+      }
+      _loaded[option.id] = path;
       await player.setSubtitleTrack(
-        SubtitleTrack.uri(
-          option.uri!,
-          title: option.label,
-          language: option.language,
-        ),
+        SubtitleTrack.uri(path, title: option.label, language: option.language),
       );
     }
     if (remember) await _remember();
