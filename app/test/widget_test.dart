@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/app/app.dart';
 import 'package:kinora/app/providers.dart';
+import 'package:kinora/features/home/home_screen.dart';
 import 'package:kinora/core/settings.dart';
 
 void main() {
@@ -27,6 +28,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Home'), findsWidgets);
+    // Laid out at the screen's size, not just present in the tree.
+    expect(
+      tester.getSize(find.byType(HomeScreen)),
+      tester.view.physicalSize / tester.view.devicePixelRatio,
+    );
     await tester.tap(find.byKey(const ValueKey('tab-search')));
     await tester.pumpAndSettle();
     expect(find.text('Search'), findsWidgets);

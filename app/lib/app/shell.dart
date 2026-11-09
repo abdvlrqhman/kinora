@@ -53,7 +53,9 @@ class AppShell extends StatelessWidget {
         children: [
           Positioned.fill(child: shell),
           // A newer Kinora on GitHub: offered once a launch (optional).
-          const UpdateCheck(),
+          // Positioned: a non-positioned 0×0 child would size the whole
+          // Stack to nothing (a blank app).
+          const Positioned(left: 0, top: 0, child: UpdateCheck()),
           // Content passing under the bar dims instead of competing with it.
           if (!typing)
             Positioned(
