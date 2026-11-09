@@ -248,6 +248,10 @@ jobs:
       # The changelog is the commits since the previous version (GitHub's
       # generated notes only list merged pull requests). The app shows it in
       # its update prompt.
+      - name: The tag is the version the app was built as
+        run: |
+          built=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' app/pubspec.yaml)
+          [ "${GITHUB_REF_NAME#v}" = "$built" ] || { echo "::error::Tag $GITHUB_REF_NAME, but the app is built as $built"; exit 1; }
       - name: Release notes
         run: |
           prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)

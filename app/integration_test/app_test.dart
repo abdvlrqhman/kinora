@@ -122,6 +122,8 @@ void main() {
             onboarded: true,
             subtitleLanguages: ['en'],
             wifiOnlyDownloads: false,
+            // The test plays this build, whatever GitHub's latest release.
+            updateChecks: false,
           ),
         ),
         // Live tracker scraping would reach the internet; the swarm is local.
