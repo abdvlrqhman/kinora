@@ -182,6 +182,7 @@ final homeCatalogsProvider = FutureProvider<List<CatalogRow>>((ref) async {
   final addons = await ref.watch(enabledAddonsProvider.future);
   final client = ref.watch(addonClientProvider);
   final jobs = <Future<CatalogRow?>>[];
+  var failures = 0;
   for (final addon in addons) {
     for (final c in addon.manifest.catalogs) {
       if (c.requiredExtras.isNotEmpty) continue;
@@ -208,13 +209,20 @@ final homeCatalogsProvider = FutureProvider<List<CatalogRow>>((ref) async {
           );
         } on Object catch (e) {
           Log.w('catalog', '${addon.manifest.name}/${c.id}: $e');
+          failures++;
           return null;
         }
       }());
     }
   }
   final rows = await Future.wait(jobs);
-  return [for (final r in rows) ?r].take(20).toList();
+  final ok = [for (final r in rows) ?r];
+  if (ok.isEmpty && jobs.isNotEmpty && failures == jobs.length) {
+    throw StateError(
+      'Your sources didn’t answer. Check your connection and try again.',
+    );
+  }
+  return ok.take(20).toList();
 });
 
 /// Full metadata for a title from the first addon that knows it.
@@ -238,24 +246,30 @@ final metaProvider =
       throw lastError ?? StateError('No source has details for this title.');
     });
 
-/// Search across every addon catalog that supports it.
-final searchProvider = FutureProvider.family<List<MetaPreview>, String>((
-  ref,
-  query,
-) async {
-  final q = query.trim();
-  if (q.length < 2) return const [];
-  final addons = await ref.watch(enabledAddonsProvider.future);
-  final agg = ref.watch(aggregatorProvider);
-  final types = {for (final a in addons) ...a.manifest.types}
-    ..retainAll({'movie', 'series', 'anime'});
-  final results = await Future.wait([
-    for (final t in types) agg.search(addons, t, q).merged,
-  ]);
-  final seen = <String>{};
-  return [
-    for (final list in results)
-      for (final m in list)
-        if (seen.add('${m.type}:${m.id}')) m,
-  ];
-});
+/// Search across every addon catalog that supports it. Not cached past its
+/// screen, and when every source failed it says so (offline) instead of
+/// pretending nothing matched.
+final searchProvider = FutureProvider.autoDispose
+    .family<List<MetaPreview>, String>((ref, query) async {
+      final q = query.trim();
+      if (q.length < 2) return const [];
+      final addons = await ref.watch(enabledAddonsProvider.future);
+      final agg = ref.watch(aggregatorProvider);
+      final types = {for (final a in addons) ...a.manifest.types}
+        ..retainAll({'movie', 'series', 'anime'});
+      final perType = await Future.wait([
+        for (final t in types) agg.search(addons, t, q).results.toList(),
+      ]);
+      final answers = [for (final list in perType) ...list];
+      if (answers.isNotEmpty && answers.every((r) => r.error != null)) {
+        throw StateError(
+          'Your sources didn’t answer. Check your connection and try again.',
+        );
+      }
+      final seen = <String>{};
+      return [
+        for (final r in answers)
+          for (final m in r.items)
+            if (seen.add('${m.type}:${m.id}')) m,
+      ];
+    });
