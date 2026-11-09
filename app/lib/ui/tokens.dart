@@ -19,8 +19,9 @@ abstract final class KColors {
   /// Tertiary text, disabled.
   static const reel = Color(0xFF77707A);
 
-  /// Fallback accent: marquee-bulb amber.
-  static const marquee = Color(0xFFFFC15E);
+  /// Brand accent, and the fallback when there's no artwork: violet
+  /// marquee light (Blackout labels read on it at 8:1).
+  static const marquee = Color(0xFFB48CFF);
 
   /// Ready / downloaded / best match.
   static const go = Color(0xFF7EE2B8);

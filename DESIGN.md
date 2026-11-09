@@ -23,7 +23,7 @@ it. That is the one bold thing. Everything else stays quiet.
 | Haze | `#B3ABB5` | Secondary text. |
 | Reel | `#77707A` | Tertiary text, disabled. |
 | Spill | dynamic | Accent extracted from the current title's artwork (vivid, contrast-checked against Lamp). |
-| Marquee | `#FFC15E` | Fallback accent when no artwork: marquee-bulb amber. |
+| Marquee | `#B48CFF` | Brand accent (icon, intro) and the fallback when there's no artwork: violet marquee light. |
 | Go | `#7EE2B8` | Ready / downloaded / best match. |
 | Cut | `#FF6B6B` | Errors and destructive actions. |
 
@@ -78,7 +78,7 @@ weight, not middle dots.
 ## Review against generic defaults
 
 - Near-black with one acid accent: avoided. Base is real black and the accent
-  isn't fixed; it is taken from each film, with amber only as a fallback.
+  isn't fixed; it is taken from each film, with violet only as a fallback.
 - Card kit with one radius and grey shadows: avoided. No cards; radii follow
   hierarchy.
 - All-caps eyebrows, dot-joined meta, mono labels, arrow-suffixed buttons:

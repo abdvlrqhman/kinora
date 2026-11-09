@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/tokens.dart';
 import '../ui/widgets/brand.dart';
+import '../ui/widgets/spacie_logo.dart';
 
 /// The first thing you see at launch: the mark switches on, "Kinora", and
 /// "Powered by Spacie". The app builds and loads underneath the whole time
@@ -109,22 +110,18 @@ class _IntroOverlayState extends State<IntroOverlay>
                           const SizedBox(height: KSpace.x4),
                           Opacity(
                             opacity: credit,
-                            child: Text.rich(
-                              TextSpan(
-                                text: 'Powered by ',
-                                style: KType.label.copyWith(
-                                  color: KColors.haze,
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: 'Spacie',
-                                    style: KType.label.copyWith(
-                                      color: KColors.lamp,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Powered by',
+                                  style: KType.label.copyWith(
+                                    color: KColors.haze,
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(width: KSpace.x2),
+                                const SpacieLogo(size: 30),
+                              ],
                             ),
                           ),
                         ],
