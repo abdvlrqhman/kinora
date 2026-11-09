@@ -34,7 +34,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The finished libraries depend only on these inputs: app-only commits
+      # skip vcpkg (and its downloads from GitHub Releases) entirely.
+      - name: Reuse built libraries
+        id: libs
+        uses: actions/cache@v6
+        with:
+          path: |
+            packages/engine/out/${{ matrix.triplet }}/include
+            packages/engine/out/${{ matrix.triplet }}/lib
+          key: libtorrent-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-${{ env.ANDROID_NDK_VERSION }}-${{ hashFiles('packages/engine/vcpkg.json', 'packages/engine/triplets/**') }}
+
       - name: Fetch vcpkg at pinned commit
+        if: steps.libs.outputs.cache-hit != 'true'
         run: |
           git init -q "$RUNNER_TEMP/vcpkg"
           cd "$RUNNER_TEMP/vcpkg"
@@ -43,19 +55,21 @@ jobs:
           ./bootstrap-vcpkg.sh -disableMetrics
 
       - name: Android NDK ${{ env.ANDROID_NDK_VERSION }}
-        if: endsWith(matrix.triplet, '-android')
+        if: steps.libs.outputs.cache-hit != 'true' && endsWith(matrix.triplet, '-android')
         run: |
           ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
           [ -d "$ndk" ] || yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ANDROID_NDK_VERSION" >/dev/null
           echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
 
       - uses: actions/cache@v6
+        if: steps.libs.outputs.cache-hit != 'true'
         with:
           path: .vcpkg-bin
           key: vcpkg-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-${{ env.ANDROID_NDK_VERSION }}-${{ hashFiles('packages/engine/vcpkg.json', 'packages/engine/triplets/**') }}
           restore-keys: vcpkg-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-
 
       - name: Build
+        if: steps.libs.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$GITHUB_WORKSPACE/.vcpkg-bin"
           "$RUNNER_TEMP/vcpkg/vcpkg" install \
