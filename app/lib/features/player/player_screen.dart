@@ -686,6 +686,51 @@ class _Controls extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Between the bars (not the screen's exact middle): on a
+                // short screen the subtitles above the scrubber stay clear.
+                const Spacer(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GlassIconButton(
+                      icon: Icons.replay_10_rounded,
+                      label: 'Back 10 seconds',
+                      onPressed: () {
+                        onInteract();
+                        onSeekBy(-10);
+                      },
+                      size: 56,
+                    ),
+                    const SizedBox(width: KSpace.section),
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        _BufferRing(controller: c),
+                        GlassIconButton(
+                          icon: playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          label: playing ? 'Pause' : 'Play',
+                          onPressed: () {
+                            onInteract();
+                            c.player.playOrPause();
+                          },
+                          size: 76,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: KSpace.section),
+                    GlassIconButton(
+                      icon: Icons.forward_10_rounded,
+                      label: 'Forward 10 seconds',
+                      onPressed: () {
+                        onInteract();
+                        onSeekBy(10);
+                      },
+                      size: 56,
+                    ),
+                  ],
+                ),
                 const Spacer(),
                 StreamBuilder<Duration>(
                   stream: c.player.stream.position,
@@ -762,55 +807,6 @@ class _Controls extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        // The play row at the screen's exact middle (between bars of
-        // different heights it sat high), where the buffering status shows
-        // when the controls hide.
-        Center(
-          child: GlassGroup(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GlassIconButton(
-                  icon: Icons.replay_10_rounded,
-                  label: 'Back 10 seconds',
-                  onPressed: () {
-                    onInteract();
-                    onSeekBy(-10);
-                  },
-                  size: 56,
-                ),
-                const SizedBox(width: KSpace.section),
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    _BufferRing(controller: c),
-                    GlassIconButton(
-                      icon: playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      label: playing ? 'Pause' : 'Play',
-                      onPressed: () {
-                        onInteract();
-                        c.player.playOrPause();
-                      },
-                      size: 76,
-                    ),
-                  ],
-                ),
-                const SizedBox(width: KSpace.section),
-                GlassIconButton(
-                  icon: Icons.forward_10_rounded,
-                  label: 'Forward 10 seconds',
-                  onPressed: () {
-                    onInteract();
-                    onSeekBy(10);
-                  },
-                  size: 56,
                 ),
               ],
             ),

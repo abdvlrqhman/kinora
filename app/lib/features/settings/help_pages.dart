@@ -14,6 +14,7 @@ import '../../services/subtitles_service.dart';
 import '../../ui/glass.dart';
 import '../../ui/glass_mode.dart';
 import '../../ui/tokens.dart';
+import '../updates/update_prompt.dart';
 import 'widgets/settings_ui.dart';
 
 /// Native engine version, or null when the library isn't loaded (tests,
@@ -246,11 +247,11 @@ class _LogLineRow extends StatelessWidget {
 }
 
 /// Settings › About.
-class AboutPage extends StatelessWidget {
+class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 
   @override
-  Widget build(BuildContext context) => SettingsPage(
+  Widget build(BuildContext context, WidgetRef ref) => SettingsPage(
     title: 'About Kinora',
     intro:
         'Kinora streams or downloads movies and shows from the sources you '
@@ -259,6 +260,21 @@ class AboutPage extends StatelessWidget {
         'account, no tracking.',
     children: [
       const _Fact('Version', kinoraVersion),
+      SwitchRow(
+        label: 'Tell me about new versions',
+        detail: 'Kinora checks its GitHub releases when it opens.',
+        value: ref.watch(settingsProvider.select((s) => s.updateChecks)),
+        onChanged: (v) => unawaited(
+          ref
+              .read(settingsProvider.notifier)
+              .update((s) => s.copyWith(updateChecks: v)),
+        ),
+      ),
+      ActionRow(
+        icon: Icons.system_update_rounded,
+        label: 'Check for updates',
+        onTap: () => unawaited(checkForUpdatesNow(context, ref)),
+      ),
       const SectionTitle('What you watch'),
       const Note(
         'Kinora is a media player and BitTorrent and HTTP client. It ships '

@@ -205,12 +205,28 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the commits since the previous version
       - uses: actions/download-artifact@v8
         with:
           path: dist
           # Only the app builds, not the engine's libtorrent folders.
           pattern: kinora-*
           merge-multiple: true
+      # The changelog is the commits since the previous version (GitHub's
+      # generated notes only list merged pull requests). The app shows it in
+      # its update prompt.
+      - name: Release notes
+        run: |
+          prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          range="${prev:+$prev..}$GITHUB_REF_NAME"
+          # (Test, CI and screenshot commits aren't news for the people
+          # updating.)
+          git log --no-merges --reverse --invert-grep \
+            --grep='^E2E' --grep='^CI:' --grep='^Goldens:' --grep='^Engine test:' \
+            --format='### %s%n%n%b' "$range" > notes.md
+          [ -s notes.md ] || echo "Kinora ${GITHUB_REF_NAME#v}" > notes.md
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Kinora ${GITHUB_REF_NAME#v}" --notes-file notes.md

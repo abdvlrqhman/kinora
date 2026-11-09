@@ -91,5 +91,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- In-app updates: hand the new IPA to SideStore. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>sidestore</string>
+	</array>
 </dict>
 </plist>

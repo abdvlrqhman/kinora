@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/updates/update_prompt.dart';
+
 import '../ui/glass.dart';
 import '../ui/tint.dart';
 import '../ui/tokens.dart';
@@ -50,6 +52,8 @@ class AppShell extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(child: shell),
+          // A newer Kinora on GitHub: offered once a launch (optional).
+          const UpdateCheck(),
           // Content passing under the bar dims instead of competing with it.
           if (!typing)
             Positioned(

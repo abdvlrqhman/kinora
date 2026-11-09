@@ -106,6 +106,7 @@ final class AppSettings {
     this.uploadLimitKBps = 0,
     this.downloadLimitKBps = 0,
     this.keepStreamsHours = 0,
+    this.updateChecks = true,
     this.vpnInterface = '',
     this.enabledSubtitleProviders = const [freeOpenSubtitlesId],
     this.lastCastDevice,
@@ -134,6 +135,7 @@ final class AppSettings {
     uploadLimitKBps: (j['uploadLimitKBps'] as num? ?? 0).toInt(),
     downloadLimitKBps: (j['downloadLimitKBps'] as num? ?? 0).toInt(),
     keepStreamsHours: (j['keepStreamsHours'] as num? ?? 0).toInt(),
+    updateChecks: j['updateChecks'] as bool? ?? true,
     vpnInterface: j['vpnInterface'] as String? ?? '',
     // Settings saved before the keyless OpenSubtitles existed get it on once.
     enabledSubtitleProviders: [
@@ -182,6 +184,9 @@ final class AppSettings {
   /// How long streamed data stays on the device after you stop watching.
   final int keepStreamsHours;
 
+  /// Tell about new Kinora versions (from GitHub releases) at launch.
+  final bool updateChecks;
+
   /// Only connect through this network interface (VPN), '' = any.
   final String vpnInterface;
 
@@ -213,6 +218,7 @@ final class AppSettings {
     'uploadLimitKBps': uploadLimitKBps,
     'downloadLimitKBps': downloadLimitKBps,
     'keepStreamsHours': keepStreamsHours,
+    'updateChecks': updateChecks,
     'vpnInterface': vpnInterface,
     'enabledSubtitleProviders': enabledSubtitleProviders,
     'freeOpenSubtitlesOffered': true,
@@ -239,6 +245,7 @@ final class AppSettings {
     int? uploadLimitKBps,
     int? downloadLimitKBps,
     int? keepStreamsHours,
+    bool? updateChecks,
     String? vpnInterface,
     List<String>? enabledSubtitleProviders,
     Map<String, Object?>? lastCastDevice,
@@ -263,6 +270,7 @@ final class AppSettings {
     uploadLimitKBps: uploadLimitKBps ?? this.uploadLimitKBps,
     downloadLimitKBps: downloadLimitKBps ?? this.downloadLimitKBps,
     keepStreamsHours: keepStreamsHours ?? this.keepStreamsHours,
+    updateChecks: updateChecks ?? this.updateChecks,
     vpnInterface: vpnInterface ?? this.vpnInterface,
     enabledSubtitleProviders:
         enabledSubtitleProviders ?? this.enabledSubtitleProviders,
