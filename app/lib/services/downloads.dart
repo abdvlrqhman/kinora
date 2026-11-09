@@ -61,6 +61,25 @@ Future<String?> completedDownloadFile(AppDatabase db, String videoId) async {
   return path != null && File(path).existsSync() ? path : null;
 }
 
+/// A torrent download of [videoId] still under way (or waiting), with its
+/// torrent known: playing it streams that same torrent, so the downloaded
+/// part plays at once.
+Future<DownloadRow?> unfinishedTorrentDownload(
+  AppDatabase db,
+  String videoId,
+) async {
+  final rows =
+      await (db.select(db.downloads)..where(
+            (t) =>
+                t.videoId.equals(videoId) &
+                t.kind.equals('torrent') &
+                t.infoHash.isNotNull() &
+                t.state.isIn(['queued', 'downloading', 'paused']),
+          ))
+          .get();
+  return rows.firstOrNull;
+}
+
 /// Subtitle files saved next to a download: [{lang, path, label}].
 Future<List<Map<String, String>>> savedDownloadSubtitles(
   AppDatabase db,

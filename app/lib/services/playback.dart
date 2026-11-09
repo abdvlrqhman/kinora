@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kinora_engine/kinora_engine.dart';
 import 'package:swarm/swarm.dart';
 
+import '../app/providers.dart';
 import '../core/log.dart';
+import 'downloads.dart';
 import 'engine_service.dart';
 import 'play_request.dart';
 import 'resolver.dart';
@@ -92,6 +94,10 @@ final class PlaybackService {
   /// Versions that couldn't start during this session (skipped on retries).
   final failedCandidates = <String>{};
 
+  /// Episodes whose unfinished download's torrent didn't start: versions
+  /// are looked up for them instead.
+  final failedDownloadTorrents = <String>{};
+
   Future<PlaybackSource> prepare(
     PlayRequest request, {
     void Function(PrepareStatus)? onStatus,
@@ -129,6 +135,31 @@ final class PlaybackService {
       return PlaybackSource(uri: Uri.parse(link), kind: PlaybackKind.direct);
     }
 
+    // Downloading this episode already: play that torrent, not another
+    // version from the start (unless the viewer picked one).
+    if (request.candidateId == null &&
+        !failedDownloadTorrents.contains(request.videoId)) {
+      final d = await unfinishedTorrentDownload(
+        _ref.read(databaseProvider),
+        request.videoId,
+      );
+      if (d != null) {
+        try {
+          return await _torrent(
+            infoHash: d.infoHash!,
+            name: d.releaseName,
+            trackers: Magnet.tryParse(d.magnet ?? '')?.trackers ?? const [],
+            fileIndex: d.fileIndex,
+            request: request,
+            runtimeMinutes: runtimeMinutes,
+            onStatus: onStatus,
+          );
+        } on PlaybackException catch (e) {
+          failedDownloadTorrents.add(request.videoId);
+          Log.w('playback', 'the download’s torrent: ${e.message}');
+        }
+      }
+    }
     onStatus?.call(const Resolving());
     final result = await _ref.read(
       resolveProvider(

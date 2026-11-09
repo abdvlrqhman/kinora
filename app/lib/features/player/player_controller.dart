@@ -198,10 +198,18 @@ class PlayerController extends ChangeNotifier {
     final src = source;
     final req = _request;
     final failedId = src?.release?.candidateId;
-    if (failedId != null)
-      _ref.read(playbackServiceProvider).failedCandidates.add(failedId);
+    final playback = _ref.read(playbackServiceProvider);
+    if (failedId != null) playback.failedCandidates.add(failedId);
+    // A torrent without a version is an unfinished download's own.
+    final fromDownload =
+        src?.kind == PlaybackKind.torrent &&
+        src?.release == null &&
+        !_isLink(req.videoId);
+    if (fromDownload) playback.failedDownloadTorrents.add(req.videoId);
     await _releaseSource();
-    if (failedId != null && req.candidateId == null && !_isLink(req.videoId)) {
+    if ((failedId != null || fromDownload) &&
+        req.candidateId == null &&
+        !_isLink(req.videoId)) {
       await _load(
         req.copyWith(clearCandidate: true),
         note:
