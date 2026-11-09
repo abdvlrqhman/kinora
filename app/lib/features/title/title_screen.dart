@@ -13,7 +13,11 @@ import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
+import '../../ui/widgets/sheet.dart';
 import '../../ui/widgets/states.dart';
+import '../cast/cast_picker.dart';
+import '../downloads/download_prompts.dart';
+import '../settings/widgets/settings_ui.dart';
 import 'episodes.dart';
 import 'title_actions.dart';
 import 'title_model.dart';
@@ -37,6 +41,18 @@ class TitleScreen extends ConsumerWidget {
         AsyncValue(:final value?) => ArtworkTintScope(
           image: artworkProvider(value.meta.background ?? value.meta.poster),
           child: _TitlePage(titleKey: key, model: value),
+        ),
+        // No installed source describes this title: adding one fixes it.
+        AsyncError(:final error) when error is StateError => _Bare(
+          child: EmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: 'No details for this',
+            message:
+                '${friendlyError(error)} Add a source that describes movies '
+                'and shows, like Cinemeta.',
+            actionLabel: 'Add a source',
+            onAction: () => context.go('/settings/sources'),
+          ),
         ),
         AsyncError(:final error) => _Bare(
           child: ErrorState(
@@ -70,6 +86,35 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
   /// One clock per visit so every row agrees on what has aired.
   final _now = DateTime.now();
 
+  /// Past the backdrop: the header strip with the title shows.
+  bool _scrolled = false;
+
+  bool _onScroll(ScrollUpdateNotification n) {
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+    final scrolled = n.metrics.pixels > _heroHeight(context) - 120;
+    if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
+    return false;
+  }
+
+  Future<void> _downloadSeason(int season, List<Episode> episodes) async {
+    final t = widget.model;
+    final ready = [
+      for (final e in episodes)
+        if (aired(e, _now)) e,
+    ];
+    for (final e in ready) {
+      if (!mounted) return;
+      await startDownload(context, ref, t.request(episode: e));
+    }
+    if (mounted && ready.isNotEmpty) {
+      showNote(
+        context,
+        'Downloading ${season == 0 ? 'the specials' : 'season $season'}. '
+        'See it in Downloads.',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = widget.model;
@@ -82,164 +127,355 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
     final subtitle = primary.isEpisode
         ? [primary.label, ?primary.episodeTitle].join('  ')
         : meta.name;
+    final left = next?.resume ?? false
+        ? timeLeftLabel(ref, meta.id, primary.videoId)
+        : null;
 
     return Stack(
       children: [
-        CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _Hero(meta: meta)),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: KSpace.margin),
-                    GlassGroup(
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: GlassButton(
-                          key: const ValueKey('play'),
-                          label: next?.label ?? 'Play',
-                          icon: Icons.play_arrow_rounded,
-                          prominent: true,
-                          semanticLabel:
-                              '${next?.label ?? 'Play'} ${meta.name}',
-                          onPressed: next == null
-                              ? null
-                              : () => openPlayer(context, primary),
-                        ),
+        NotificationListener<ScrollUpdateNotification>(
+          onNotification: _onScroll,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _Hero(meta: meta, isMovie: !t.isSeries),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: KSpace.margin),
+                      CastTargetBuilder(
+                        builder: (context, tv) {
+                          final label = playOn(next?.label ?? 'Play', tv);
+                          return GlassGroup(
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: GlassButton(
+                                key: const ValueKey('play'),
+                                label: label,
+                                icon: Icons.play_arrow_rounded,
+                                prominent: true,
+                                semanticLabel: '$label ${meta.name}',
+                                onPressed: next == null
+                                    ? null
+                                    : () => openPlayer(context, primary),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (next != null)
-                      ReleaseLine(video: t.video(next.episode))
-                    else
-                      const SizedBox(height: 18),
-                    const SizedBox(height: KSpace.margin),
-                    GlassGroup(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: next == null
-                                ? const ActionTile(
-                                    icon: Icons.download_rounded,
-                                    label: 'Download',
-                                    semanticLabel: 'Download',
-                                    onPressed: null,
-                                  )
-                                : DownloadAction(request: primary),
-                          ),
-                          Expanded(child: MyListAction(meta: meta)),
-                          if (meta.trailerYouTubeIds.isNotEmpty)
+                      const SizedBox(height: 10),
+                      if (next != null)
+                        ReleaseLine(video: t.video(next.episode), extra: left)
+                      else
+                        const SizedBox(height: 18),
+                      const SizedBox(height: KSpace.margin),
+                      GlassGroup(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Expanded(
-                              child: ActionTile(
-                                icon: Icons.movie_creation_outlined,
-                                label: 'Trailer',
-                                semanticLabel: 'Watch the trailer on YouTube',
-                                onPressed: () => unawaited(
-                                  launchUrl(
-                                    Uri.https('www.youtube.com', '/watch', {
-                                      'v': meta.trailerYouTubeIds.first,
-                                    }),
-                                    mode: LaunchMode.externalApplication,
+                              child: next == null
+                                  ? const ActionTile(
+                                      icon: Icons.download_rounded,
+                                      label: 'Download',
+                                      semanticLabel: 'Download',
+                                      onPressed: null,
+                                    )
+                                  : DownloadAction(request: primary),
+                            ),
+                            Expanded(child: MyListAction(meta: meta)),
+                            if (meta.trailerYouTubeIds.isNotEmpty)
+                              Expanded(
+                                child: ActionTile(
+                                  icon: Icons.movie_creation_outlined,
+                                  label: 'Trailer',
+                                  semanticLabel: 'Watch the trailer on YouTube',
+                                  onPressed: () => unawaited(
+                                    launchUrl(
+                                      Uri.https('www.youtube.com', '/watch', {
+                                        'v': meta.trailerYouTubeIds.first,
+                                      }),
+                                      mode: LaunchMode.externalApplication,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          Expanded(
-                            child: ActionTile(
-                              icon: Icons.tune_rounded,
-                              label: 'Choose another version',
-                              semanticLabel: 'Choose another version',
-                              onPressed: next == null
-                                  ? null
-                                  : () => showVersionsSheet(
-                                      context,
-                                      video: t.video(next.episode),
-                                      subtitle: subtitle,
-                                      onPick: (r) => openPlayer(
+                            Expanded(
+                              child: ActionTile(
+                                icon: Icons.tune_rounded,
+                                label: 'Versions',
+                                semanticLabel: 'Choose another version',
+                                onPressed: next == null
+                                    ? null
+                                    : () => showVersionsSheet(
                                         context,
-                                        primary.copyWith(
-                                          candidateId: r.candidateId,
+                                        video: t.video(next.episode),
+                                        subtitle: subtitle,
+                                        onPick: (r) => openPlayer(
+                                          context,
+                                          primary.copyWith(
+                                            candidateId: r.candidateId,
+                                          ),
                                         ),
+                                        onDownload: (r) async {
+                                          await startDownload(
+                                            context,
+                                            ref,
+                                            primary.copyWith(
+                                              candidateId: r.candidateId,
+                                            ),
+                                          );
+                                          if (context.mounted) {
+                                            showNote(
+                                              context,
+                                              'Downloading ${releaseQuality(r)}. '
+                                              'See it in Downloads.',
+                                            );
+                                          }
+                                        },
                                       ),
-                                    ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: KSpace.section),
-                    if (meta.description?.trim().isNotEmpty ?? false)
-                      ExpandableText(
-                        meta.description!.trim(),
-                        style: KType.body,
-                      ),
-                    _Credits(meta: meta),
-                  ],
-                ),
-              ),
-            ),
-            if (t.isSeries) ...[
-              SliverPadding(
-                padding: const EdgeInsets.only(
-                  top: KSpace.section,
-                  bottom: KSpace.x1,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: SeasonPicker(
-                    seasons: t.seasons,
-                    selected: season,
-                    onSelect: (s) => setState(() => _season = s),
+                      const SizedBox(height: KSpace.section),
+                      if (meta.description?.trim().isNotEmpty ?? false)
+                        ExpandableText(
+                          meta.description!.trim(),
+                          style: KType.body,
+                        ),
+                      _Credits(meta: meta),
+                    ],
                   ),
                 ),
               ),
-              SliverList.builder(
-                itemCount: episodes.length,
-                itemBuilder: (_, i) => EpisodeRow(
-                  key: ValueKey(episodes[i].id),
-                  model: t,
-                  episode: episodes[i],
-                  now: _now,
+              if (t.isSeries) ...[
+                SliverPadding(
+                  padding: const EdgeInsets.only(
+                    top: KSpace.section,
+                    bottom: KSpace.x1,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SeasonPicker(
+                            seasons: t.seasons,
+                            selected: season,
+                            onSelect: (s) => setState(() => _season = s),
+                          ),
+                        ),
+                        _SeasonMenu(
+                          season: season,
+                          onDownload: () =>
+                              unawaited(_downloadSeason(season, episodes)),
+                        ),
+                        const SizedBox(width: KSpace.margin - 12),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverList.builder(
+                  itemCount: episodes.length,
+                  itemBuilder: (_, i) => EpisodeRow(
+                    key: ValueKey(episodes[i].id),
+                    model: t,
+                    episode: episodes[i],
+                    now: _now,
+                  ),
+                ),
+              ],
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.paddingOf(context).bottom + KSpace.section,
                 ),
               ),
             ],
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: MediaQuery.paddingOf(context).bottom + KSpace.section,
-              ),
-            ),
-          ],
+          ),
         ),
-        // Fixed: scrolled content fades under the status bar and Back.
-        const TopShade(),
-        const _BackButton(),
+        _Header(title: meta.name, scrolled: _scrolled),
       ],
     );
   }
 }
 
+/// "⋯" after the season picker: actions for the whole season.
+class _SeasonMenu extends StatelessWidget {
+  const _SeasonMenu({required this.season, required this.onDownload});
+
+  final int season;
+  final VoidCallback onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = season == 0 ? 'the specials' : 'season $season';
+    return Semantics(
+      button: true,
+      label: 'More for ${season == 0 ? 'Specials' : 'Season $season'}',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => showGlassSheet<void>(
+          context,
+          builder: (sheet) => SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SheetAction(
+                  icon: Icons.download_rounded,
+                  label: 'Download $name',
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    onDownload();
+                  },
+                ),
+                const SizedBox(height: KSpace.x2),
+              ],
+            ),
+          ),
+        ),
+        child: const SizedBox.square(
+          dimension: 48,
+          child: Icon(Icons.more_horiz_rounded, color: KColors.haze),
+        ),
+      ),
+    );
+  }
+}
+
+/// Back and Cast float over the backdrop; past it, a glass strip with the
+/// title fades in behind them (instantly with reduced motion).
+class _Header extends StatelessWidget {
+  const _Header({required this.title, required this.scrolled});
+
+  final String title;
+  final bool scrolled;
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final fade = reduce ? Duration.zero : KMotion.base;
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: Stack(
+        children: [
+          const TopShade(),
+          IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: scrolled ? 1 : 0,
+              duration: fade,
+              curve: KMotion.curve,
+              child: Column(
+                children: [
+                  // Content scrolling under the strip fades to near black.
+                  SizedBox(
+                    height: top + 56 + 32,
+                    width: double.infinity,
+                    child: const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: [0, 0.7, 1],
+                          colors: [
+                            Color(0xE6000000),
+                            Color(0xE6000000),
+                            Color(0x00000000),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: scrolled ? 1 : 0,
+              duration: fade,
+              curve: KMotion.curve,
+              child: GlassGroup(
+                child: Glass(
+                  radius: 0,
+                  tintStrength: 0.10,
+                  child: SizedBox(height: top + 56, width: double.infinity),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              KSpace.margin,
+              top + KSpace.x1,
+              KSpace.margin,
+              0,
+            ),
+            child: GlassGroup(
+              child: Row(
+                children: [
+                  const _BackButton(),
+                  const SizedBox(width: KSpace.x3),
+                  Expanded(
+                    child: ExcludeSemantics(
+                      child: AnimatedOpacity(
+                        opacity: scrolled ? 1 : 0,
+                        duration: fade,
+                        curve: KMotion.curve,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textDirection: contentDir(title),
+                          style: KType.h2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: KSpace.x3),
+                  const CastButton(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Hero extends StatelessWidget {
-  const _Hero({required this.meta});
+  const _Hero({required this.meta, required this.isMovie});
 
   final MetaDetail meta;
+
+  /// A movie's backdrop grows into the player; a show's episode stills do.
+  final bool isMovie;
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final genres = meta.genres.take(4).join(', ');
+    final art = Artwork(
+      url: meta.background ?? meta.poster,
+      memCacheWidth: decodeWidth(context, width),
+    );
     return SizedBox(
       height: _heroHeight(context),
       child: Stack(
         fit: StackFit.expand,
         children: [
           _Parallax(
-            child: Artwork(
-              url: meta.background ?? meta.poster,
-              memCacheWidth: decodeWidth(context, width),
-            ),
+            child: isMovie ? ArtHero(videoId: meta.id, child: art) : art,
           ),
           const LegibilityScrim(stops: [0.3, 1]),
           Positioned(
@@ -382,14 +618,10 @@ class _BackButton extends StatelessWidget {
   const _BackButton();
 
   @override
-  Widget build(BuildContext context) => Positioned(
-    top: MediaQuery.paddingOf(context).top + KSpace.x1,
-    left: KSpace.x3,
-    child: GlassIconButton(
-      icon: Icons.chevron_left_rounded,
-      label: 'Back',
-      onPressed: () => context.canPop() ? context.pop() : context.go('/'),
-    ),
+  Widget build(BuildContext context) => GlassIconButton(
+    icon: Icons.chevron_left_rounded,
+    label: 'Back',
+    onPressed: () => context.canPop() ? context.pop() : context.go('/'),
   );
 }
 
@@ -402,7 +634,11 @@ class _Bare extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     children: [
       Positioned.fill(child: child),
-      const _BackButton(),
+      Positioned(
+        top: MediaQuery.paddingOf(context).top + KSpace.x1,
+        left: KSpace.margin,
+        child: const GlassGroup(child: _BackButton()),
+      ),
     ],
   );
 }

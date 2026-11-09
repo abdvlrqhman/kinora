@@ -1,16 +1,21 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:stremio/stremio.dart';
 
 import '../../app/router.dart';
 import '../../core/db/database.dart';
+import '../../core/format.dart';
 import '../../services/downloads.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
 import '../../services/resolver.dart';
+import '../downloads/download_prompts.dart';
 import '../../ui/glass.dart';
+import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 
 /// Adds or removes a title from My list (+ / ✓).
@@ -72,6 +77,7 @@ class ActionTile extends StatelessWidget {
           label,
           textAlign: TextAlign.center,
           maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: KType.small.copyWith(color: color),
         ),
       ),
@@ -99,8 +105,12 @@ class MyListAction extends ConsumerWidget {
   }
 }
 
-/// How a download control looks for one video's download row.
-({IconData icon, String label, Color color}) downloadLook(DownloadRow? row) {
+/// How a download control looks for one video's download row. [what]
+/// names the video on the idle label ("Download E3").
+({IconData icon, String label, Color color}) downloadLook(
+  DownloadRow? row, {
+  String? what,
+}) {
   switch (row?.state) {
     case 'completed':
       return (
@@ -123,6 +133,12 @@ class MyListAction extends ConsumerWidget {
         label: 'Queued',
         color: KColors.lamp,
       );
+    case 'paused' when row!.error == waitingForWifi:
+      return (
+        icon: Icons.wifi_rounded,
+        label: waitingForWifi,
+        color: KColors.marquee,
+      );
     case 'paused':
       return (icon: Icons.pause_rounded, label: 'Paused', color: KColors.haze);
     case 'failed':
@@ -134,13 +150,14 @@ class MyListAction extends ConsumerWidget {
     default:
       return (
         icon: Icons.download_rounded,
-        label: 'Download',
+        label: what == null ? 'Download' : 'Download $what',
         color: KColors.lamp,
       );
   }
 }
 
-/// Starts, pauses or resumes; a finished download plays offline.
+/// Starts, pauses or resumes; a finished download plays offline. A row
+/// waiting for Wi-Fi asks before using mobile data.
 void onDownloadTap(
   BuildContext context,
   WidgetRef ref,
@@ -153,10 +170,12 @@ void onDownloadTap(
       openPlayer(context, request.copyWith(localFile: row!.filePath));
     case 'downloading' || 'queued':
       unawaited(actions.pause(row!.id));
+    case 'paused' when row!.error == waitingForWifi:
+      unawaited(showWifiWaitSheet(context, ref, row));
     case 'paused':
       unawaited(actions.resume(row!.id));
     default:
-      unawaited(actions.download(request));
+      unawaited(startDownload(context, ref, request));
   }
 }
 
@@ -171,7 +190,11 @@ class DownloadAction extends ConsumerWidget {
     final row = ref.watch(
       downloadForVideoProvider(request.videoId).select((a) => a.value),
     );
-    final look = downloadLook(row);
+    // "Download E3": a show's page says which episode it means.
+    final look = downloadLook(
+      row,
+      what: request.isEpisode ? 'E${request.episode}' : null,
+    );
     final what = request.isEpisode ? ' ${request.label}' : '';
     return ActionTile(
       icon: look.icon,
@@ -183,11 +206,29 @@ class DownloadAction extends ConsumerWidget {
   }
 }
 
-/// One calm line under Play naming the version it will use.
+/// "30m left" of a video being resumed, from its saved progress.
+String? timeLeftLabel(WidgetRef ref, String mediaId, String videoId) {
+  final p = ref.watch(
+    mediaProgressProvider(mediaId).select((a) => a.value?[videoId]),
+  );
+  if (p == null || p.durationMs <= 0) return null;
+  final left = Duration(milliseconds: math.max(0, p.durationMs - p.positionMs));
+  return '${Fmt.duration(left)} left';
+}
+
+/// One calm line under Play naming the version it will use, plus [extra]
+/// ("30m left") in Haze. With no stream source it offers to add one.
 class ReleaseLine extends ConsumerWidget {
-  const ReleaseLine({super.key, required this.video});
+  const ReleaseLine({
+    super.key,
+    required this.video,
+    this.maxLines = 2,
+    this.extra,
+  });
 
   final VideoRef video;
+  final int maxLines;
+  final String? extra;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -221,10 +262,49 @@ class ReleaseLine extends ConsumerWidget {
             ),
             if (best.reasons.isNotEmpty)
               TextSpan(text: '   ${best.reasons.first}', style: quiet),
+            // Kept whole ("30m left") when the line wraps.
+            if (extra != null)
+              TextSpan(
+                text: '   ${extra!.replaceAll(' ', '\u00A0')}',
+                style: KType.tabular(quiet),
+              ),
           ],
         ),
-        maxLines: 2,
+        maxLines: maxLines,
         overflow: TextOverflow.ellipsis,
+      );
+    } else if (result.value case final r? when r.noStreamSource) {
+      line = Wrap(
+        spacing: KSpace.x3,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            r.message ?? 'Add a source that provides streams.',
+            style: quiet,
+          ),
+          Semantics(
+            button: true,
+            label: 'Add a source',
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => context.go('/settings/sources'),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Align(
+                  widthFactor: 1,
+                  child: Text(
+                    'Add a source',
+                    style: KType.label.copyWith(
+                      color: KinoraTint.of(context),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     } else {
       final text = switch (result) {
@@ -233,7 +313,12 @@ class ReleaseLine extends ConsumerWidget {
         AsyncError() => 'Couldn’t check versions right now.',
         _ => 'Finding the best version…',
       };
-      line = Text(text, style: quiet, maxLines: 2);
+      line = Text(
+        text,
+        style: quiet,
+        maxLines: maxLines,
+        overflow: TextOverflow.ellipsis,
+      );
     }
     return Semantics(liveRegion: true, child: line);
   }

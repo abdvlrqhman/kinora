@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -5,19 +7,22 @@ import 'package:media_kit/media_kit.dart';
 import '../../../app/providers.dart';
 import '../../../core/settings.dart';
 import '../../../ui/tokens.dart';
-
-final _rtl = RegExp(r'[֐-ࣿיִ-﷿ﹰ-﻿]');
+import '../../../ui/widgets/media.dart';
 
 /// Renders the current subtitle lines with the user's style. Kinora draws
 /// subtitles itself (not libass) so every script, including Arabic and
 /// Hebrew, uses the system's fonts and bidi shaping.
 class SubtitleOverlay extends ConsumerWidget {
-  const SubtitleOverlay({super.key, required this.player, required this.lift});
+  const SubtitleOverlay({
+    super.key,
+    required this.player,
+    required this.clearance,
+  });
 
   final Player player;
 
-  /// Extra bottom space while controls are visible.
-  final double lift;
+  /// Space the controls take at the bottom while visible; lines stay above.
+  final double clearance;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,11 +44,15 @@ class SubtitleOverlay extends ConsumerWidget {
               padding: EdgeInsets.only(
                 left: c.maxWidth * 0.08,
                 right: c.maxWidth * 0.08,
-                bottom: c.maxHeight * style.bottomMargin + lift,
+                bottom: math.max(c.maxHeight * style.bottomMargin, clearance),
               ),
               child: Align(
                 alignment: Alignment.bottomCenter,
-                child: _Lines(lines: lines, style: style, fontSize: size),
+                // The style sets the size (as in its preview), not the
+                // system text size.
+                child: MediaQuery.withNoTextScaling(
+                  child: _Lines(lines: lines, style: style, fontSize: size),
+                ),
               ),
             );
           },
@@ -66,8 +75,6 @@ class _Lines extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = lines.join('\n');
-    final dir = _rtl.hasMatch(text) ? TextDirection.rtl : TextDirection.ltr;
     final base = TextStyle(
       fontFamily: KType.text,
       fontSize: fontSize,
@@ -79,30 +86,40 @@ class _Lines extends StatelessWidget {
           ? const [Shadow(blurRadius: 4, color: Color(0xCC000000))]
           : null,
     );
-    Widget label = Stack(
-      children: [
-        if (style.outline)
+    // One Text per line, each with its own direction: an English line under
+    // an Arabic one stays left to right.
+    Widget line(String text) {
+      final dir = contentDir(text);
+      return Stack(
+        children: [
+          if (style.outline)
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              textDirection: dir,
+              style: base.copyWith(
+                color: null,
+                shadows: const [],
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = fontSize * 0.14
+                  ..strokeJoin = StrokeJoin.round
+                  ..color = const Color(0xE6000000),
+              ),
+            ),
           Text(
             text,
             textAlign: TextAlign.center,
             textDirection: dir,
-            style: base.copyWith(
-              color: null,
-              shadows: const [],
-              foreground: Paint()
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = fontSize * 0.14
-                ..strokeJoin = StrokeJoin.round
-                ..color = const Color(0xE6000000),
-            ),
+            style: base,
           ),
-        Text(
-          text,
-          textAlign: TextAlign.center,
-          textDirection: dir,
-          style: base,
-        ),
-      ],
+        ],
+      );
+    }
+
+    Widget label = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [for (final l in lines) line(l)],
     );
     if (style.backgroundOpacity > 0) {
       label = DecoratedBox(
@@ -121,7 +138,7 @@ class _Lines extends StatelessWidget {
     }
     return Semantics(
       liveRegion: true,
-      label: text,
+      label: lines.join('\n'),
       child: ExcludeSemantics(child: label),
     );
   }

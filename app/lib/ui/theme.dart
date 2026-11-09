@@ -66,18 +66,22 @@ ThemeData kinoraTheme() {
     ),
     sliderTheme: SliderThemeData(
       trackHeight: 3,
+      tickMarkShape: SliderTickMarkShape.noTickMark,
       inactiveTrackColor: KColors.lamp.withValues(alpha: 0.18),
       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
       overlayShape: SliderComponentShape.noOverlay,
     ),
+    // On: Lamp thumb on the accent (Marquee here; SwitchRow passes the
+    // title's Spill). Go stays reserved for ready and downloaded.
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
-        (s) =>
-            s.contains(WidgetState.selected) ? KColors.blackout : KColors.haze,
+        (s) => s.contains(WidgetState.selected) ? KColors.lamp : KColors.haze,
       ),
       trackColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? KColors.go : KColors.seat,
+        (s) =>
+            s.contains(WidgetState.selected) ? KColors.marquee : KColors.seat,
       ),
+      trackOutlineColor: const WidgetStatePropertyAll(Color(0x00000000)),
     ),
   );
 }

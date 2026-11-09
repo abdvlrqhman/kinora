@@ -2,8 +2,11 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/core/db/database.dart';
+import 'package:kinora/features/title/episodes.dart';
 import 'package:kinora/features/title/title_model.dart';
 import 'package:kinora/features/title/title_screen.dart';
+import 'package:kinora/services/downloads.dart';
+import 'package:kinora/services/play_request.dart';
 import 'package:kinora/services/resolver.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:kinora/ui/glass.dart';
@@ -48,7 +51,8 @@ void main() {
   group('movie', () {
     testScreen('plays and names the version it will use', (tester) async {
       final nav = await pumpTitle(tester, testDb(), isMovie: true);
-      expect(find.text('The Long Light'), findsOneWidget);
+      // The backdrop's title, and the header strip's (shown once scrolled).
+      expect(find.text('The Long Light'), findsNWidgets(2));
       expect(find.text('2h 10m'), findsOneWidget);
       expect(find.text('Drama, Mystery'), findsOneWidget);
       expect(find.textContaining('1080p WEB-DL, 214 seeds'), findsOneWidget);
@@ -152,41 +156,46 @@ void main() {
       expect(find.textContaining('North Wind'), findsOneWidget);
     });
 
-    testScreen('switches seasons, dims unaired episodes, lists specials last', (
-      tester,
-    ) async {
-      final nav = await pumpTitle(tester, testDb());
-      expect(find.textContaining('Low Tide'), findsOneWidget);
-      expect(find.bySemanticsLabel('Season 1'), findsOneWidget);
+    testScreen(
+      'switches seasons, dates unaired episodes, lists specials last',
+      (tester) async {
+        final nav = await pumpTitle(tester, testDb());
+        expect(find.textContaining('Low Tide'), findsOneWidget);
+        expect(find.bySemanticsLabel('Season 1'), findsOneWidget);
 
-      await tester.tap(find.bySemanticsLabel('Season 2'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('North Wind'), findsOneWidget);
-      expect(find.textContaining('Low Tide'), findsNothing);
-      expect(find.textContaining('Airs '), findsOneWidget);
-      expect(
-        find.ancestor(
-          of: find.textContaining('Open Water'),
-          matching: find.byType(Opacity),
-        ),
-        findsOneWidget,
-      );
+        await tester.tap(find.bySemanticsLabel('Season 2'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('North Wind'), findsOneWidget);
+        expect(find.textContaining('Low Tide'), findsNothing);
+        // Unaired: full contrast, says when it airs, and doesn't play.
+        expect(find.textContaining('Airs '), findsOneWidget);
+        expect(
+          find.ancestor(
+            of: find.textContaining('Open Water'),
+            matching: find.byType(Opacity),
+          ),
+          findsNothing,
+        );
 
-      await tester.ensureVisible(find.bySemanticsLabel('Specials'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.bySemanticsLabel('Specials'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Behind the lights'), findsOneWidget);
+        // Past the end of the picker's row (it shares it with the ⋯ menu).
+        await tester.ensureVisible(find.text('Specials'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsLabel('Specials'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Behind the lights'), findsOneWidget);
 
-      // Tapping an episode plays it.
-      await tester.ensureVisible(find.bySemanticsLabel('Season 1'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.bySemanticsLabel('Season 1'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.bySemanticsLabel(RegExp('^Episode 2, The Keeper')));
-      await tester.pumpAndSettle();
-      expect(nav.played.last.videoId, 'tt200:1:2');
-    });
+        // Tapping an episode plays it.
+        await tester.drag(find.byType(SeasonPicker), const Offset(400, 0));
+        await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsLabel('Season 1'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.bySemanticsLabel(RegExp('^Episode 2, The Keeper')),
+        );
+        await tester.pumpAndSettle();
+        expect(nav.played.last.videoId, 'tt200:1:2');
+      },
+    );
 
     testScreen('marks watched and downloaded episodes', (tester) async {
       final db = testDb();
@@ -225,8 +234,10 @@ void main() {
         find.bySemanticsLabel(RegExp(r'^Episode 2, The Keeper.*Downloaded')),
         findsOneWidget,
       );
-      // Next up is E2, so the Download action says so too.
-      expect(find.text('Downloaded'), findsNWidgets(2));
+      // Next up is E2: the Download action says Downloaded; the row's
+      // trailing icon alone marks it.
+      expect(find.text('Downloaded'), findsOneWidget);
+      expect(find.byIcon(Icons.download_done_rounded), findsNWidgets(2));
     });
 
     testScreen('picks another version from the sheet', (tester) async {
@@ -234,16 +245,20 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Choose another version'));
       await tester.pumpAndSettle();
 
-      expect(find.text('4K Dolby Vision WEB, cached'), findsOneWidget);
-      expect(find.text('720p HDTV, 41 seeds'), findsOneWidget);
+      // Quality and source only; seeds sit in the facts, and Instant is the
+      // one word for cached.
+      expect(find.text('4K Dolby Vision WEB'), findsOneWidget);
+      expect(find.text('720p HDTV'), findsOneWidget);
+      expect(find.text('41 seeds'), findsOneWidget);
       expect(find.text('Instant'), findsWidgets);
+      expect(find.text('Starts instantly'), findsNothing);
       expect(find.text('Best'), findsOneWidget);
       expect(find.textContaining('Few seeds'), findsOneWidget);
       expect(find.text('2 GB'), findsOneWidget);
 
       await tester.tap(find.bySemanticsLabel('4K, 1 versions'));
       await tester.pumpAndSettle();
-      expect(find.text('720p HDTV, 41 seeds'), findsNothing);
+      expect(find.text('720p HDTV'), findsNothing);
 
       await tester.tap(find.bySemanticsLabel(RegExp('^4K Dolby Vision')));
       await tester.pumpAndSettle();
@@ -303,4 +318,55 @@ void main() {
       expect(model.seasons, [1, 2, 3, 0]);
     });
   });
+
+  testScreen('downloads a chosen version, or the whole season', (tester) async {
+    final actions = _Downloads();
+    final db = testDb();
+    await pumpScreen(
+      tester,
+      const TitleScreen(type: 'series', id: 'tt200'),
+      db: db,
+      size: const Size(390, 1400),
+      overrides: [
+        ...withSource(),
+        metaProvider.overrideWith((ref, key) async => series),
+        resolveWith(fakeReleases),
+        downloadActionsProvider.overrideWithValue(actions),
+      ],
+    );
+    await tester.pumpAndSettle();
+    // "Versions" on screen; the full phrase for screen readers.
+    expect(find.text('Versions'), findsOneWidget);
+    expect(find.text('Download E1'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Choose another version'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Download this version, 720p HDTV'));
+    await tester.pumpAndSettle();
+    expect(actions.requests.single.candidateId, 'c3');
+    expect(find.textContaining('Downloading 720p HDTV'), findsOneWidget);
+
+    await tester.ensureVisible(find.bySemanticsLabel('More for Season 1'));
+    await tester.tap(find.bySemanticsLabel('More for Season 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download season 1'));
+    await tester.pumpAndSettle();
+    expect(
+      [for (final r in actions.requests.skip(1)) r.videoId],
+      ['tt200:1:1', 'tt200:1:2', 'tt200:1:3', 'tt200:1:4'],
+    );
+  });
+}
+
+final class _Downloads implements DownloadActions {
+  final requests = <PlayRequest>[];
+
+  @override
+  Future<void> download(PlayRequest request) async => requests.add(request);
+  @override
+  Future<void> pause(String downloadId) async {}
+  @override
+  Future<void> resume(String downloadId) async {}
+  @override
+  Future<void> remove(String downloadId) async {}
 }

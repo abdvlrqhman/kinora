@@ -10,6 +10,7 @@ import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/title/title_screen.dart';
 import '../services/play_request.dart';
+import '../ui/tokens.dart';
 import 'providers.dart';
 import 'shell.dart';
 
@@ -70,12 +71,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/player',
         parentNavigatorKey: _rootKey,
-        pageBuilder: (_, state) => CustomTransitionPage(
-          key: state.pageKey,
-          child: PlayerScreen(request: state.extra! as PlayRequest),
-          transitionsBuilder: (_, animation, _, child) =>
-              FadeTransition(opacity: animation, child: child),
-        ),
+        // The artwork you tapped grows into the player (see artHeroTag);
+        // with reduced motion it's an instant cut.
+        pageBuilder: (context, state) {
+          final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+          return CustomTransitionPage(
+            key: state.pageKey,
+            transitionDuration: reduce ? Duration.zero : KMotion.slow,
+            reverseTransitionDuration: reduce ? Duration.zero : KMotion.base,
+            child: PlayerScreen(request: state.extra! as PlayRequest),
+            transitionsBuilder: (_, animation, _, child) => FadeTransition(
+              opacity: CurvedAnimation(
+                parent: animation,
+                curve: KMotion.emphasized,
+              ),
+              child: child,
+            ),
+          );
+        },
       ),
     ],
   );

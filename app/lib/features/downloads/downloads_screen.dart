@@ -20,6 +20,7 @@ import '../../ui/widgets/sheet.dart';
 import '../../ui/widgets/states.dart';
 import '../settings/languages.dart';
 import '../settings/widgets/settings_ui.dart';
+import 'download_prompts.dart';
 import 'storage.dart';
 
 /// Bytes a download takes on the phone right now.
@@ -74,7 +75,20 @@ typedef DownloadStatus = ({
   double? progress,
 });
 
-DownloadStatus downloadStatus(DownloadRow r) {
+/// "about 6 min left" for a download moving at [bytesPerSecond].
+String? etaLabel(int bytesLeft, double? bytesPerSecond) {
+  if (bytesPerSecond == null || bytesPerSecond <= 0 || bytesLeft <= 0) {
+    return null;
+  }
+  final minutes = (bytesLeft / bytesPerSecond / 60).round();
+  if (minutes < 1) return 'less than a minute left';
+  if (minutes < 60) return 'about $minutes min left';
+  return 'about ${Fmt.duration(Duration(minutes: minutes))} left';
+}
+
+/// [rate] is the measured speed (bytes/s) of a moving download, for its
+/// time left.
+DownloadStatus downloadStatus(DownloadRow r, {double? rate}) {
   final pct = r.totalBytes > 0
       ? (r.doneBytes / r.totalBytes).clamp(0.0, 1.0)
       : null;
@@ -92,7 +106,7 @@ DownloadStatus downloadStatus(DownloadRow r) {
     ),
     'downloading' when pct != null => (
       strong: 'Downloading ${(pct * 100).floor()}%',
-      soft: sizes,
+      soft: [?sizes, ?etaLabel(r.totalBytes - r.doneBytes, rate)].join('  '),
       color: KColors.lamp,
       progress: pct,
     ),
@@ -102,8 +116,8 @@ DownloadStatus downloadStatus(DownloadRow r) {
       color: KColors.lamp,
       progress: null,
     ),
-    'paused' when r.error == 'Waiting for Wi-Fi' => (
-      strong: 'Waiting for Wi-Fi',
+    'paused' when r.error == waitingForWifi => (
+      strong: waitingForWifi,
       soft: sizes,
       color: KColors.marquee,
       progress: null,
@@ -144,6 +158,9 @@ List<String> savedSubtitleLanguages(DownloadRow r) {
   }
 }
 
+bool _waiting(DownloadRow r) =>
+    r.state == 'paused' && r.error == waitingForWifi;
+
 String _episodeLabel(DownloadRow r) => r.season != null && r.episode != null
     ? Fmt.episode(r.season!, r.episode!)
     : r.title;
@@ -162,6 +179,37 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   final _open = <String>{};
+
+  /// Last size and measured speed of each moving download, for time left.
+  // shortcut: measured from row updates here; a rate column or getter on
+  // the downloads service would be steadier.
+  final _speeds = <String, ({int bytes, DateTime at, double? rate})>{};
+
+  double? _rate(DownloadRow r) {
+    if (r.state != 'downloading') {
+      _speeds.remove(r.id);
+      return null;
+    }
+    final now = DateTime.now();
+    final prev = _speeds[r.id];
+    if (prev == null || r.doneBytes < prev.bytes) {
+      _speeds[r.id] = (bytes: r.doneBytes, at: now, rate: null);
+      return null;
+    }
+    final secs = now.difference(prev.at).inMilliseconds / 1000;
+    if (r.doneBytes == prev.bytes) return secs > 15 ? null : prev.rate;
+    if (secs <= 0) return prev.rate;
+    final sample = (r.doneBytes - prev.bytes) / secs;
+    final rate = prev.rate == null ? sample : prev.rate! * 0.7 + sample * 0.3;
+    _speeds[r.id] = (bytes: r.doneBytes, at: now, rate: rate);
+    return rate;
+  }
+
+  void _tap(DownloadRow r) => r.state == 'completed'
+      ? _play(r)
+      : _waiting(r)
+      ? unawaited(showWifiWaitSheet(context, ref, r))
+      : unawaited(_menu(r));
 
   DownloadActions get _actions => ref.read(downloadActionsProvider);
 
@@ -246,6 +294,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                 label: switch (r.state) {
                   'downloading' || 'queued' => 'Pause download',
                   'failed' => 'Try again',
+                  _ when _waiting(r) => 'Download on mobile data',
                   _ => 'Resume download',
                 },
                 onTap: () => Navigator.pop(sheet, 'toggle'),
@@ -302,54 +351,80 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     }
     final groups = groupDownloads(rows);
     final used = groups.fold(0, (a, g) => a + g.bytes);
+    final free = ref.watch(freeSpaceProvider).value;
+    // One flat, lazily built list: an open show with hundreds of episodes
+    // only builds the rows on screen.
+    final items = <Widget Function()>[
+      () => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
+        child: Semantics(
+          header: true,
+          child: Text('Downloads', style: KType.h1),
+        ),
+      ),
+      () => _Summary(used: used, free: free),
+    ];
+    Widget row(DownloadRow r) => _EpisodeRow(
+      row: r,
+      rate: _rate(r),
+      onTap: () => _tap(r),
+      onMenu: () => unawaited(_menu(r)),
+      onToggle: () => _waiting(r)
+          ? unawaited(showWifiWaitSheet(context, ref, r))
+          : unawaited(_toggle(r)),
+    );
+    for (final g in groups) {
+      final first = g.first;
+      if (!g.isShow) {
+        items.add(
+          () => _MovieRow(
+            row: first,
+            rate: _rate(first),
+            onTap: () => _tap(first),
+            onMenu: () => unawaited(_menu(first)),
+            onToggle: () => _waiting(first)
+                ? unawaited(showWifiWaitSheet(context, ref, first))
+                : unawaited(_toggle(first)),
+          ),
+        );
+        continue;
+      }
+      final open = _open.contains(first.mediaId);
+      items.add(
+        () => _ShowHeader(
+          group: g,
+          open: open,
+          onToggleOpen: () => setState(() {
+            if (!_open.remove(first.mediaId)) _open.add(first.mediaId);
+          }),
+          onDeleteShow: () =>
+              unawaited(_delete(g.rows, 'all of ${first.title}')),
+        ),
+      );
+      if (!open) continue;
+      for (final MapEntry(key: season, value: list) in g.seasons.entries) {
+        items.add(
+          () => _SeasonHeader(
+            title: first.title,
+            season: season,
+            rows: list,
+            onDelete: () =>
+                unawaited(_delete(list, 'season $season of ${first.title}')),
+          ),
+        );
+        for (final r in list) {
+          items.add(() => row(r));
+        }
+      }
+    }
     return Scaffold(
-      body: ListView(
+      body: ListView.builder(
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + KSpace.x4,
           bottom: AppShell.bottomInset(context),
         ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
-            child: Semantics(
-              header: true,
-              child: Text('Downloads', style: KType.h1),
-            ),
-          ),
-          _Summary(used: used, free: ref.watch(freeSpaceProvider).value),
-          for (final g in groups)
-            if (g.isShow)
-              _ShowGroup(
-                group: g,
-                open: _open.contains(g.first.mediaId),
-                onToggleOpen: () => setState(() {
-                  if (!_open.remove(g.first.mediaId)) {
-                    _open.add(g.first.mediaId);
-                  }
-                }),
-                episode: (r) => _EpisodeRow(
-                  row: r,
-                  onTap: () =>
-                      r.state == 'completed' ? _play(r) : unawaited(_menu(r)),
-                  onMenu: () => unawaited(_menu(r)),
-                  onToggle: () => unawaited(_toggle(r)),
-                ),
-                onDeleteSeason: (season, rows) => unawaited(
-                  _delete(rows, 'season $season of ${g.first.title}'),
-                ),
-                onDeleteShow: () =>
-                    unawaited(_delete(g.rows, 'all of ${g.first.title}')),
-              )
-            else
-              _MovieRow(
-                row: g.first,
-                onTap: () => g.first.state == 'completed'
-                    ? _play(g.first)
-                    : unawaited(_menu(g.first)),
-                onMenu: () => unawaited(_menu(g.first)),
-                onToggle: () => unawaited(_toggle(g.first)),
-              ),
-        ],
+        itemCount: items.length,
+        itemBuilder: (_, i) => items[i](),
       ),
     );
   }
@@ -407,7 +482,11 @@ class _Summary extends StatelessWidget {
             ),
             if (free != null && used + free! > 0) ...[
               const SizedBox(height: KSpace.x2),
-              ProgressLine(fraction: used / (used + free!)),
+              ProgressLine(
+                fraction: used / (used + free!),
+                height: 4,
+                trackAlpha: 0.16,
+              ),
             ],
           ],
         ),
@@ -417,13 +496,14 @@ class _Summary extends StatelessWidget {
 }
 
 class _Status extends StatelessWidget {
-  const _Status({required this.row});
+  const _Status({required this.row, this.rate});
 
   final DownloadRow row;
+  final double? rate;
 
   @override
   Widget build(BuildContext context) {
-    final s = downloadStatus(row);
+    final s = downloadStatus(row, rate: rate);
     final subs = savedSubtitleLanguages(row);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,7 +520,7 @@ class _Status extends StatelessWidget {
                 ),
               ),
             ),
-            if (s.soft != null)
+            if (s.soft?.isNotEmpty ?? false)
               Text(
                 s.soft!,
                 style: KType.tabular(
@@ -465,12 +545,12 @@ class _Status extends StatelessWidget {
 }
 
 /// "Downloaded 2.6 GB. Subtitles in Arabic."
-String _statusSpoken(DownloadRow r) {
-  final s = downloadStatus(r);
+String _statusSpoken(DownloadRow r, {double? rate}) {
+  final s = downloadStatus(r, rate: rate);
   final subs = savedSubtitleLanguages(r);
   return [
     s.strong,
-    ?s.soft,
+    if (s.soft?.isNotEmpty ?? false) s.soft!,
     if (subs.isNotEmpty) 'Subtitles in ${subs.join(', ')}',
   ].join('. ');
 }
@@ -493,6 +573,12 @@ class _Trailing extends StatelessWidget {
       'completed' => (Icons.more_horiz_rounded, 'Options', onMenu),
       'downloading' || 'queued' => (Icons.pause_rounded, 'Pause', onToggle),
       'failed' => (Icons.refresh_rounded, 'Try again', onToggle),
+      // Waiting for Wi-Fi: asks before using mobile data.
+      _ when _waiting(row) => (
+        Icons.wifi_rounded,
+        'Download options',
+        onToggle,
+      ),
       _ => (Icons.download_rounded, 'Resume', onToggle),
     };
     return Semantics(
@@ -522,9 +608,11 @@ class _MovieRow extends StatelessWidget {
     required this.onTap,
     required this.onMenu,
     required this.onToggle,
+    this.rate,
   });
 
   final DownloadRow row;
+  final double? rate;
   final VoidCallback onTap;
   final VoidCallback onMenu;
   final VoidCallback onToggle;
@@ -541,7 +629,7 @@ class _MovieRow extends StatelessWidget {
       children: [
         Expanded(
           child: Pressable(
-            label: '${row.title}. ${_statusSpoken(row)}',
+            label: '${row.title}. ${_statusSpoken(row, rate: rate)}',
             hint: row.state == 'completed' ? 'Plays offline' : null,
             onTap: onTap,
             onLongPress: onMenu,
@@ -563,9 +651,13 @@ class _MovieRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(row.title, style: KType.title),
+                      Text(
+                        row.title,
+                        style: KType.title,
+                        textDirection: contentDir(row.title),
+                      ),
                       const SizedBox(height: KSpace.x1),
-                      _Status(row: row),
+                      _Status(row: row, rate: rate),
                     ],
                   ),
                 ),
@@ -585,9 +677,11 @@ class _EpisodeRow extends StatelessWidget {
     required this.onTap,
     required this.onMenu,
     required this.onToggle,
+    this.rate,
   });
 
   final DownloadRow row;
+  final double? rate;
   final VoidCallback onTap;
   final VoidCallback onMenu;
   final VoidCallback onToggle;
@@ -607,7 +701,11 @@ class _EpisodeRow extends StatelessWidget {
         children: [
           Expanded(
             child: Pressable(
-              label: [_spoken(row), ?name, _statusSpoken(row)].join('. '),
+              label: [
+                _spoken(row),
+                ?name,
+                _statusSpoken(row, rate: rate),
+              ].join('. '),
               hint: row.state == 'completed' ? 'Plays offline' : null,
               onTap: onTap,
               onLongPress: onMenu,
@@ -645,7 +743,7 @@ class _EpisodeRow extends StatelessWidget {
                               ),
                               if (name != null)
                                 TextSpan(
-                                  text: '  $name',
+                                  text: '  ${isolate(name)}',
                                   style: KType.label.copyWith(
                                     color: KColors.haze,
                                   ),
@@ -656,7 +754,7 @@ class _EpisodeRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: KSpace.x1),
-                        _Status(row: row),
+                        _Status(row: row, rate: rate),
                       ],
                     ),
                   ),
@@ -671,21 +769,19 @@ class _EpisodeRow extends StatelessWidget {
   }
 }
 
-class _ShowGroup extends StatelessWidget {
-  const _ShowGroup({
+/// A show's row: poster, name and a summary; tap opens its episodes, long
+/// press offers to delete the whole show.
+class _ShowHeader extends StatelessWidget {
+  const _ShowHeader({
     required this.group,
     required this.open,
     required this.onToggleOpen,
-    required this.episode,
-    required this.onDeleteSeason,
     required this.onDeleteShow,
   });
 
   final DownloadGroup group;
   final bool open;
   final VoidCallback onToggleOpen;
-  final Widget Function(DownloadRow) episode;
-  final void Function(int season, List<DownloadRow> rows) onDeleteSeason;
   final VoidCallback onDeleteShow;
 
   @override
@@ -700,98 +796,68 @@ class _ShowGroup extends StatelessWidget {
       Fmt.bytes(group.bytes),
       if (active > 0) '$active in progress',
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Pressable(
-          label: '${first.title}. ${summary.join(', ')}',
-          hint: open ? 'Hides episodes' : 'Shows episodes',
-          onTap: onToggleOpen,
-          onLongPress: onDeleteShow,
-          actions: {
-            const CustomSemanticsAction(label: 'Delete show'): onDeleteShow,
-          },
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              KSpace.margin,
-              KSpace.x2,
-              KSpace.x2,
-              KSpace.x2,
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 64,
-                  child: Artwork(
-                    url: first.poster,
-                    fallbackText: first.title,
-                    radius: KRadius.poster,
-                    aspectRatio: 2 / 3,
-                    memCacheWidth: decodeWidth(context, 64),
-                  ),
-                ),
-                const SizedBox(width: KSpace.x3),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(first.title, style: KType.title),
-                      const SizedBox(height: KSpace.x1),
-                      Wrap(
-                        spacing: KSpace.x3,
-                        children: [
-                          for (final s in summary) Text(s, style: soft),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: 48,
-                  child: AnimatedRotation(
-                    turns: open ? 0.5 : 0,
-                    duration: reduce ? Duration.zero : KMotion.base,
-                    curve: KMotion.curve,
-                    child: const Icon(
-                      Icons.expand_more_rounded,
-                      color: KColors.haze,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Pressable(
+      label: '${first.title}. ${summary.join(', ')}',
+      hint: open
+          ? 'Hides episodes. Long press to delete the show'
+          : 'Shows episodes. Long press to delete the show',
+      onTap: onToggleOpen,
+      onLongPress: onDeleteShow,
+      actions: {
+        const CustomSemanticsAction(label: 'Delete show'): onDeleteShow,
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          KSpace.margin,
+          KSpace.x2,
+          KSpace.x2,
+          KSpace.x2,
         ),
-        AnimatedSize(
-          duration: reduce ? Duration.zero : KMotion.base,
-          curve: KMotion.curve,
-          alignment: Alignment.topCenter,
-          child: !open
-              ? const SizedBox(width: double.infinity)
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final MapEntry(key: season, value: rows)
-                        in group.seasons.entries) ...[
-                      _SeasonHeader(
-                        title: first.title,
-                        season: season,
-                        rows: rows,
-                        onDelete: () => onDeleteSeason(season, rows),
-                      ),
-                      for (final r in rows) episode(r),
-                    ],
-                    ActionRow(
-                      icon: Icons.delete_outline_rounded,
-                      label: 'Delete show',
-                      detail: 'Removes every downloaded episode.',
-                      color: KColors.cut,
-                      onTap: onDeleteShow,
-                    ),
-                  ],
+        child: Row(
+          children: [
+            SizedBox(
+              width: 64,
+              child: Artwork(
+                url: first.poster,
+                fallbackText: first.title,
+                radius: KRadius.poster,
+                aspectRatio: 2 / 3,
+                memCacheWidth: decodeWidth(context, 64),
+              ),
+            ),
+            const SizedBox(width: KSpace.x3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    first.title,
+                    style: KType.title,
+                    textDirection: contentDir(first.title),
+                  ),
+                  const SizedBox(height: KSpace.x1),
+                  Wrap(
+                    spacing: KSpace.x3,
+                    children: [for (final s in summary) Text(s, style: soft)],
+                  ),
+                ],
+              ),
+            ),
+            SizedBox.square(
+              dimension: 48,
+              child: AnimatedRotation(
+                turns: open ? 0.5 : 0,
+                duration: reduce ? Duration.zero : KMotion.base,
+                curve: KMotion.curve,
+                child: const Icon(
+                  Icons.expand_more_rounded,
+                  color: KColors.haze,
                 ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

@@ -94,7 +94,34 @@ class _GlassButtonState extends State<GlassButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    final fg = enabled ? KColors.lamp : KColors.reel;
+    // The primary action is lit: a solid accent capsule with a dark label.
+    final lit = widget.prominent && enabled;
+    final fg = lit
+        ? KColors.blackout
+        : enabled
+        ? KColors.lamp
+        : KColors.reel;
+    const padding = EdgeInsets.symmetric(horizontal: 20, vertical: 13);
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      // Centers the label when the button is stretched full width.
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (widget.icon != null) ...[
+          Icon(widget.icon, size: 20, color: fg),
+          if (widget.label.isNotEmpty) const SizedBox(width: KSpace.x2),
+        ],
+        if (widget.label.isNotEmpty)
+          Text(
+            widget.label,
+            style: KType.title.copyWith(
+              color: fg,
+              fontWeight: lit ? FontWeight.w700 : null,
+              fontVariations: lit ? const [FontVariation.weight(700)] : null,
+            ),
+          ),
+      ],
+    );
     return Semantics(
       button: true,
       enabled: enabled,
@@ -117,29 +144,36 @@ class _GlassButtonState extends State<GlassButton> {
           curve: KMotion.curve,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-            child: Glass(
-              tintStrength: widget.prominent ? 0.42 : 0.14,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                // Centers the label when the button is stretched full width.
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (widget.icon != null) ...[
-                    Icon(widget.icon, size: 20, color: fg),
-                    if (widget.label.isNotEmpty)
-                      const SizedBox(width: KSpace.x2),
-                  ],
-                  if (widget.label.isNotEmpty)
-                    Text(widget.label, style: KType.title.copyWith(color: fg)),
-                ],
-              ),
-            ),
+            child: lit
+                ? LitCapsule(padding: padding, child: content)
+                : Glass(tintStrength: 0.14, padding: padding, child: content),
           ),
         ),
       ),
     );
   }
+}
+
+/// A solid capsule in the readable accent ([KinoraTint.lit]): the one
+/// projector-lit control on a screen. Put Blackout content on it.
+class LitCapsule extends StatelessWidget {
+  /// Creates a lit capsule.
+  const LitCapsule({
+    super.key,
+    required this.child,
+    this.padding = EdgeInsets.zero,
+    this.shape = const StadiumBorder(),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final ShapeBorder shape;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: ShapeDecoration(color: KinoraTint.lit(context), shape: shape),
+    child: Padding(padding: padding, child: child),
+  );
 }
 
 /// Round glass icon button (player controls, close, cast).

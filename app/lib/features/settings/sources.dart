@@ -9,6 +9,9 @@ import '../../services/sources.dart';
 import '../../ui/glass.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/sheet.dart';
+import '../../ui/widgets/states.dart';
+
+export '../../ui/widgets/states.dart' show addonError;
 import 'widgets/settings_ui.dart';
 
 /// The only suggestions: official Stremio metadata and subtitle addons.
@@ -52,28 +55,6 @@ String addonProvides(Addon addon) {
       : '${parts.sublist(0, parts.length - 1).join(', ')} and ${parts.last}';
   return text[0].toUpperCase() + text.substring(1);
 }
-
-/// What went wrong with an addon, in words. Never includes the URL.
-String addonError(Object e) => switch (e) {
-  InvalidAddonUrlException() =>
-    'That isn’t an addon link. Paste the full link, usually ending in '
-        'manifest.json.',
-  AddonHttpException(statusCode: 404) =>
-    'Nothing was found at that link. Check that it’s complete.',
-  AddonHttpException(:final statusCode) =>
-    'The addon answered with error $statusCode. Try again later.',
-  AddonNetworkException() =>
-    'Couldn’t reach the addon. Check your connection and the link.',
-  AddonTimeoutException() => 'The addon took too long to answer. Try again.',
-  AddonResponseException() =>
-    'That link isn’t a Stremio addon, or it sent something Kinora can’t '
-        'read.',
-  AddonCancelledException() => 'Cancelled.',
-  DebridKeyRejectedException() =>
-    'Your debrid service rejected the key set in this addon. Configure the '
-        'addon again and add the new link.',
-  _ => 'The addon couldn’t be added. Try again.',
-};
 
 /// Health of one addon in words, and its color.
 (String, Color) addonHealthText(AddonHealth? h) {

@@ -11,6 +11,7 @@ import '../../app/providers.dart';
 import '../../core/format.dart';
 import '../../core/paths.dart';
 import '../../services/downloads.dart';
+import '../../services/engine_service.dart';
 import '../../ui/tokens.dart';
 import '../downloads/storage.dart';
 import 'widgets/settings_ui.dart';
@@ -140,7 +141,8 @@ class StoragePage extends ConsumerWidget {
       case StorageKind.downloads:
         await deleteAllDownloads(ref);
       case StorageKind.streams:
-        await clearDirectory(paths.streams);
+        // Keeps what's playing or prefetched intact.
+        await ref.read(engineServiceProvider).clearStreamCache();
       case StorageKind.subtitles:
         await clearDirectory(paths.subtitles);
       case StorageKind.artwork:

@@ -225,7 +225,9 @@ void main() {
     expect(kit.actions.calls.last, 'remove e4');
     expect(find.text('Season 2'), findsNothing);
 
-    await tester.tap(find.bySemanticsLabel(RegExp('^Delete show')));
+    // The whole show: from its long-press, not an inline row.
+    expect(find.text('Delete show'), findsNothing);
+    await tester.longPress(find.bySemanticsLabel(RegExp(r'^Harbor Lights\. ')));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('Delete'));
     await tester.pumpAndSettle();
@@ -255,5 +257,34 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  test('time left comes from the measured speed', () {
+    expect(etaLabel(1 << 30, null), isNull);
+    expect(etaLabel(1 << 30, (3 << 20).toDouble()), 'about 6 min left');
+    expect(etaLabel(1 << 20, (1 << 20).toDouble()), 'less than a minute left');
+    expect(etaLabel(10 << 30, (1 << 20).toDouble()), 'about 2h 51m left');
+  });
+
+  kitTest('a row waiting for Wi-Fi asks before using mobile data', (
+    tester,
+  ) async {
+    final db = kitDb();
+    await seed(db);
+    final kit = await pumpKit(
+      tester,
+      db: db,
+      location: '/downloads',
+      size: const Size(390, 1400),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel(RegExp(r'^Harbor Lights\. ')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Salt and Iron', findRichText: true));
+    await tester.pumpAndSettle();
+    expect(find.text('Wait for Wi-Fi'), findsOneWidget);
+    await tester.tap(find.text('Download on mobile data (2 GB)'));
+    await tester.pumpAndSettle();
+    expect(kit.actions.calls.last, 'resume e3');
   });
 }

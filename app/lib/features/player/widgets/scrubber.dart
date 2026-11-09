@@ -73,9 +73,15 @@ class _ScrubberState extends State<Scrubber> {
           widget.onSeek(widget.position - const Duration(seconds: 10)),
       child: Row(
         children: [
-          SizedBox(
-            width: 64,
-            child: Text(Fmt.timecode(shown), style: KType.tabular(KType.label)),
+          // Grow with large text instead of wrapping "1:23:45".
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 64),
+            child: Text(
+              Fmt.timecode(shown),
+              maxLines: 1,
+              softWrap: false,
+              style: KType.tabular(KType.label),
+            ),
           ),
           Expanded(
             child: LayoutBuilder(
@@ -106,10 +112,12 @@ class _ScrubberState extends State<Scrubber> {
               ),
             ),
           ),
-          SizedBox(
-            width: 72,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 72),
             child: Text(
               '-${Fmt.timecode(remaining.isNegative ? Duration.zero : remaining)}',
+              maxLines: 1,
+              softWrap: false,
               textAlign: TextAlign.end,
               style: KType.tabular(KType.label.copyWith(color: KColors.haze)),
             ),

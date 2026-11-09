@@ -8,6 +8,22 @@ import '../tint.dart';
 import '../tokens.dart';
 import 'artwork.dart';
 
+final _firstLetter = RegExp(r'\p{L}', unicode: true);
+final _rtlLetter = RegExp(r'[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]');
+
+/// Direction of content text (titles, overviews) from its first letter:
+/// Arabic, Hebrew and similar scripts read right to left.
+TextDirection contentDir(String text) {
+  final first = _firstLetter.firstMatch(text)?[0];
+  return first != null && _rtlLetter.hasMatch(first)
+      ? TextDirection.rtl
+      : TextDirection.ltr;
+}
+
+/// [text] isolated (U+2068 … U+2069) so its direction can't reorder the
+/// text around it in a mixed line ("E3  <Arabic title>").
+String isolate(String text) => '\u2068$text\u2069';
+
 /// Decode width in physical pixels for an image shown [logical] px wide.
 int decodeWidth(BuildContext context, double logical) =>
     (logical * MediaQuery.devicePixelRatioOf(context)).round();
@@ -83,6 +99,30 @@ class _PressableState extends State<Pressable> {
   }
 }
 
+/// Hero tag for a video's artwork: the still or backdrop you tap grows into
+/// the player while it prepares. One per video on a page.
+String artHeroTag(String videoId) => 'art-$videoId';
+
+/// Artwork that flies into the player when its video starts.
+class ArtHero extends StatelessWidget {
+  const ArtHero({super.key, required this.videoId, required this.child});
+
+  final String videoId;
+  final Widget child;
+
+  // Off in hidden tabs (go_router keeps them alive offstage, tickers off),
+  // so nothing flies from a screen you can't see.
+  @override
+  Widget build(BuildContext context) => HeroMode(
+    enabled: TickerMode.valuesOf(context).enabled,
+    child: Hero(
+      tag: artHeroTag(videoId),
+      curve: KMotion.emphasized,
+      child: child,
+    ),
+  );
+}
+
 /// Poster size used in rows.
 abstract final class PosterSize {
   static const double width = 116;
@@ -119,23 +159,39 @@ class PosterTile extends StatelessWidget {
   );
 }
 
-/// Thin watch-progress bar in the current accent.
+/// Thin progress bar in the current accent over a faint track. Always
+/// fills the width it's given, so the track shows how far there is to go.
 class ProgressLine extends StatelessWidget {
-  const ProgressLine({super.key, required this.fraction});
+  const ProgressLine({
+    super.key,
+    required this.fraction,
+    this.height = 3,
+    this.color,
+    this.trackAlpha = 0.24,
+  });
 
   final double fraction;
+  final double height;
+
+  /// Defaults to the accent.
+  final Color? color;
+
+  /// Opacity of the Lamp track.
+  final double trackAlpha;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(2),
-    child: SizedBox(
-      height: 3,
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    height: height,
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(height),
       child: ColoredBox(
-        color: KColors.lamp.withValues(alpha: 0.24),
+        color: KColors.lamp.withValues(alpha: trackAlpha),
         child: FractionallySizedBox(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           widthFactor: fraction.clamp(0.02, 1),
-          child: ColoredBox(color: KinoraTint.of(context)),
+          heightFactor: 1,
+          child: ColoredBox(color: color ?? KinoraTint.of(context)),
         ),
       ),
     ),
@@ -223,6 +279,7 @@ class TitleLogo extends StatelessWidget {
       style: KType.hero,
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
+      textDirection: contentDir(name),
     );
     final image = artworkProvider(logo);
     if (image == null) return text;
@@ -312,6 +369,7 @@ class _ExpandableTextState extends State<ExpandableText> {
           child: Text(
             widget.text,
             style: widget.style,
+            textDirection: contentDir(widget.text),
             maxLines: _open ? null : widget.maxLines,
             overflow: _open ? TextOverflow.visible : TextOverflow.ellipsis,
           ),

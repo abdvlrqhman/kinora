@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,7 +82,18 @@ class _SubtitleStylePageState extends ConsumerState<SubtitleStylePage> {
           onChanged: (v) => _preview(_style.copyWith(scale: v)),
           onChangeEnd: (v) => _save(_style.copyWith(scale: v)),
         ),
-        const SectionTitle('Color'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            KSpace.margin,
+            KSpace.x3,
+            KSpace.margin,
+            0,
+          ),
+          child: Semantics(
+            header: true,
+            child: Text('Color', style: KType.title),
+          ),
+        ),
         _Swatches(
           value: s.color,
           onChanged: (c) => _save(_style.copyWith(color: c)),
@@ -260,7 +272,9 @@ class _Swatches extends StatelessWidget {
 }
 
 /// The style drawn over a sample frame at a phone's landscape proportions,
-/// so size and position match what the player shows.
+/// so size and position match what the player shows. Only the bottom of the
+/// frame is shown, at 1:1, so the text appears at its real size (scaled
+/// down only when its lines are wider than the screen).
 class SubtitlePreview extends StatelessWidget {
   const SubtitlePreview({super.key, required this.style, this.rtl = false});
 
@@ -275,45 +289,91 @@ class SubtitlePreview extends StatelessWidget {
     final text = rtl
         ? 'لم يغادر حارس المنارة الجزيرة قط.\nكان ينتظر سفينة لن تعود.'
         : 'The keeper never left the island.\nHe was waiting for a ship.';
-    return Semantics(
-      label: 'Preview of your subtitle style',
-      image: true,
-      excludeSemantics: true,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(KRadius.still),
-        child: AspectRatio(
-          aspectRatio: _frame.aspectRatio,
-          child: FittedBox(
-            child: SizedBox.fromSize(
-              size: _frame,
-              child: MediaQuery.withNoTextScaling(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    const CustomPaint(painter: _ScenePainter()),
-                    Padding(
-                      padding: EdgeInsets.only(
-                        left: _frame.width * 0.08,
-                        right: _frame.width * 0.08,
-                        bottom: _frame.height * style.bottomMargin,
-                      ),
-                      child: Align(
-                        alignment: Alignment.bottomCenter,
-                        child: _StyledLines(
-                          text: text,
-                          style: style,
-                          fontSize: fontSize,
-                          rtl: rtl,
+    final lines = text.split('\n');
+    var widest = 0.0;
+    for (final line in lines) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: line,
+          style: TextStyle(
+            fontFamily: KType.text,
+            fontSize: fontSize,
+            fontWeight: style.bold ? FontWeight.w700 : FontWeight.w600,
+            fontVariations: [FontVariation.weight(style.bold ? 700 : 600)],
+          ),
+        ),
+        textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+      )..layout();
+      widest = math.max(widest, painter.width);
+      painter.dispose();
+    }
+    final textHeight = lines.length * fontSize * 1.25 + fontSize * 0.3;
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cropWidth = math.min(
+          _frame.width,
+          math.max(c.maxWidth, widest + fontSize + KSpace.section),
+        );
+        final cropHeight = math.min(
+          _frame.height,
+          math.max(
+            150.0,
+            _frame.height * style.bottomMargin + textHeight + KSpace.x4,
+          ),
+        );
+        final scale = c.maxWidth / cropWidth;
+        return Semantics(
+          label: 'Preview of your subtitle style',
+          image: true,
+          excludeSemantics: true,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(KRadius.still),
+            child: SizedBox(
+              width: c.maxWidth,
+              height: cropHeight * scale,
+              child: FittedBox(
+                child: SizedBox(
+                  width: cropWidth,
+                  height: cropHeight,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.bottomCenter,
+                      minWidth: _frame.width,
+                      maxWidth: _frame.width,
+                      minHeight: _frame.height,
+                      maxHeight: _frame.height,
+                      child: MediaQuery.withNoTextScaling(
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            const CustomPaint(painter: _ScenePainter()),
+                            Padding(
+                              padding: EdgeInsets.only(
+                                left: _frame.width * 0.08,
+                                right: _frame.width * 0.08,
+                                bottom: _frame.height * style.bottomMargin,
+                              ),
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: _StyledLines(
+                                  text: text,
+                                  style: style,
+                                  fontSize: fontSize,
+                                  rtl: rtl,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

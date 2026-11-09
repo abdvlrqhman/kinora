@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,7 @@ import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/states.dart';
+import '../home/home_feed.dart';
 import 'search_model.dart';
 
 /// Search: a glass field, recent searches, results grouped by type, and
@@ -31,23 +33,11 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
+  // The keyboard opens only when the field is tapped: idle Search is a
+  // place to browse, not a keyboard over the tab bar.
   final _focus = FocusNode();
   Timer? _debounce;
   String _query = '';
-  bool _visible = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Tabs stay alive offstage with tickers off: focus each time the tab opens.
-    final visible = TickerMode.valuesOf(context).enabled;
-    if (visible && !_visible && _controller.text.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focus.requestFocus();
-      });
-    }
-    _visible = visible;
-  }
 
   @override
   void dispose() {
@@ -95,6 +85,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Back online: searches that failed offline run again.
+    ref.listen(onlineProvider, (prev, next) {
+      if (next.value == true && prev?.value == false) {
+        ref.invalidate(searchProvider);
+      }
+    });
     final top = MediaQuery.paddingOf(context).top;
     return Scaffold(
       body: Column(
@@ -123,7 +119,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   Widget _body() {
     final q = _query;
-    if (q.isEmpty) return _Recents(onPick: _useRecent);
+    if (q.isEmpty) return _Idle(onPick: _useRecent);
     final link = parsePlayLink(q);
     if (link != null) return _LinkResult(link: link);
     return _Results(
@@ -209,15 +205,20 @@ class _SearchField extends StatelessWidget {
   );
 }
 
-class _Recents extends ConsumerWidget {
-  const _Recents({required this.onPick});
+/// Idle Search: recent searches as capsules, then what's popular in your
+/// first catalog, to browse without typing.
+class _Idle extends ConsumerWidget {
+  const _Idle({required this.onPick});
 
   final ValueChanged<String> onPick;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recents = ref.watch(recentSearchesProvider).value ?? const [];
-    if (recents.isEmpty) {
+    final popular =
+        ref.watch(homeRowsProvider).value?.rows.firstOrNull?.items.take(12) ??
+        const <MetaPreview>[];
+    if (recents.isEmpty && popular.isEmpty) {
       return const EmptyState(
         icon: Icons.search_rounded,
         title: 'Find something to watch',
@@ -227,84 +228,129 @@ class _Recents extends ConsumerWidget {
       );
     }
     final store = ref.read(searchHistoryProvider);
-    return ListView.builder(
+    final capsuleHeight = math.max(
+      48.0,
+      MediaQuery.textScalerOf(context).scale(22) + 26,
+    );
+    return CustomScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.only(
-        top: KSpace.x3,
-        bottom: AppShell.bottomInset(context),
-      ),
-      itemCount: recents.length + 1,
-      itemBuilder: (context, i) {
-        if (i == 0) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(
-              KSpace.margin,
-              0,
-              KSpace.margin,
-              KSpace.x2,
-            ),
-            child: Semantics(
-              header: true,
-              child: Text('Recent searches', style: KType.h2),
-            ),
-          );
-        }
-        final q = recents[i - 1];
-        return Row(
-          children: [
-            Expanded(
-              child: Pressable(
-                label: 'Search for $q',
-                onTap: () => onPick(q),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: KSpace.margin),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.history_rounded,
-                          color: KColors.reel,
-                          size: 20,
-                        ),
-                        const SizedBox(width: KSpace.x3),
-                        Expanded(
-                          child: Text(
-                            q,
-                            style: KType.body,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
+      slivers: [
+        if (recents.isNotEmpty) ...[
+          const _Header('Recent searches'),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: capsuleHeight,
+              child: GlassGroup(
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: KSpace.margin,
+                  ),
+                  itemCount: recents.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: KSpace.x2),
+                  itemBuilder: (context, i) => _RecentCapsule(
+                    query: recents[i],
+                    onTap: () => onPick(recents[i]),
+                    onRemove: () => unawaited(store.remove(recents[i])),
                   ),
                 ),
               ),
             ),
-            Semantics(
-              button: true,
-              label: 'Remove $q from recent searches',
-              excludeSemantics: true,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => unawaited(store.remove(q)),
-                child: const SizedBox.square(
-                  dimension: 48,
-                  child: Icon(
-                    Icons.close_rounded,
-                    color: KColors.reel,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: KSpace.margin - 14),
-          ],
-        );
-      },
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: KSpace.section)),
+        ],
+        if (popular.isNotEmpty) ...[
+          const _Header('Popular right now'),
+          _PosterGrid(
+            items: popular.toList(),
+            onOpen: (m) => openTitle(context, type: m.type, id: m.id),
+          ),
+        ],
+        SliverToBoxAdapter(
+          child: SizedBox(height: AppShell.bottomInset(context)),
+        ),
+      ],
     );
   }
+}
+
+class _Header extends StatelessWidget {
+  const _Header(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => SliverPadding(
+    padding: const EdgeInsets.fromLTRB(
+      KSpace.margin,
+      0,
+      KSpace.margin,
+      KSpace.x3,
+    ),
+    sliver: SliverToBoxAdapter(
+      child: Semantics(header: true, child: Text(text, style: KType.h2)),
+    ),
+  );
+}
+
+/// A recent search: tap runs it, × forgets it.
+class _RecentCapsule extends StatelessWidget {
+  const _RecentCapsule({
+    required this.query,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  final String query;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Glass(
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          button: true,
+          label: 'Search for $query',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(start: KSpace.x4),
+              child: Center(
+                widthFactor: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    query,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textDirection: contentDir(query),
+                    style: KType.label.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Semantics(
+          button: true,
+          label: 'Remove $query from recent searches',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onRemove,
+            child: const SizedBox(
+              width: 44,
+              child: Icon(Icons.close_rounded, color: KColors.haze, size: 18),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _LinkResult extends StatelessWidget {
@@ -334,15 +380,13 @@ class _LinkResult extends StatelessWidget {
           children: [
             const SizedBox.square(
               dimension: 56,
-              child: GlassGroup(
-                child: Glass(
-                  tintStrength: 0.42,
-                  child: Center(
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: KColors.lamp,
-                      size: 28,
-                    ),
+              child: LitCapsule(
+                shape: CircleBorder(),
+                child: Center(
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: KColors.blackout,
+                    size: 28,
                   ),
                 ),
               ),
@@ -369,14 +413,32 @@ class _LinkResult extends StatelessWidget {
   );
 }
 
-class _Results extends ConsumerWidget {
+class _Results extends ConsumerStatefulWidget {
   const _Results({required this.query, required this.onOpen});
 
   final String query;
   final ValueChanged<MetaPreview> onOpen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Results> createState() => _ResultsState();
+}
+
+class _ResultsState extends ConsumerState<_Results> {
+  /// Groups opened past their first two rows.
+  final _all = <String>{};
+
+  static const _cap = 6;
+
+  @override
+  void didUpdateWidget(_Results old) {
+    super.didUpdateWidget(old);
+    if (old.query != widget.query) _all.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = widget.query;
+    final onOpen = widget.onOpen;
     final noSources = ref.watch(
       enabledAddonsProvider.select((a) => a.value?.isEmpty ?? false),
     );
@@ -404,7 +466,7 @@ class _Results extends ConsumerWidget {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
                 KSpace.margin,
-                KSpace.x3,
+                0,
                 KSpace.margin,
                 KSpace.x3,
               ),
@@ -429,7 +491,35 @@ class _Results extends ConsumerWidget {
                 ),
               ),
             ),
-            _PosterGrid(items: g.items, onOpen: onOpen),
+            if (g.items.length > _cap && !_all.contains(g.label)) ...[
+              _PosterGrid(
+                items: g.items.take(_cap).toList(),
+                onOpen: onOpen,
+                bottom: KSpace.x4,
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  KSpace.margin,
+                  0,
+                  KSpace.margin,
+                  KSpace.section,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: GlassGroup(
+                      child: GlassButton(
+                        label: 'Show all ${g.items.length}',
+                        semanticLabel:
+                            'Show all ${g.items.length} ${g.label.toLowerCase()}',
+                        onPressed: () => setState(() => _all.add(g.label)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ] else
+              _PosterGrid(items: g.items, onOpen: onOpen),
           ],
           SliverToBoxAdapter(child: SizedBox(height: bottom)),
         ],
@@ -464,22 +554,22 @@ class _Results extends ConsumerWidget {
 }
 
 class _PosterGrid extends StatelessWidget {
-  const _PosterGrid({required this.items, required this.onOpen});
+  const _PosterGrid({
+    required this.items,
+    required this.onOpen,
+    this.bottom = KSpace.section,
+  });
 
   final List<MetaPreview> items;
   final ValueChanged<MetaPreview> onOpen;
+  final double bottom;
 
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
     builder: (context, constraints) {
       final g = _gridMetrics(context, constraints.crossAxisExtent);
       return SliverPadding(
-        padding: const EdgeInsets.fromLTRB(
-          KSpace.margin,
-          0,
-          KSpace.margin,
-          KSpace.section,
-        ),
+        padding: EdgeInsets.fromLTRB(KSpace.margin, 0, KSpace.margin, bottom),
         sliver: SliverGrid.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: g.columns,
@@ -508,6 +598,7 @@ class _PosterGrid extends StatelessWidget {
                     m.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    textDirection: contentDir(m.name),
                     style: KType.label.copyWith(fontWeight: FontWeight.w600),
                   ),
                   if (m.releaseInfo != null)

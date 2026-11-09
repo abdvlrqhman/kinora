@@ -16,6 +16,7 @@ import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/paths.dart';
 import 'package:kinora/core/secure_keys.dart';
 import 'package:kinora/core/settings.dart';
+import 'package:kinora/features/cast/cast_picker.dart';
 import 'package:kinora/features/downloads/downloads_screen.dart';
 import 'package:kinora/features/downloads/storage.dart';
 import 'package:kinora/features/onboarding/onboarding_screen.dart';
@@ -263,6 +264,8 @@ Future<Kit> pumpKit(
         pathsProvider.overrideWithValue(kit.paths),
         httpClientProvider.overrideWithValue(fakeHttp(manifests)),
         downloadActionsProvider.overrideWithValue(kit.actions),
+        // No sockets in tests: the TV search finds nothing.
+        castSearchProvider.overrideWithValue(() async {}),
         freeSpaceProvider.overrideWith((_) async => freeSpace),
         artworkCacheProvider.overrideWithValue((
           size: () async => 3 * 1024 * 1024,

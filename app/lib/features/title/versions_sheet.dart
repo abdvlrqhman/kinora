@@ -4,22 +4,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../services/resolver.dart';
 import '../../ui/glass.dart';
+import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/sheet.dart';
 import '../../ui/widgets/states.dart';
 import 'title_model.dart';
 
-/// Opens the version picker for [video]; [onPick] plays the chosen one.
+/// "1080p WEB-DL": a release's quality and source, without availability
+/// (seeds and Instant have their own places in a version row).
+String releaseQuality(ResolvedRelease r) => r.headline.split(', ').first;
+
+final _instantWords = RegExp('instant|cached', caseSensitive: false);
+
+/// Opens the version picker for [video]; [onPick] plays the chosen one and
+/// [onDownload] downloads it.
 Future<void> showVersionsSheet(
   BuildContext context, {
   required VideoRef video,
   required String subtitle,
   required ValueChanged<ResolvedRelease> onPick,
+  ValueChanged<ResolvedRelease>? onDownload,
 }) => showGlassSheet<void>(
   context,
-  builder: (_) =>
-      VersionsSheet(video: video, subtitle: subtitle, onPick: onPick),
+  builder: (_) => VersionsSheet(
+    video: video,
+    subtitle: subtitle,
+    onPick: onPick,
+    onDownload: onDownload,
+  ),
 );
 
 /// Every version of one video, best first, filterable by resolution.
@@ -29,6 +42,7 @@ class VersionsSheet extends ConsumerStatefulWidget {
     required this.video,
     required this.subtitle,
     required this.onPick,
+    this.onDownload,
   });
 
   final VideoRef video;
@@ -36,6 +50,7 @@ class VersionsSheet extends ConsumerStatefulWidget {
   /// What is being played ("S1 E3  Pilot" or the movie's name).
   final String subtitle;
   final ValueChanged<ResolvedRelease> onPick;
+  final ValueChanged<ResolvedRelease>? onDownload;
 
   @override
   ConsumerState<VersionsSheet> createState() => _VersionsSheetState();
@@ -81,6 +96,12 @@ class _VersionsSheetState extends ConsumerState<VersionsSheet> {
           Navigator.of(context).pop();
           widget.onPick(r);
         },
+        onDownload: widget.onDownload == null
+            ? null
+            : (r) {
+                Navigator.of(context).pop();
+                widget.onDownload!(r);
+              },
       ),
       AsyncValue(:final value?) => _Note(
         value.message ?? 'No one is sharing this right now. Try again later.',
@@ -125,12 +146,14 @@ class _List extends StatelessWidget {
     required this.filter,
     required this.onFilter,
     required this.onPick,
+    this.onDownload,
   });
 
   final VersionGroups groups;
   final String? filter;
   final ValueChanged<String?> onFilter;
   final ValueChanged<ResolvedRelease> onPick;
+  final ValueChanged<ResolvedRelease>? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -150,10 +173,13 @@ class _List extends StatelessWidget {
             shrinkWrap: true,
             padding: const EdgeInsets.only(bottom: KSpace.x3),
             itemCount: shown.length,
-            itemBuilder: (_, i) => _ReleaseTile(
+            itemBuilder: (_, i) => ReleaseTile(
               release: shown[i],
               isBest: identical(shown[i], best),
               onTap: () => onPick(shown[i]),
+              onDownload: onDownload == null
+                  ? null
+                  : () => onDownload!(shown[i]),
             ),
           ),
         ),
@@ -218,20 +244,27 @@ class _Filters extends StatelessWidget {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onSelect(value),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 48),
-                    child: on
-                        ? Glass(
-                            tintStrength: 0.3,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: Center(child: text),
-                          )
-                        : Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Center(child: text),
-                          ),
+                // A 36-pt capsule inside the 48-pt touch target.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 48),
+                  child: Center(
+                    child: SizedBox(
+                      height: 36,
+                      child: on
+                          ? Glass(
+                              tintStrength: 0.3,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Center(widthFactor: 1, child: text),
+                            )
+                          : Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Center(widthFactor: 1, child: text),
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -243,16 +276,26 @@ class _Filters extends StatelessWidget {
   }
 }
 
-class _ReleaseTile extends StatelessWidget {
-  const _ReleaseTile({
+/// One version: quality and source, Best and Instant marks, reasons and
+/// warnings, then size, seeds and source, and the raw name last. Tap plays
+/// it; the trailing control downloads it.
+class ReleaseTile extends StatelessWidget {
+  const ReleaseTile({
+    super.key,
     required this.release,
     required this.isBest,
     required this.onTap,
+    this.onDownload,
+    this.current = false,
   });
 
   final ResolvedRelease release;
   final bool isBest;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final VoidCallback? onDownload;
+
+  /// The version playing now (checked, not tappable).
+  final bool current;
 
   @override
   Widget build(BuildContext context) {
@@ -262,49 +305,63 @@ class _ReleaseTile extends StatelessWidget {
       color: KColors.go,
       fontWeight: FontWeight.w700,
     );
-    return Pressable(
+    final quality = releaseQuality(r);
+    // The Instant mark is the one word for cached; reasons don't repeat it.
+    final reasons = [
+      for (final reason in r.reasons)
+        if (!(r.instant && _instantWords.hasMatch(reason))) reason,
+    ];
+    final tile = Pressable(
       label: [
-        r.headline,
+        quality,
+        if (current) 'Playing now',
         if (isBest) 'Best match',
         if (r.instant) 'Instant',
-        ...r.reasons,
+        ...reasons,
         ...r.warnings,
         if (r.sizeBytes != null) Fmt.bytes(r.sizeBytes!),
         if (r.seeders != null) '${r.seeders} seeds',
       ].join('. '),
-      hint: 'Plays this version',
-      onTap: onTap,
+      hint: current ? null : 'Plays this version',
+      onTap: current ? null : onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: KSpace.margin,
-          vertical: KSpace.x3,
+        padding: EdgeInsetsDirectional.fromSTEB(
+          KSpace.margin,
+          KSpace.x3,
+          onDownload == null ? KSpace.margin : 0,
+          KSpace.x3,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Wrap(
+              spacing: KSpace.x2,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Expanded(
-                  child: Text(r.headline, style: KType.tabular(KType.title)),
-                ),
-                if (isBest) ...[
-                  const SizedBox(width: KSpace.x2),
-                  Text('Best', style: mark),
-                ],
-                if (r.instant) ...[
-                  const SizedBox(width: KSpace.x2),
-                  const Icon(Icons.bolt_rounded, size: 18, color: KColors.go),
-                  Text('Instant', style: mark),
-                ],
+                Text(quality, style: KType.tabular(KType.title)),
+                if (isBest) Text('Best', style: mark),
+                if (r.instant)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.bolt_rounded,
+                        size: 18,
+                        color: KColors.go,
+                      ),
+                      Text('Instant', style: mark),
+                    ],
+                  ),
+                if (current)
+                  Icon(Icons.check_rounded, color: KinoraTint.of(context)),
               ],
             ),
-            if (r.reasons.isNotEmpty) ...[
+            if (reasons.isNotEmpty) ...[
               const SizedBox(height: 2),
               Wrap(
                 spacing: KSpace.x3,
                 children: [
-                  for (final reason in r.reasons)
+                  for (final reason in reasons)
                     Text(
                       reason,
                       style: KType.label.copyWith(color: KColors.haze),
@@ -349,22 +406,48 @@ class _ReleaseTile extends StatelessWidget {
                     r.seeders == 1 ? '1 seed' : '${r.seeders} seeds',
                     style: facts,
                   ),
-                if (r.addonName != null)
-                  Text(
-                    r.addonName!,
-                    style: facts.copyWith(color: KColors.reel),
-                  ),
+                if (r.addonName != null) Text(r.addonName!, style: facts),
               ],
             ),
             Text(
               r.releaseName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: KType.small.copyWith(color: KColors.reel),
+              style: KType.small,
             ),
           ],
         ),
       ),
+    );
+    if (onDownload == null) return tile;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: tile),
+        Padding(
+          padding: const EdgeInsets.only(
+            top: KSpace.x1,
+            right: KSpace.margin - 12,
+          ),
+          child: Semantics(
+            button: true,
+            label: 'Download this version, $quality',
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onDownload,
+              child: const SizedBox.square(
+                dimension: 48,
+                child: Icon(
+                  Icons.download_rounded,
+                  color: KColors.haze,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

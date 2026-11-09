@@ -3,6 +3,7 @@
 @Tags(['golden'])
 library;
 
+import 'package:dlna/dlna.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,8 +12,11 @@ import 'package:kinora/app/app.dart';
 import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/settings.dart';
+import 'package:kinora/features/cast/cast_picker.dart';
+import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/features/search/search_screen.dart';
 import 'package:kinora/features/title/title_screen.dart';
+import 'package:kinora/services/cast_service.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:stremio/stremio.dart';
 
@@ -96,7 +100,7 @@ void main() {
     return nav;
   }
 
-  testScreen('home', (tester) async {
+  Future<void> pumpHome(WidgetTester tester) async {
     tester.view
       ..physicalSize = const Size(390, 844) * 3
       ..devicePixelRatio = 3;
@@ -194,7 +198,12 @@ void main() {
           ),
           databaseProvider.overrideWithValue(db),
           ...withSource(),
-          homeCatalogsProvider.overrideWith((ref) async => [movies, shows]),
+          homeRowsProvider.overrideWith(
+            (ref) => Stream.value(HomeRows([movies, shows])),
+          ),
+          onlineProvider.overrideWith((ref) => Stream.value(true)),
+          castSearchProvider.overrideWithValue(() async {}),
+          resolveWith(fakeReleases),
           metaProvider.overrideWith(
             (ref, key) async => switch (key.id) {
               'tt100' => movieMeta(
@@ -215,9 +224,25 @@ void main() {
       ),
     );
     await settleImages(tester);
+  }
+
+  // At rest: Continue watching clears the tab bar.
+  testScreen('home', (tester) async {
+    await pumpHome(tester);
     await expectLater(
       find.byType(KinoraApp),
       matchesGoldenFile('screens/home.png'),
+    );
+  });
+
+  // Scrolled: rows passing under the tab bar dim behind its scrim.
+  testScreen('home, scrolled under the tab bar', (tester) async {
+    await pumpHome(tester);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -260));
+    await settleImages(tester);
+    await expectLater(
+      find.byType(KinoraApp),
+      matchesGoldenFile('screens/home_scrolled.png'),
     );
   });
 
@@ -236,6 +261,44 @@ void main() {
     await expectLater(
       find.byType(TitleScreen),
       matchesGoldenFile('screens/title_series_episodes.png'),
+    );
+  });
+
+  testScreen('title, header strip once scrolled', (tester) async {
+    await pumpTitle(tester);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -420));
+    await settleImages(tester);
+    await expectLater(
+      find.byType(TitleScreen),
+      matchesGoldenFile('screens/title_header_strip.png'),
+    );
+  });
+
+  testScreen('cast picker', (tester) async {
+    await pumpTitle(tester);
+    ProviderScope.containerOf(tester.element(find.byType(TitleScreen)))
+        .read(castServiceProvider)
+        .devices = [
+      DlnaDevice(
+        udn: 'uuid:tv-2',
+        friendlyName: 'Bedroom TV',
+        modelName: 'LG webOS TV',
+        location: Uri.parse('http://192.168.1.31:1527/'),
+        avTransportControlUrl: Uri.parse('http://192.168.1.31:1527/av'),
+      ),
+      DlnaDevice(
+        udn: 'uuid:tv-1',
+        friendlyName: 'Living Room TV',
+        modelName: 'Samsung 5 Series',
+        location: Uri.parse('http://192.168.1.20:9197/dmr'),
+        avTransportControlUrl: Uri.parse('http://192.168.1.20:9197/av'),
+      ),
+    ];
+    await tester.tap(find.bySemanticsLabel('Cast to a TV'));
+    await settleImages(tester);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('screens/cast_picker.png'),
     );
   });
 

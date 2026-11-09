@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/core/db/database.dart';
+import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/features/search/search_model.dart';
 import 'package:kinora/features/search/search_screen.dart';
 import 'package:kinora/services/sources.dart';
@@ -57,7 +58,7 @@ void main() {
     );
   });
 
-  testScreen('focuses the field and searches after a 350 ms pause', (
+  testScreen('focuses the field on tap and searches after a 350 ms pause', (
     tester,
   ) async {
     final queries = <String>[];
@@ -74,7 +75,11 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
+    // No keyboard until the field is tapped: idle Search is for browsing.
     final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.focusNode!.hasFocus, isFalse);
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
     expect(field.focusNode!.hasFocus, isTrue);
 
     await tester.enterText(find.byType(TextField), 'har');
@@ -230,5 +235,70 @@ void main() {
     await tester.pump(SearchScreen.debounce);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testScreen('idle Search shows recent capsules and what\'s popular', (
+    tester,
+  ) async {
+    final db = testDb();
+    await db
+        .into(db.searchHistory)
+        .insert(SearchHistoryCompanion.insert(query: 'dune'));
+    final nav = await pumpScreen(
+      tester,
+      const SearchScreen(),
+      db: db,
+      overrides: [
+        ...withSource(),
+        homeRowsProvider.overrideWith(
+          (ref) => Stream.value(
+            HomeRows([
+              catalogRow('Popular movies', [
+                preview('tt100', 'The Long Light'),
+                preview('tt101', 'Glass Harbor'),
+              ]),
+            ]),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Popular right now'), findsOneWidget);
+    expect(find.bySemanticsLabel('Search for dune'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Glass Harbor, 2024'));
+    await tester.pumpAndSettle();
+    expect(nav.locations.last, '/title/movie/tt101');
+  });
+
+  testScreen('long groups show two rows, then Show all', (tester) async {
+    final many = [
+      for (var i = 0; i < 9; i++) preview('tt$i', 'Harbor $i', year: '20$i'),
+    ];
+    await pumpScreen(
+      tester,
+      const SearchScreen(),
+      db: testDb(),
+      size: const Size(390, 1600),
+      overrides: [
+        ...withSource(),
+        searchProvider.overrideWith((ref, q) async => many),
+      ],
+    );
+    await tester.enterText(find.byType(TextField), 'harbor');
+    await tester.pump(SearchScreen.debounce);
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel(RegExp('^Harbor 5,')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^Harbor 6,')), findsNothing);
+    await tester.tap(find.text('Show all 9'));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel(RegExp('^Harbor 8,')), findsOneWidget);
+  });
+
+  test('the group with the best match comes first', () {
+    final groups = groupResults([
+      preview('tt200', 'Harbor Lights', type: 'series'),
+      preview('tt100', 'Harbor'),
+    ]);
+    expect([for (final g in groups) g.label], ['Shows', 'Movies']);
   });
 }

@@ -197,13 +197,11 @@ class _NetworkPageState extends ConsumerState<NetworkPage> {
       title: 'Network',
       children: [
         NavRow(
-          icon: Icons.download_rounded,
           label: 'Download speed',
           value: limitLabel(s.downloadLimitKBps),
           onTap: () => _limit('Download speed', s.downloadLimitKBps, false),
         ),
         NavRow(
-          icon: Icons.upload_rounded,
           label: 'Upload speed',
           value: limitLabel(s.uploadLimitKBps),
           onTap: () => _limit('Upload speed', s.uploadLimitKBps, true),

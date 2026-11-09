@@ -41,7 +41,7 @@ class SettingsPage extends StatelessWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: Padding(
-              padding: const EdgeInsets.only(left: KSpace.x3),
+              padding: const EdgeInsets.only(left: KSpace.margin),
               child: GlassGroup(
                 child: GlassIconButton(
                   icon: Icons.chevron_left_rounded,
@@ -134,13 +134,11 @@ const _rowPadding = EdgeInsets.symmetric(
 class NavRow extends StatelessWidget {
   const NavRow({
     super.key,
-    required this.icon,
     required this.label,
     required this.onTap,
     this.value,
   });
 
-  final IconData icon;
   final String label;
   final String? value;
   final VoidCallback onTap;
@@ -155,8 +153,6 @@ class NavRow extends StatelessWidget {
         padding: _rowPadding,
         child: Row(
           children: [
-            Icon(icon, color: KColors.haze, size: 22),
-            const SizedBox(width: KSpace.x4),
             Expanded(
               child: _Labels(label: label, detail: value),
             ),
@@ -241,7 +237,12 @@ class SwitchRow extends StatelessWidget {
                 child: _Labels(label: label, detail: detail),
               ),
               const SizedBox(width: KSpace.x3),
-              Switch(value: value, onChanged: onChanged),
+              // On: a Lamp thumb on this screen's accent.
+              Switch(
+                value: value,
+                onChanged: onChanged,
+                activeTrackColor: KinoraTint.of(context),
+              ),
             ],
           ),
         ),

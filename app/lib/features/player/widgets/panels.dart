@@ -1,11 +1,20 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../app/providers.dart';
 import '../../../core/lang.dart';
 import '../../../ui/glass.dart';
 import '../../../ui/tint.dart';
 import '../../../ui/tokens.dart';
 import '../../../ui/widgets/artwork.dart';
+import '../../../ui/widgets/media.dart';
+import '../../title/episodes.dart';
 import '../../../services/subtitle_option.dart';
 import '../player_controller.dart';
 
@@ -45,17 +54,22 @@ class SidePanel extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     KSpace.margin,
-                    KSpace.x4,
-                    KSpace.x2,
+                    KSpace.x3,
+                    KSpace.x3,
                     KSpace.x2,
                   ),
                   child: Row(
                     children: [
-                      Expanded(child: Text(title, style: KType.h2)),
-                      IconButton(
-                        tooltip: 'Close',
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(title, style: KType.h2),
+                        ),
+                      ),
+                      GlassIconButton(
+                        icon: Icons.close_rounded,
+                        label: 'Close',
                         onPressed: onClose,
-                        icon: const Icon(Icons.close_rounded),
                       ),
                     ],
                   ),
@@ -72,7 +86,7 @@ class SidePanel extends StatelessWidget {
 
 /// Audio tracks, then subtitles grouped by language (tap a language to see
 /// every subtitle in it), timing and night mode.
-class TracksPanel extends StatefulWidget {
+class TracksPanel extends ConsumerStatefulWidget {
   const TracksPanel({
     super.key,
     required this.controller,
@@ -83,11 +97,20 @@ class TracksPanel extends StatefulWidget {
   final VoidCallback onClose;
 
   @override
-  State<TracksPanel> createState() => _TracksPanelState();
+  ConsumerState<TracksPanel> createState() => _TracksPanelState();
 }
 
-class _TracksPanelState extends State<TracksPanel> {
-  String? _openLanguage;
+class _TracksPanelState extends ConsumerState<TracksPanel> {
+  /// The language whose subtitles are listed; starts at the active one.
+  late String? _openLanguage = widget.controller.subtitles
+      .where((s) => s.id == widget.controller.activeSubtitleId)
+      .map((s) => s.language ?? '')
+      .firstOrNull;
+
+  void _step(int ms) {
+    final c = widget.controller;
+    unawaited(c.setSubtitleDelay(c.subtitleDelay + Duration(milliseconds: ms)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,8 +126,23 @@ class _TracksPanelState extends State<TracksPanel> {
         for (final s in c.subtitles) {
           (byLang[s.language] ??= []).add(s);
         }
+        // Your subtitle languages first, in your order; then the rest A-Z.
+        final mine = [
+          for (final l in ref.watch(
+            settingsProvider.select((s) => s.subtitleLanguages),
+          ))
+            normalizeLang(l),
+        ];
+        int rank(String? l) {
+          final i = mine.indexOf(normalizeLang(l));
+          return i < 0 ? mine.length : i;
+        }
+
         final langs = byLang.keys.toList()
-          ..sort((a, b) => langName(a).compareTo(langName(b)));
+          ..sort((a, b) {
+            final r = rank(a).compareTo(rank(b));
+            return r != 0 ? r : langName(a).compareTo(langName(b));
+          });
         final active = c.subtitles
             .where((s) => s.id == c.activeSubtitleId)
             .firstOrNull;
@@ -129,8 +167,10 @@ class _TracksPanelState extends State<TracksPanel> {
                 selected: active == null,
                 onTap: () => c.selectSubtitle(null),
               ),
-              if (c.subtitles.isEmpty)
-                const _Note('Looking for subtitles in your languages…'),
+              if (c.subtitleSearch == SubtitleSearch.searching)
+                const _Note('Looking for subtitles in your languages…')
+              else if (c.subtitleNote case final note?)
+                _SubtitleNote(note: note),
               for (final lang in langs) ...[
                 _LanguageRow(
                   name: langName(lang),
@@ -170,9 +210,8 @@ class _TracksPanelState extends State<TracksPanel> {
                       _Step(
                         label: 'Earlier',
                         icon: Icons.remove_rounded,
-                        onTap: () => c.setSubtitleDelay(
-                          c.subtitleDelay - const Duration(milliseconds: 100),
-                        ),
+                        onTap: () => _step(-100),
+                        onLongPress: () => _step(-1000),
                       ),
                       Expanded(
                         child: Text(
@@ -186,9 +225,8 @@ class _TracksPanelState extends State<TracksPanel> {
                       _Step(
                         label: 'Later',
                         icon: Icons.add_rounded,
-                        onTap: () => c.setSubtitleDelay(
-                          c.subtitleDelay + const Duration(milliseconds: 100),
-                        ),
+                        onTap: () => _step(100),
+                        onLongPress: () => _step(1000),
                       ),
                     ],
                   ),
@@ -206,7 +244,8 @@ class _TracksPanelState extends State<TracksPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Line appears before it’s said? Wait for it, then tap.',
+                        'Line appears before it’s said? Wait for it, then '
+                        'tap. Hold Earlier or Later to move a whole second.',
                         style: KType.small,
                       ),
                       const SizedBox(height: KSpace.x2),
@@ -219,17 +258,12 @@ class _TracksPanelState extends State<TracksPanel> {
                   ),
                 ),
               const _Heading('Sound'),
-              SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: KSpace.margin,
-                ),
-                title: Text('Night mode', style: KType.body),
-                subtitle: Text(
-                  'Quieter loud scenes, clearer dialogue',
-                  style: KType.small,
-                ),
-                value: c.nightMode,
-                onChanged: (_) => c.toggleNightMode(),
+              _Choice(
+                label: 'Night mode',
+                detail: 'Quieter loud scenes, clearer dialogue',
+                selected: c.nightMode,
+                toggle: true,
+                onTap: c.toggleNightMode,
               ),
             ],
           ),
@@ -296,23 +330,13 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
       onClose: widget.onClose,
       child: Column(
         children: [
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
-              children: [
-                for (final s in seasons)
-                  Padding(
-                    padding: const EdgeInsets.only(right: KSpace.x2),
-                    child: ChoiceChip(
-                      label: Text(s == 0 ? 'Specials' : 'Season $s'),
-                      selected: s == season,
-                      onSelected: (_) => setState(() => _season = s),
-                    ),
-                  ),
-              ],
-            ),
+          SeasonPicker(
+            seasons: [
+              ...seasons.where((s) => s > 0),
+              if (seasons.contains(0)) 0,
+            ],
+            selected: season,
+            onSelect: (s) => setState(() => _season = s),
           ),
           const SizedBox(height: KSpace.x2),
           Expanded(
@@ -320,14 +344,17 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
                 ? const _Note('Episode list isn’t available for this title.')
                 : ListView.builder(
                     itemCount: list.length,
-                    itemExtent: 92,
                     itemBuilder: (context, i) {
                       final e = list[i];
                       final current = e.id == c.request.videoId;
+                      final name = e.title ?? 'Episode ${e.episode}';
                       return Semantics(
                         button: true,
                         selected: current,
-                        label: 'Episode ${e.episode}, ${e.title ?? ''}',
+                        label: [
+                          'Episode ${e.episode}, $name',
+                          if (current) 'Playing now',
+                        ].join('. '),
                         excludeSemantics: true,
                         child: InkWell(
                           onTap: current
@@ -360,7 +387,9 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        'E${e.episode}',
+                                        current
+                                            ? 'E${e.episode}  Playing now'
+                                            : 'E${e.episode}',
                                         style: KType.small.copyWith(
                                           color: current
                                               ? KinoraTint.of(context)
@@ -368,13 +397,12 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
                                         ),
                                       ),
                                       Text(
-                                        e.title ?? 'Episode ${e.episode}',
+                                        name,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
+                                        textDirection: contentDir(name),
                                         style: KType.label,
                                       ),
-                                      if (current)
-                                        Text('Playing now', style: KType.small),
                                     ],
                                   ),
                                 ),
@@ -457,6 +485,8 @@ class _Note extends StatelessWidget {
   );
 }
 
+/// One choice with a Spill check when chosen. [toggle] makes it an on/off
+/// row (Night mode) instead of one of several.
 class _Choice extends StatelessWidget {
   const _Choice({
     required this.label,
@@ -464,19 +494,27 @@ class _Choice extends StatelessWidget {
     required this.onTap,
     this.detail,
     this.indent = false,
+    this.toggle = false,
   });
 
   final String label;
   final String? detail;
   final bool selected;
   final bool indent;
+  final bool toggle;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
-    button: true,
-    selected: selected,
-    label: label,
+    button: !toggle,
+    toggled: toggle ? selected : null,
+    selected: toggle ? null : selected,
+    inMutuallyExclusiveGroup: toggle ? null : true,
+    // Details ("For deaf and hard of hearing") are read too.
+    label: [
+      label,
+      if (detail != null && detail!.isNotEmpty) detail!.replaceAll('\n', '. '),
+    ].join('. '),
     excludeSemantics: true,
     child: InkWell(
       onTap: onTap,
@@ -506,14 +544,61 @@ class _Choice extends StatelessWidget {
                   ],
                 ),
               ),
-              if (selected)
-                Icon(Icons.check_rounded, color: KinoraTint.of(context)),
+              SizedBox.square(
+                dimension: 24,
+                child: selected
+                    ? Icon(Icons.check_rounded, color: KinoraTint.of(context))
+                    : null,
+              ),
             ],
           ),
         ),
       ),
     ),
   );
+}
+
+/// What the subtitle search found nothing for, and where to fix it.
+class _SubtitleNote extends StatelessWidget {
+  const _SubtitleNote({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final lower = note.toLowerCase();
+    final (String, String)? fix = lower.contains('subtitle sites')
+        ? ('Open Subtitle sites', '/settings/subtitle-sites')
+        : lower.contains('languages')
+        ? ('Open Languages', '/settings/languages')
+        : null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        KSpace.margin,
+        KSpace.x2,
+        KSpace.margin,
+        KSpace.x2,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            liveRegion: true,
+            child: Text(note, style: KType.label.copyWith(color: KColors.haze)),
+          ),
+          if (fix != null) ...[
+            const SizedBox(height: KSpace.x2),
+            // Leaves the player (its progress is saved) for Settings.
+            GlassButton(
+              label: fix.$1,
+              icon: Icons.tune_rounded,
+              onPressed: () => context.go(fix.$2),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _LanguageRow extends StatelessWidget {
@@ -539,8 +624,8 @@ class _LanguageRow extends StatelessWidget {
     excludeSemantics: true,
     child: InkWell(
       onTap: onTap,
-      child: SizedBox(
-        height: 52,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 52),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
           child: Row(
@@ -572,14 +657,68 @@ class _LanguageRow extends StatelessWidget {
   );
 }
 
+/// Earlier/Later: tap moves 0.1 s, hold moves 1 s.
 class _Step extends StatelessWidget {
-  const _Step({required this.label, required this.icon, required this.onTap});
+  const _Step({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
-  Widget build(BuildContext context) =>
-      GlassIconButton(icon: icon, label: label, onPressed: onTap, size: 44);
+  Widget build(BuildContext context) => Semantics(
+    onLongPressHint: '$label by one second',
+    onLongPress: onLongPress,
+    child: GestureDetector(
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        onLongPress();
+      },
+      child: GlassIconButton(icon: icon, label: label, onPressed: onTap),
+    ),
+  );
+}
+
+/// [top] at the top and [bottom] at the bottom of the screen; scrolls
+/// instead when large text makes them taller than it.
+class FillOrScroll extends StatelessWidget {
+  const FillOrScroll({
+    super.key,
+    required this.padding,
+    required this.top,
+    required this.bottom,
+  });
+
+  final EdgeInsets padding;
+  final Widget top;
+  final Widget bottom;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) => SingleChildScrollView(
+      padding: padding,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: math.max(0, c.maxHeight - padding.vertical),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            top,
+            Padding(
+              padding: const EdgeInsets.only(top: KSpace.x4),
+              child: bottom,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

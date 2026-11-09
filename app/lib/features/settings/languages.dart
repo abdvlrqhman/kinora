@@ -56,7 +56,6 @@ class LanguagesPage extends ConsumerWidget {
               _save(ref, (s) => s.copyWith(preferHearingImpaired: v)),
         ),
         NavRow(
-          icon: Icons.text_fields_rounded,
           label: 'Subtitle style',
           value: styleSummary(s.subtitleStyle),
           onTap: () => context.go('/settings/languages/style'),

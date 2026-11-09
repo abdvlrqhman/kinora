@@ -1,7 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/core/db/database.dart';
+import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/features/home/home_screen.dart';
+import 'package:kinora/features/title/title_model.dart';
+import 'package:kinora/ui/glass.dart';
+import 'package:kinora/ui/widgets/states.dart';
 import 'package:kinora/services/sources.dart';
 
 import '../harness.dart';
@@ -54,9 +60,9 @@ void main() {
       size: const Size(390, 1600),
       overrides: [
         ...withSource(),
-        homeCatalogsProvider.overrideWith((ref) async {
+        homeRowsProvider.overrideWith((ref) {
           loads++;
-          return rows;
+          return Stream.value(HomeRows(rows));
         }),
         metaProvider.overrideWith(
           (ref, key) async =>
@@ -118,7 +124,7 @@ void main() {
       size: const Size(390, 1600),
       overrides: [
         ...withSource(),
-        homeCatalogsProvider.overrideWith((ref) async => rows),
+        homeRowsProvider.overrideWith((ref) => Stream.value(HomeRows(rows))),
         metaProvider.overrideWith((ref, key) async => movieMeta()),
       ],
     );
@@ -168,9 +174,11 @@ void main() {
       db: db,
       overrides: [
         ...withSource(),
-        homeCatalogsProvider.overrideWith((ref) async {
+        homeRowsProvider.overrideWith((ref) {
           calls++;
-          throw Exception('SocketException: Network is unreachable');
+          return Stream.error(
+            Exception('SocketException: Network is unreachable'),
+          );
         }),
       ],
     );
@@ -191,7 +199,7 @@ void main() {
       textScale: 1.5,
       overrides: [
         ...withSource(),
-        homeCatalogsProvider.overrideWith((ref) async => rows),
+        homeRowsProvider.overrideWith((ref) => Stream.value(HomeRows(rows))),
         metaProvider.overrideWith((ref, key) async => movieMeta()),
       ],
     );
@@ -200,5 +208,99 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testScreen(
+    'a show\'s billboard resumes it in one tap and names the version',
+    (tester) async {
+      final db = testDb();
+      await seedLibrary(db);
+      final nav = await pumpScreen(
+        tester,
+        const HomeScreen(),
+        db: db,
+        size: const Size(390, 1600),
+        overrides: [
+          ...withSource(),
+          homeRowsProvider.overrideWith(
+            (ref) => Stream.value(
+              HomeRows([
+                catalogRow('Popular shows', [
+                  preview('tt200', 'Harbor Lights', type: 'series'),
+                ]),
+              ]),
+            ),
+          ),
+          metaProvider.overrideWith(
+            (ref, key) async => key.id == 'tt200'
+                ? seriesMeta()
+                : throw StateError('No details'),
+          ),
+          resolveWith(fakeReleases),
+        ],
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<GlassButton>(find.byKey(const ValueKey('billboard-play')))
+            .label,
+        'Resume S1 E3',
+      );
+      expect(find.textContaining('1080p WEB-DL, 214 seeds'), findsOneWidget);
+      expect(find.textContaining('30m left'), findsWidgets);
+      expect(find.bySemanticsLabel('Details'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('billboard-play')));
+      await tester.pumpAndSettle();
+      expect(nav.played.last.videoId, 'tt200:1:3');
+      expect(nav.played.last.startAt, const Duration(minutes: 20));
+    },
+  );
+
+  testScreen('rows appear as each source answers; offline says so', (
+    tester,
+  ) async {
+    final feed = StreamController<HomeRows>();
+    addTearDown(feed.close);
+    await pumpScreen(
+      tester,
+      const HomeScreen(),
+      db: testDb(),
+      size: const Size(390, 1600),
+      overrides: [
+        ...withSource(),
+        homeRowsProvider.overrideWith((ref) => feed.stream),
+        metaProvider.overrideWith((ref, key) async => movieMeta()),
+      ],
+    );
+    feed.add(HomeRows([rows.first], complete: false));
+    await tester.pumpAndSettle();
+    expect(find.text('Popular movies'), findsOneWidget);
+    expect(find.byType(LoadingBlock), findsWidgets); // the slow one
+
+    feed.add(const HomeRows([], failed: true, offline: true));
+    await tester.pumpAndSettle();
+    expect(find.text('You’re offline'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
+  test('the billboard rotates daily and prefers shows with new episodes', () {
+    final pool = [
+      for (var i = 0; i < 12; i++)
+        preview('tt$i', 'Film $i', background: 'b$i'),
+    ];
+    final row = [catalogRow('Popular', pool)];
+    final days = {
+      for (var d = 1; d <= 20; d++)
+        pickFeatured(row, const [], DateTime(2026, 11, d))!.id,
+    };
+    // Ten titles with backdrops take turns, a different one each day.
+    expect(days.length, 10);
+    expect(
+      pickFeatured(row, const [], DateTime(2026, 11, 3, 9))!.id,
+      pickFeatured(row, const [], DateTime(2026, 11, 3, 23))!.id,
+    );
+    final show = TitleModel(seriesMeta(background: 'harbor'));
+    final fresh = [NewEpisodes(show, show.order.take(1).toList())];
+    expect(pickFeatured(row, fresh, DateTime(2026, 11, 3))!.id, 'tt200');
   });
 }

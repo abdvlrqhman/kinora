@@ -108,9 +108,10 @@ class SeasonPicker extends StatelessWidget {
 
 const double _stillWidth = 128;
 
-/// One episode: still with progress, "E3" and title, air date, watched and
-/// downloaded marks, a download control, and a two-line overview that opens
-/// on tap. Unaired episodes are dimmed and say when they air.
+/// One episode: still with progress (a full Haze line once watched), "E3"
+/// and title, air date, a download control whose icon says when it's
+/// downloaded, and a two-line overview that opens on tap. Unaired episodes
+/// say when they air and can't be played yet.
 class EpisodeRow extends ConsumerWidget {
   const EpisodeRow({
     super.key,
@@ -194,13 +195,26 @@ class EpisodeRow extends ConsumerWidget {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                Artwork(
-                                  url: e.thumbnail,
-                                  memCacheWidth: decodeWidth(
-                                    context,
-                                    _stillWidth,
+                                ArtHero(
+                                  videoId: e.id,
+                                  child: Artwork(
+                                    url: e.thumbnail,
+                                    memCacheWidth: decodeWidth(
+                                      context,
+                                      _stillWidth,
+                                    ),
                                   ),
                                 ),
+                                if (watched)
+                                  const Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: ProgressLine(
+                                      fraction: 1,
+                                      color: KColors.haze,
+                                    ),
+                                  ),
                                 if (partial) ...[
                                   stillShade,
                                   Positioned(
@@ -237,7 +251,7 @@ class EpisodeRow extends ConsumerWidget {
                                     ),
                                   ),
                                   TextSpan(
-                                    text: name,
+                                    text: isolate(name),
                                     style: KType.body.copyWith(
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -255,20 +269,6 @@ class EpisodeRow extends ConsumerWidget {
                               children: [
                                 if (runtime != null) Text(runtime, style: meta),
                                 if (when != null) Text(when, style: meta),
-                                if (watched)
-                                  const Icon(
-                                    Icons.check_circle_rounded,
-                                    size: 16,
-                                    color: KColors.haze,
-                                  ),
-                                if (downloaded)
-                                  Text(
-                                    'Downloaded',
-                                    style: meta.copyWith(
-                                      color: KColors.go,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
                               ],
                             ),
                           ],
@@ -297,7 +297,7 @@ class EpisodeRow extends ConsumerWidget {
         ],
       ),
     );
-    return isAired ? row : Opacity(opacity: 0.45, child: row);
+    return row;
   }
 }
 

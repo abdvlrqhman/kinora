@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../ui/glass.dart';
+import '../ui/tint.dart';
 import '../ui/tokens.dart';
 
 enum AppTab {
@@ -21,9 +24,22 @@ class AppShell extends StatelessWidget {
 
   final StatefulNavigationShell shell;
 
+  /// The bar's labels stop growing here so the bar never outgrows the
+  /// screen; pages keep the full text size.
+  static const _maxBarTextScale = 1.3;
+
+  static double _barHeight(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context)
+        .clamp(maxScaleFactor: _maxBarTextScale);
+    return math.max(64, 40 + scaler.scale(16));
+  }
+
   /// Height the tab bar occupies, so pages can pad their last item.
   static double bottomInset(BuildContext context) =>
-      MediaQuery.paddingOf(context).bottom + 12 + 64 + KSpace.x4;
+      MediaQuery.paddingOf(context).bottom +
+      12 +
+      _barHeight(context) +
+      KSpace.x4;
 
   @override
   Widget build(BuildContext context) {
@@ -32,30 +48,41 @@ class AppShell extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(child: shell),
+          // Content passing under the bar dims instead of competing with it.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: bottom + 140,
+            child: const LegibilityScrim(stops: [0, 1]),
+          ),
           Positioned(
             left: KSpace.margin,
             right: KSpace.margin,
             bottom: bottom + 12,
-            child: GlassGroup(
-              child: Glass(
-                tintStrength: 0.10,
-                child: SizedBox(
-                  height: 64,
-                  child: Row(
-                    children: [
-                      for (final t in AppTab.values)
-                        Expanded(
-                          child: _TabButton(
-                            key: ValueKey('tab-${t.name}'),
-                            tab: t,
-                            selected: t.index == shell.currentIndex,
-                            onTap: () => shell.goBranch(
-                              t.index,
-                              initialLocation: t.index == shell.currentIndex,
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: _maxBarTextScale,
+              child: GlassGroup(
+                child: Glass(
+                  tintStrength: 0.10,
+                  child: SizedBox(
+                    height: _barHeight(context),
+                    child: Row(
+                      children: [
+                        for (final t in AppTab.values)
+                          Expanded(
+                            child: _TabButton(
+                              key: ValueKey('tab-${t.name}'),
+                              tab: t,
+                              selected: t.index == shell.currentIndex,
+                              onTap: () => shell.goBranch(
+                                t.index,
+                                initialLocation: t.index == shell.currentIndex,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -81,7 +108,7 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? KColors.lamp : KColors.reel;
+    final color = selected ? KColors.lamp : KColors.haze;
     return Semantics(
       button: true,
       selected: selected,
@@ -97,7 +124,28 @@ class _TabButton extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               tab.label,
-              style: KType.small.copyWith(color: color, fontSize: 11),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: KType.small.copyWith(
+                color: color,
+                fontWeight: selected ? FontWeight.w700 : null,
+                fontVariations: selected
+                    ? const [FontVariation.weight(700)]
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 4),
+            // State isn't carried by color alone: the chosen tab has a dot.
+            SizedBox.square(
+              dimension: 4,
+              child: selected
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: KinoraTint.of(context),
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                  : null,
             ),
           ],
         ),

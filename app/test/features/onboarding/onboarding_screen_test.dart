@@ -18,14 +18,15 @@ void main() {
       manifests: {_cinemeta: manifestJson('Cinemeta')},
     );
     await tester.pumpAndSettle();
-    expect(find.text('Welcome'), findsOneWidget);
+    expect(find.text('Your own cinema'), findsOneWidget);
+    expect(find.text('Set up Kinora'), findsOneWidget);
     // No skipping before the welcome is read.
     expect(find.text('Skip'), findsNothing);
     await _next(tester);
 
     // Languages.
     expect(find.text('Your languages'), findsOneWidget);
-    expect(find.bySemanticsLabel('Step 1 of 4'), findsOneWidget);
+    expect(find.bySemanticsLabel('Step 1 of 6'), findsOneWidget);
     await tester.tap(find.text('Add a language'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -52,15 +53,32 @@ void main() {
     );
     await _next(tester);
 
+    // Debrid is optional: added as a configured stream source.
+    expect(find.text('Instant playback'), findsOneWidget);
+    expect(find.byKey(const ValueKey('addon-url')), findsOneWidget);
+    await _next(tester);
+
     // Subtitle sites are optional.
     expect(find.text('Subtitle sites'), findsOneWidget);
     expect(find.textContaining('Optional.'), findsOneWidget);
     await _next(tester);
 
-    // Done: a summary, then Home.
+    // So is a TV; this phone is the default.
+    expect(find.text('Your TV'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('^Play on this phone. Chosen')),
+      findsOne,
+    );
+    await _next(tester);
+
+    // Done: a summary, then Home. Cinemeta lists titles but streams none.
     expect(find.text('You’re set'), findsOneWidget);
     expect(find.text('Subtitles in Arabic'), findsOneWidget);
     expect(find.text('1 source: Cinemeta'), findsOneWidget);
+    expect(
+      find.text('Nothing will play yet: add a source that provides streams.'),
+      findsOneWidget,
+    );
     expect(kit.settings.onboarded, isFalse);
     await tester.tap(find.text('Start watching'));
     await tester.pumpAndSettle();
@@ -80,7 +98,7 @@ void main() {
     );
     await tester.tap(find.byIcon(Icons.chevron_left_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Subtitle sites'), findsOneWidget);
+    expect(find.text('Your TV'), findsOneWidget);
     await tester.tap(find.bySemanticsLabel('Skip setup'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start watching'));
@@ -94,7 +112,7 @@ void main() {
         const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     await tester.pumpAndSettle();
-    for (var step = 0; step < 5; step++) {
+    for (var step = 0; step < 7; step++) {
       expect(tester.takeException(), isNull, reason: 'step $step');
       final scrollable = find.byType(Scrollable);
       if (scrollable.evaluate().isNotEmpty) {
@@ -102,7 +120,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'step $step end');
       }
-      if (step < 4) await _next(tester);
+      if (step < 6) await _next(tester);
     }
   });
 }

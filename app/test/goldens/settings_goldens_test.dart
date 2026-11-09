@@ -176,4 +176,48 @@ void main() {
       matchesGoldenFile('downloads.png'),
     );
   });
+
+  // The progress track and the storage meter show how far there is to go.
+  kitTest('downloads, a movie in progress', (tester) async {
+    await phone(tester);
+    final db = kitDb();
+    await addDownload(
+      db,
+      id: 'm1',
+      mediaId: 'tt100',
+      type: 'movie',
+      title: 'Ember',
+      season: null,
+      state: 'downloading',
+      total: 2147483648,
+      done: 966367642,
+      poster: asset('ember_poster.png'),
+      at: DateTime(2026, 11, 3),
+    );
+    await addDownload(
+      db,
+      id: 'm2',
+      mediaId: 'tt103',
+      type: 'movie',
+      title: 'Glacier',
+      season: null,
+      total: 1932735283,
+      done: 1932735283,
+      poster: asset('glacier_poster.png'),
+      subtitles: '[{"lang":"ar","path":"/a","label":"a"}]',
+      at: DateTime(2026, 11, 1),
+    );
+    await pumpKit(
+      tester,
+      db: db,
+      location: '/downloads',
+      freeSpace: 44023414784,
+    );
+    await tester.pumpAndSettle();
+    await loadImages(tester);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('downloads_in_progress.png'),
+    );
+  });
 }

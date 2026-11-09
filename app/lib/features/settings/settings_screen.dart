@@ -33,6 +33,14 @@ final List<RouteBase> settingsRoutes = [
   GoRoute(path: 'about', builder: (_, _) => const AboutPage()),
 ];
 
+/// "3 sources, all on", "3 sources, 2 on", "1 source, off".
+String sourcesSummary(int count, int on) {
+  final n = count == 1 ? '1 source' : '$count sources';
+  if (on == count) return count == 1 ? '$n, on' : '$n, all on';
+  if (on == 0) return count == 1 ? '$n, off' : '$n, all off';
+  return '$n, $on on';
+}
+
 /// Settings: plain rows in three groups, each opening its page.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -54,17 +62,15 @@ class SettingsScreen extends ConsumerWidget {
       children: [
         const SectionTitle('Watching'),
         NavRow(
-          icon: Icons.hub_outlined,
           label: 'Sources',
           value: addons == null
               ? null
               : addons.isEmpty
               ? 'None yet. Add one to see movies and shows.'
-              : '${addons.length} added, $on on',
+              : sourcesSummary(addons.length, on),
           onTap: () => go('sources'),
         ),
         NavRow(
-          icon: Icons.translate_rounded,
           label: 'Languages and subtitles',
           value: [
             switch (languageList(s.subtitleLanguages)) {
@@ -77,13 +83,11 @@ class SettingsScreen extends ConsumerWidget {
           onTap: () => go('languages'),
         ),
         NavRow(
-          icon: Icons.subtitles_outlined,
           label: 'Subtitle sites',
           value: sites.isEmpty ? 'None on' : sites.join(', '),
           onTap: () => go('subtitle-sites'),
         ),
         NavRow(
-          icon: Icons.play_circle_outline_rounded,
           label: 'Playback',
           value: [
             'Up to ${resolutionLabel(s.maxResolution)}',
@@ -93,13 +97,11 @@ class SettingsScreen extends ConsumerWidget {
         ),
         const SectionTitle('This phone'),
         NavRow(
-          icon: Icons.download_outlined,
           label: 'Downloads',
           value: s.wifiOnlyDownloads ? 'On Wi-Fi only' : 'On any network',
           onTap: () => go('downloads'),
         ),
         NavRow(
-          icon: Icons.network_check_rounded,
           label: 'Network',
           value: s.vpnInterface.isNotEmpty
               ? 'Only through ${s.vpnInterface}'
@@ -109,20 +111,17 @@ class SettingsScreen extends ConsumerWidget {
           onTap: () => go('network'),
         ),
         NavRow(
-          icon: Icons.sd_storage_outlined,
           label: 'Storage',
           value: 'See and clear what Kinora keeps',
           onTap: () => go('storage'),
         ),
         const SectionTitle('Help'),
         NavRow(
-          icon: Icons.monitor_heart_outlined,
           label: 'Diagnostics',
           value: 'Versions and recent log',
           onTap: () => go('diagnostics'),
         ),
         NavRow(
-          icon: Icons.info_outline_rounded,
           label: 'About Kinora',
           value: 'Version $kinoraVersion',
           onTap: () => go('about'),

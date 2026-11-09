@@ -49,19 +49,16 @@ final class SearchGroup {
 
 const _groupLabels = {'movie': 'Movies', 'series': 'Shows', 'anime': 'Anime'};
 
-/// Movies, then shows, then anime, then anything else.
+/// Results grouped by type; the group holding the best match comes first
+/// (sources return results best match first).
 List<SearchGroup> groupResults(List<MetaPreview> items) {
   final byType = <String, List<MetaPreview>>{};
   for (final m in items) {
     (byType[m.type] ??= []).add(m);
   }
-  final types = [
-    ..._groupLabels.keys.where(byType.containsKey),
-    ...byType.keys.where((t) => !_groupLabels.containsKey(t)),
-  ];
   return [
-    for (final t in types)
-      SearchGroup(_groupLabels[t] ?? _capitalized(typeLabel(t)), byType[t]!),
+    for (final MapEntry(key: t, value: list) in byType.entries)
+      SearchGroup(_groupLabels[t] ?? _capitalized(typeLabel(t)), list),
   ];
 }
 

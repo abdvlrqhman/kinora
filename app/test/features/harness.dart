@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
+import 'package:kinora/features/cast/cast_picker.dart';
+import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/services/play_request.dart';
 import 'package:kinora/services/resolver.dart';
 import 'package:kinora/services/sources.dart';
@@ -73,7 +75,14 @@ Future<Nav> pumpScreen(
   await tester.pumpWidget(
     ProviderScope(
       retry: (_, _) => null,
-      overrides: [databaseProvider.overrideWithValue(db), ...overrides],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        // No connectivity plugin in tests: the phone is online.
+        onlineProvider.overrideWith((ref) => Stream.value(true)),
+        // ...and finds no TVs without opening sockets.
+        castSearchProvider.overrideWithValue(() async {}),
+        ...overrides,
+      ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,
         theme: kinoraTheme(),

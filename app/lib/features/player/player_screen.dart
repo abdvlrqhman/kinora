@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
@@ -16,8 +18,10 @@ import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
+import '../../ui/widgets/media.dart';
 import '../../ui/widgets/states.dart';
 import '../../services/cast_service.dart';
+import '../title/versions_sheet.dart';
 import 'player_controller.dart';
 import 'widgets/cast_panel.dart';
 import 'widgets/panels.dart';
@@ -51,6 +55,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _flash; // transient feedback: "+10s", "Volume 60%"
   Timer? _flashTimer;
 
+  /// Screen reader on: controls stay up (they'd vanish mid-swipe).
+  bool _accessible = false;
+
+  /// Double-tap seeks in a row add up ("+30 s").
+  int _seekSum = 0;
+  Timer? _seekReset;
+
+  /// The last cast failure already shown, so each shows once.
+  String? _castNoticeShown;
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +88,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _pipSub = Pip.instance.changes.listen((v) {
       if (mounted) setState(() => _inPip = v);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _accessible = MediaQuery.maybeAccessibleNavigationOf(context) ?? false;
+    if (_accessible) {
+      _hide?.cancel();
+      _controls = true;
+    }
   }
 
   /// PiP is offered only while something is actually playing.
@@ -100,6 +124,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       c.notice = null;
       _showFlash(notice);
     }
+    // A cast that failed or lost the TV says why, once, over the phone view.
+    final castNote = _cast.message;
+    if (castNote != null &&
+        castNote != _castNoticeShown &&
+        (_cast.phase == CastPhase.stopped || _cast.phase == CastPhase.lost)) {
+      _castNoticeShown = castNote;
+      _showFlash(castNote);
+    }
     _syncPip();
     setState(() {});
   }
@@ -108,6 +140,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void dispose() {
     _hide?.cancel();
     _flashTimer?.cancel();
+    _seekReset?.cancel();
     _cast.removeListener(_onChange);
     unawaited(_pipSub?.cancel());
     unawaited(Pip.instance.setAllowed(allowed: false));
@@ -125,6 +158,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _scheduleHide() {
     _hide?.cancel();
+    if (_accessible) return;
     _hide = Timer(const Duration(seconds: 4), () {
       if (mounted &&
           c.player.state.playing &&
@@ -197,14 +231,32 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _doubleTap(TapDownDetails d, double width) {
     final x = d.localPosition.dx;
     if (x < width * 0.35) {
-      unawaited(c.seekRelative(const Duration(seconds: -10)));
-      _showFlash('−10 s');
+      _seekBy(-10);
     } else if (x > width * 0.65) {
-      unawaited(c.seekRelative(const Duration(seconds: 10)));
-      _showFlash('+10 s');
+      _seekBy(10);
     } else {
       unawaited(c.player.playOrPause());
     }
+  }
+
+  /// Seeks [seconds] and shows the running total of taps within 700 ms.
+  void _seekBy(int seconds) {
+    _seekSum = _seekSum.sign == seconds.sign ? _seekSum + seconds : seconds;
+    _seekReset?.cancel();
+    _seekReset = Timer(const Duration(milliseconds: 700), () => _seekSum = 0);
+    unawaited(c.seekRelative(Duration(seconds: seconds)));
+    _showFlash(_seekSum > 0 ? '+$_seekSum s' : '−${-_seekSum} s');
+  }
+
+  /// Height of the scrubber and bottom row, so subtitles sit above them.
+  double _controlsHeight(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return MediaQuery.paddingOf(context).bottom +
+        KSpace.x3 +
+        math.max(44, scaler.scale(18)) +
+        KSpace.x2 +
+        math.max(48, scaler.scale(22) + 26) +
+        KSpace.x2;
   }
 
   // ---------------------------------------------------------------- build --
@@ -212,6 +264,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final req = c.request;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final motion = reduce ? Duration.zero : KMotion.base;
     return ArtworkTintScope(
       image: artworkProvider(req.still ?? req.background ?? req.poster),
       child: Scaffold(
@@ -232,7 +286,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ),
                 SubtitleOverlay(
                   player: c.player,
-                  lift: _controls && !_inPip ? 96 : 0,
+                  clearance: _controls && !_inPip
+                      ? _controlsHeight(context)
+                      : 0,
                 ),
                 if (!_inPip) ...[
                   // Gesture layer.
@@ -267,7 +323,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       Center(child: _FlashLabel(text: _flash!)),
                     AnimatedOpacity(
                       opacity: _controls ? 1 : 0,
-                      duration: KMotion.base,
+                      duration: motion,
                       child: IgnorePointer(
                         ignoring: !_controls,
                         child: _locked
@@ -327,7 +383,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     offset: _panel == _Panel.none
                         ? const Offset(1.1, 0)
                         : Offset.zero,
-                    duration: KMotion.base,
+                    duration: motion,
                     curve: KMotion.curve,
                     child: Align(
                       alignment: Alignment.centerRight,
@@ -423,7 +479,7 @@ class _Controls extends StatelessWidget {
               Row(
                 children: [
                   GlassIconButton(
-                    icon: Icons.arrow_back_rounded,
+                    icon: Icons.chevron_left_rounded,
                     label: 'Close player',
                     onPressed: onBack,
                   ),
@@ -436,11 +492,12 @@ class _Controls extends StatelessWidget {
                           req.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          textDirection: contentDir(req.title),
                           style: KType.title,
                         ),
                         if (req.isEpisode)
                           Text(
-                            'S${req.season} E${req.episode}${req.episodeTitle == null ? '' : '  ${req.episodeTitle}'}',
+                            _episodeLine(req),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: KType.small,
@@ -454,7 +511,7 @@ class _Controls extends StatelessWidget {
                   const SizedBox(width: KSpace.x2),
                   GlassIconButton(
                     icon: Icons.cast_rounded,
-                    label: 'Play on TV',
+                    label: 'Cast to a TV',
                     onPressed: () => onPanel(_Panel.cast),
                   ),
                   const SizedBox(width: KSpace.x2),
@@ -669,7 +726,16 @@ class _BufferingHint extends StatelessWidget {
   );
 }
 
-/// While preparing: the artwork, the title and what's happening, in words.
+/// "S1 E3  Pilot", the episode title isolated so its direction can't
+/// reorder the line.
+String _episodeLine(PlayRequest r) => [
+  'S${r.season} E${r.episode}',
+  if (r.episodeTitle != null) isolate(r.episodeTitle!),
+].join('  ');
+
+/// While preparing: the artwork you tapped (grown into the screen), the
+/// title, the version being started and what's happening, in words. On
+/// failure, what to do next.
 class _PrepareView extends StatelessWidget {
   const _PrepareView({
     required this.controller,
@@ -687,39 +753,57 @@ class _PrepareView extends StatelessWidget {
     final req = c.request;
     final failed = c.phase == PlayerPhase.failed;
     final pad = MediaQuery.paddingOf(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final art = Artwork(
+      url: req.still ?? req.background ?? req.poster,
+      memCacheWidth: decodeWidth(context, width),
+    );
     return Stack(
       fit: StackFit.expand,
       children: [
-        Opacity(
-          opacity: 0.45,
-          child: Artwork(url: req.still ?? req.background ?? req.poster),
+        Hero(
+          tag: artHeroTag(req.videoId),
+          curve: KMotion.emphasized,
+          // Full strength as it leaves the tile, dimmed as it lands.
+          flightShuttleBuilder: (_, animation, direction, _, _) =>
+              FadeTransition(
+                opacity: Tween<double>(
+                  begin: direction == HeroFlightDirection.push ? 1 : 0.45,
+                  end: direction == HeroFlightDirection.push ? 0.45 : 1,
+                ).animate(animation),
+                child: art,
+              ),
+          child: Opacity(opacity: 0.45, child: art),
         ),
         const LegibilityScrim(stops: [0, 1]),
-        Padding(
+        FillOrScroll(
           padding: EdgeInsets.fromLTRB(
             pad.left + KSpace.margin * 2,
             pad.top + KSpace.x3,
             pad.right + KSpace.margin,
             pad.bottom + KSpace.margin,
           ),
-          child: Column(
+          top: GlassGroup(
+            child: GlassIconButton(
+              icon: Icons.chevron_left_rounded,
+              label: 'Close player',
+              onPressed: onBack,
+            ),
+          ),
+          bottom: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GlassIconButton(
-                icon: Icons.arrow_back_rounded,
-                label: 'Close player',
-                onPressed: onBack,
-              ),
-              const Spacer(),
               Text(
                 req.title,
                 style: KType.hero,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
+                textDirection: contentDir(req.title),
               ),
               if (req.isEpisode)
                 Text(
-                  'S${req.season} E${req.episode}${req.episodeTitle == null ? '' : '  ${req.episodeTitle}'}',
+                  _episodeLine(req),
                   style: KType.title.copyWith(color: KColors.haze),
                 ),
               const SizedBox(height: KSpace.margin),
@@ -746,24 +830,55 @@ class _PrepareView extends StatelessWidget {
                     children: [
                       const _Pulse(),
                       const SizedBox(width: KSpace.x3),
-                      Text(c.status, style: KType.label),
+                      Flexible(
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Text(c.status, style: KType.label),
+                        ),
+                      ),
                     ],
                   ),
                 )
               else ...[
-                Text(c.error ?? 'Playback couldn’t start.', style: KType.body),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    c.error ?? 'Playback couldn’t start.',
+                    style: KType.body,
+                  ),
+                ),
                 const SizedBox(height: KSpace.x4),
                 GlassGroup(
-                  child: Row(
-                    children: [
-                      GlassButton(
-                        label: 'Choose another version',
-                        prominent: true,
-                        onPressed: onVersions,
-                      ),
-                      const SizedBox(width: KSpace.x3),
-                      GlassButton(label: 'Try again', onPressed: c.retry),
-                    ],
+                  child: Wrap(
+                    spacing: KSpace.x3,
+                    runSpacing: KSpace.x3,
+                    children: switch (c.failureAction) {
+                      // Nothing can stream yet: the fix is a source.
+                      FailureAction.addSource => [
+                        GlassButton(
+                          label: 'Add a source',
+                          icon: Icons.add_rounded,
+                          prominent: true,
+                          onPressed: () => context.go('/settings/sources'),
+                        ),
+                      ],
+                      // A pasted link has no other versions.
+                      FailureAction.retry => [
+                        GlassButton(
+                          label: 'Try again',
+                          prominent: true,
+                          onPressed: c.retry,
+                        ),
+                      ],
+                      FailureAction.versions => [
+                        GlassButton(
+                          label: 'Choose another version',
+                          prominent: true,
+                          onPressed: onVersions,
+                        ),
+                        GlassButton(label: 'Try again', onPressed: c.retry),
+                      ],
+                    },
                   ),
                 ),
               ],
@@ -820,7 +935,8 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
   );
 }
 
-/// Up Next near the credits: counts down, then plays the next episode.
+/// Up Next near the credits: counts down inside its Play button (whose
+/// fill drains over 10 s), then plays the next episode.
 class _UpNext extends StatefulWidget {
   const _UpNext({required this.controller});
   final PlayerController controller;
@@ -829,14 +945,23 @@ class _UpNext extends StatefulWidget {
   State<_UpNext> createState() => _UpNextState();
 }
 
-class _UpNextState extends State<_UpNext> {
-  int _left = 10;
+class _UpNextState extends State<_UpNext> with SingleTickerProviderStateMixin {
+  static const _seconds = 10;
+  int _left = _seconds;
   Timer? _t;
+  late final AnimationController _drain = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: _seconds),
+    value: 1,
+  );
+
+  bool get _counting =>
+      widget.controller.request.isEpisode && widget.controller.autoplayNext;
 
   @override
   void initState() {
     super.initState();
-    if (widget.controller.request.isEpisode && widget.controller.autoplayNext) {
+    if (_counting) {
       _t = Timer.periodic(const Duration(seconds: 1), (t) {
         if (!mounted) return;
         setState(() => _left--);
@@ -849,15 +974,39 @@ class _UpNextState extends State<_UpNext> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (!_counting || reduce) {
+      _drain
+        ..stop()
+        ..value = 1;
+    } else if (!_drain.isAnimating && _t != null && _t!.isActive) {
+      unawaited(_drain.reverse(from: _left / _seconds));
+    }
+  }
+
+  @override
   void dispose() {
     _t?.cancel();
+    _drain.dispose();
     super.dispose();
+  }
+
+  void _keepWatching() {
+    _t?.cancel();
+    _drain.stop();
+    widget.controller.upNextDismissed = true;
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final next = widget.controller.nextEpisode!;
     final pad = MediaQuery.paddingOf(context);
+    final width = math.min(380.0, MediaQuery.sizeOf(context).width * 0.45);
+    final name = next.episodeTitle ?? 'Episode ${next.episode}';
+    final counting = _t?.isActive ?? false;
     return Align(
       alignment: Alignment.bottomRight,
       child: Padding(
@@ -868,7 +1017,7 @@ class _UpNextState extends State<_UpNext> {
           pad.bottom + 110,
         ),
         child: SizedBox(
-          width: 340,
+          width: width,
           child: Glass(
             radius: KRadius.sheet,
             padding: const EdgeInsets.all(KSpace.x4),
@@ -876,14 +1025,8 @@ class _UpNextState extends State<_UpNext> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  widget.controller.autoplayNext
-                      ? 'Next episode in $_left'
-                      : 'Up next',
-                  style: KType.small,
-                ),
-                const SizedBox(height: KSpace.x2),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
                       width: 112,
@@ -891,38 +1034,47 @@ class _UpNextState extends State<_UpNext> {
                         url: next.still,
                         radius: KRadius.still,
                         aspectRatio: 16 / 9,
-                        memCacheWidth: 260,
+                        memCacheWidth: decodeWidth(context, 112),
                       ),
                     ),
                     const SizedBox(width: KSpace.x3),
                     Expanded(
-                      child: Text(
-                        'S${next.season} E${next.episode}${next.episodeTitle == null ? '' : '\n${next.episodeTitle}'}',
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: KType.label,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Up next  S${next.season} E${next.episode}',
+                            style: KType.tabular(KType.small),
+                          ),
+                          Text(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textDirection: contentDir(name),
+                            style: KType.title,
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: KSpace.x3),
-                Row(
-                  children: [
-                    GlassButton(
-                      label: 'Play now',
-                      prominent: true,
-                      onPressed: widget.controller.playNext,
-                    ),
-                    const SizedBox(width: KSpace.x2),
-                    GlassButton(
-                      label: 'Keep watching',
-                      onPressed: () {
-                        _t?.cancel();
-                        widget.controller.upNextDismissed = true;
-                        setState(() {});
-                      },
-                    ),
-                  ],
+                GlassGroup(
+                  child: Wrap(
+                    spacing: KSpace.x2,
+                    runSpacing: KSpace.x2,
+                    children: [
+                      _CountdownButton(
+                        seconds: counting ? _left : null,
+                        drain: _drain,
+                        onPressed: widget.controller.playNext,
+                      ),
+                      GlassButton(
+                        label: 'Keep watching',
+                        onPressed: _keepWatching,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -933,7 +1085,90 @@ class _UpNextState extends State<_UpNext> {
   }
 }
 
-/// Switch to another version without leaving (keeps the position).
+/// "Play now  7": a lit capsule whose fill drains as the count runs down.
+/// The drained part turns pale, so the dark label reads all the way.
+class _CountdownButton extends StatelessWidget {
+  const _CountdownButton({
+    required this.seconds,
+    required this.drain,
+    required this.onPressed,
+  });
+
+  /// Seconds left; null when not counting down.
+  final int? seconds;
+  final Animation<double> drain;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final lit = KinoraTint.lit(context);
+    final label = KType.title.copyWith(
+      color: KColors.blackout,
+      fontWeight: FontWeight.w700,
+      fontVariations: const [FontVariation.weight(700)],
+    );
+    return Semantics(
+      button: true,
+      label: seconds == null
+          ? 'Play the next episode now'
+          : 'Play the next episode now. It starts in $seconds seconds',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onPressed();
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: ClipPath(
+            clipper: const ShapeBorderClipper(shape: StadiumBorder()),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ColoredBox(color: Color.lerp(lit, KColors.lamp, 0.6)!),
+                ),
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: drain,
+                    builder: (_, _) => FractionallySizedBox(
+                      alignment: AlignmentDirectional.centerStart,
+                      widthFactor: drain.value,
+                      child: ColoredBox(color: lit),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.play_arrow_rounded,
+                        size: 20,
+                        color: KColors.blackout,
+                      ),
+                      const SizedBox(width: KSpace.x2),
+                      Text('Play now', style: label),
+                      if (seconds != null)
+                        Text('  $seconds', style: KType.tabular(label)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Switch to another version without leaving (keeps the position): the
+/// same rows as the title page's version sheet.
 class _VersionsPanel extends ConsumerWidget {
   const _VersionsPanel({required this.controller, required this.onClose});
 
@@ -954,68 +1189,65 @@ class _VersionsPanel extends ConsumerWidget {
         ),
       ),
     );
+    Widget note(String text) => Padding(
+      padding: const EdgeInsets.all(KSpace.margin),
+      child: Text(text, style: KType.body.copyWith(color: KColors.haze)),
+    );
     return SidePanel(
-      title: 'Versions',
+      title: 'Choose another version',
       onClose: onClose,
-      child: result.when(
-        loading: () => Padding(
-          padding: const EdgeInsets.all(KSpace.margin),
-          child: Text('Finding versions…', style: KType.small),
-        ),
-        error: (e, _) => Padding(
-          padding: const EdgeInsets.all(KSpace.margin),
-          child: Text(
-            'Couldn’t load versions. ${friendlyError(e)}',
-            style: KType.small,
-          ),
-        ),
-        data: (res) => res.releases.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.all(KSpace.margin),
-                child: Text(
-                  res.message ?? 'No versions found.',
-                  style: KType.body,
-                ),
-              )
-            : ListView.builder(
-                itemCount: res.releases.length,
-                itemBuilder: (context, i) {
-                  final v = res.releases[i];
-                  final current =
-                      controller.source?.release?.candidateId == v.candidateId;
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: KSpace.margin,
-                      vertical: 4,
+      child: switch (result) {
+        AsyncValue(:final value?) when value.releases.isNotEmpty =>
+          ListView.builder(
+            itemCount: value.releases.length,
+            itemBuilder: (context, i) {
+              final v = value.releases[i];
+              return ReleaseTile(
+                release: v,
+                isBest: i == 0,
+                current:
+                    controller.source?.release?.candidateId == v.candidateId,
+                onTap: () {
+                  onClose();
+                  controller.switchTo(
+                    r.copyWith(
+                      candidateId: v.candidateId,
+                      // A chosen version streams, even if a download exists.
+                      clearLocal: true,
+                      startAt: controller.phase == PlayerPhase.playing
+                          ? controller.player.state.position
+                          : null,
                     ),
-                    title: Text(v.headline, style: KType.body),
-                    subtitle: Text(
-                      [...v.reasons.take(2), ...v.warnings.take(1)].join('\n'),
-                      style: KType.small,
-                    ),
-                    trailing: current
-                        ? Icon(
-                            Icons.check_rounded,
-                            color: KinoraTint.of(context),
-                          )
-                        : null,
-                    onTap: current
-                        ? null
-                        : () {
-                            onClose();
-                            controller.switchTo(
-                              r.copyWith(
-                                candidateId: v.candidateId,
-                                startAt: controller.phase == PlayerPhase.playing
-                                    ? controller.player.state.position
-                                    : null,
-                              ),
-                            );
-                          },
                   );
                 },
+              );
+            },
+          ),
+        AsyncValue(:final value?) when value.noStreamSource => ListView(
+          children: [
+            note(value.message ?? 'Add a source that provides streams.'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: GlassButton(
+                  label: 'Add a source',
+                  icon: Icons.add_rounded,
+                  prominent: true,
+                  onPressed: () => context.go('/settings/sources'),
+                ),
               ),
-      ),
+            ),
+          ],
+        ),
+        AsyncValue(:final value?) => note(
+          value.message ?? 'No versions found.',
+        ),
+        AsyncError(:final error) => note(
+          'Couldn’t load versions. ${friendlyError(error)}',
+        ),
+        _ => note('Finding versions…'),
+      },
     );
   }
 }

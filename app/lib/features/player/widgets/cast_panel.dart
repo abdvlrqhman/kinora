@@ -5,17 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/format.dart';
+import '../../cast/cast_picker.dart';
 import '../../../services/cast_service.dart';
 import '../../../ui/glass.dart';
 import '../../../ui/tint.dart';
 import '../../../ui/tokens.dart';
 import '../../../ui/widgets/artwork.dart';
+import '../../../ui/widgets/media.dart';
 import '../player_controller.dart';
 import 'panels.dart';
 import 'scrubber.dart';
 
-/// Pick a TV. Searches on open; warns when the TV can't decode this version.
-class CastPanel extends ConsumerStatefulWidget {
+/// Cast to a TV. Searches on open; warns when a TV can't decode this
+/// version and offers one it can.
+class CastPanel extends ConsumerWidget {
   const CastPanel({
     super.key,
     required this.controller,
@@ -27,35 +30,16 @@ class CastPanel extends ConsumerStatefulWidget {
   final VoidCallback onClose;
   final VoidCallback onVersions;
 
-  @override
-  ConsumerState<CastPanel> createState() => _CastPanelState();
-}
-
-class _CastPanelState extends ConsumerState<CastPanel> {
-  final _address = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(ref.read(castServiceProvider).search());
-  }
-
-  @override
-  void dispose() {
-    _address.dispose();
-    super.dispose();
-  }
-
-  Future<void> _castTo(DlnaDevice d) async {
-    final c = widget.controller;
+  Future<void> _castTo(WidgetRef ref, DlnaDevice d) async {
+    final c = controller;
     final cast = ref.read(castServiceProvider);
     final source = c.source;
     if (source == null) return;
     final sub = await c.subtitleForTv();
     final at = c.player.state.position;
     await c.player.pause();
-    widget.onClose();
-    await cast.cast(
+    onClose();
+    final ok = await cast.cast(
       d: d,
       source: source,
       request: c.request,
@@ -64,152 +48,46 @@ class _CastPanelState extends ConsumerState<CastPanel> {
       subtitlePath: sub?.path,
       subtitleLanguage: sub?.language,
     );
+    // The player shows why (cast.message); the phone picks up again.
+    if (!ok && !cast.isCasting) await c.player.play();
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cast = ref.watch(castServiceProvider);
-    return ListenableBuilder(
-      listenable: cast,
-      builder: (context, _) {
-        final source = widget.controller.source;
-        return SidePanel(
-          title: 'Play on TV',
-          onClose: widget.onClose,
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: KSpace.x4),
-            children: [
-              if (cast.searching)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: KSpace.margin,
-                    vertical: KSpace.x2,
-                  ),
-                  child: Text(
-                    'Looking for TVs on this Wi-Fi…',
-                    style: KType.small,
-                  ),
-                ),
-              for (final d in cast.devices)
-                Builder(
-                  builder: (context) {
-                    final check = source == null ? null : cast.check(d, source);
-                    final ok = check?.isPlayable ?? true;
-                    return Semantics(
-                      button: true,
-                      label: 'Play on ${d.friendlyName}',
-                      excludeSemantics: true,
-                      child: InkWell(
-                        onTap: () => _castTo(d),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: KSpace.margin,
-                            vertical: 12,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.tv_rounded),
-                              const SizedBox(width: KSpace.x3),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(d.friendlyName, style: KType.body),
-                                    if (d.modelName != null)
-                                      Text(d.modelName!, style: KType.small),
-                                    if (!ok)
-                                      Text(
-                                        check!.problems.join('\n'),
-                                        style: KType.small.copyWith(
-                                          color: KColors.marquee,
-                                        ),
-                                      ),
-                                    if (ok &&
-                                        (check?.warnings.isNotEmpty ?? false))
-                                      Text(
-                                        check!.warnings.join('\n'),
-                                        style: KType.small,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
+    final source = controller.source;
+    return SidePanel(
+      title: 'Cast to a TV',
+      onClose: onClose,
+      child: ListenableBuilder(
+        listenable: cast,
+        builder: (context, _) => CastDeviceList(
+          onPick: (d) => unawaited(_castTo(ref, d)),
+          notes: (d) {
+            if (source == null) return const [];
+            final check = cast.check(d, source);
+            return [
+              for (final p in check.problems) (text: p, problem: true),
+              if (check.isPlayable)
+                for (final w in check.warnings) (text: w, problem: false),
+            ];
+          },
+          trailing: [
+            if (source != null &&
+                cast.devices.any((d) => !cast.check(d, source).isPlayable))
+              Padding(
+                padding: const EdgeInsets.all(KSpace.margin),
+                child: GlassButton(
+                  label: 'Choose a version the TV can play',
+                  onPressed: () {
+                    onClose();
+                    onVersions();
                   },
                 ),
-              if (cast.devices.any(
-                (d) => source != null && !cast.check(d, source).isPlayable,
-              ))
-                Padding(
-                  padding: const EdgeInsets.all(KSpace.margin),
-                  child: GlassButton(
-                    label: 'Choose a version the TV can play',
-                    onPressed: () {
-                      widget.onClose();
-                      widget.onVersions();
-                    },
-                  ),
-                ),
-              if (cast.message != null && !cast.searching)
-                Padding(
-                  padding: const EdgeInsets.all(KSpace.margin),
-                  child: Text(cast.message!, style: KType.body),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  KSpace.margin,
-                  KSpace.x4,
-                  KSpace.margin,
-                  0,
-                ),
-                child: Text(
-                  'TV not listed? Enter its address (Settings › Network on the TV).',
-                  style: KType.small,
-                ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: KSpace.margin,
-                  vertical: KSpace.x2,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _address,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          hintText: '192.168.1.20',
-                        ),
-                        onSubmitted: cast.addByAddress,
-                      ),
-                    ),
-                    const SizedBox(width: KSpace.x2),
-                    GlassButton(
-                      label: 'Add',
-                      onPressed: () => cast.addByAddress(_address.text),
-                    ),
-                  ],
-                ),
-              ),
-              if (!cast.searching)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: KSpace.margin,
-                  ),
-                  child: TextButton(
-                    onPressed: cast.search,
-                    child: const Text('Search again'),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }
@@ -225,6 +103,7 @@ class CastingView extends ConsumerWidget {
     final cast = ref.watch(castServiceProvider);
     final req = controller.request;
     final pad = MediaQuery.paddingOf(context);
+    final width = MediaQuery.sizeOf(context).width;
     return ListenableBuilder(
       listenable: cast,
       builder: (context, _) {
@@ -241,37 +120,50 @@ class CastingView extends ConsumerWidget {
           children: [
             Opacity(
               opacity: 0.4,
-              child: Artwork(url: req.still ?? req.background ?? req.poster),
+              child: Artwork(
+                url: req.still ?? req.background ?? req.poster,
+                memCacheWidth: decodeWidth(context, width),
+              ),
             ),
             const LegibilityScrim(stops: [0, 1]),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                pad.left + KSpace.margin * 2,
-                pad.top + KSpace.x4,
-                pad.right + KSpace.margin * 2,
-                pad.bottom + KSpace.margin,
-              ),
-              child: GlassGroup(
-                child: Column(
+            GlassGroup(
+              child: FillOrScroll(
+                padding: EdgeInsets.fromLTRB(
+                  pad.left + KSpace.margin * 2,
+                  pad.top + KSpace.x4,
+                  pad.right + KSpace.margin * 2,
+                  pad.bottom + KSpace.margin,
+                ),
+                top: Row(
+                  children: [
+                    Icon(Icons.tv_rounded, color: KinoraTint.of(context)),
+                    const SizedBox(width: KSpace.x2),
+                    Expanded(
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Text(status, style: KType.title),
+                      ),
+                    ),
+                  ],
+                ),
+                bottom: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.tv_rounded, color: KinoraTint.of(context)),
-                        const SizedBox(width: KSpace.x2),
-                        Expanded(child: Text(status, style: KType.title)),
-                      ],
-                    ),
-                    const Spacer(),
                     Text(
                       req.title,
                       style: KType.hero,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                      textDirection: contentDir(req.title),
                     ),
                     if (req.isEpisode)
                       Text(
-                        'S${req.season} E${req.episode}${req.episodeTitle == null ? '' : '  ${req.episodeTitle}'}',
+                        [
+                          'S${req.season} E${req.episode}',
+                          if (req.episodeTitle != null)
+                            isolate(req.episodeTitle!),
+                        ].join('  '),
                         style: KType.title.copyWith(color: KColors.haze),
                       ),
                     const SizedBox(height: KSpace.margin),
@@ -282,7 +174,10 @@ class CastingView extends ConsumerWidget {
                       onSeek: cast.seek,
                     ),
                     const SizedBox(height: KSpace.x3),
-                    Row(
+                    Wrap(
+                      spacing: KSpace.x3,
+                      runSpacing: KSpace.x3,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         GlassIconButton(
                           icon: Icons.replay_10_rounded,
@@ -291,7 +186,6 @@ class CastingView extends ConsumerWidget {
                             cast.position - const Duration(seconds: 10),
                           ),
                         ),
-                        const SizedBox(width: KSpace.x3),
                         GlassIconButton(
                           icon: cast.phase == CastPhase.playing
                               ? Icons.pause_rounded
@@ -302,7 +196,6 @@ class CastingView extends ConsumerWidget {
                           onPressed: cast.togglePlay,
                           size: 64,
                         ),
-                        const SizedBox(width: KSpace.x3),
                         GlassIconButton(
                           icon: Icons.forward_10_rounded,
                           label: 'Forward 10 seconds',
@@ -310,19 +203,18 @@ class CastingView extends ConsumerWidget {
                             cast.position + const Duration(seconds: 10),
                           ),
                         ),
-                        const SizedBox(width: KSpace.section),
+                        const SizedBox(width: KSpace.x4),
                         GlassIconButton(
                           icon: Icons.volume_down_rounded,
                           label: 'TV volume down',
                           onPressed: () => cast.changeVolume(-5),
                         ),
-                        const SizedBox(width: KSpace.x2),
                         GlassIconButton(
                           icon: Icons.volume_up_rounded,
                           label: 'TV volume up',
                           onPressed: () => cast.changeVolume(5),
                         ),
-                        const Spacer(),
+                        const SizedBox(width: KSpace.x4),
                         GlassButton(
                           label: 'Watch on this phone',
                           icon: Icons.phone_iphone_rounded,

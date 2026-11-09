@@ -15,6 +15,7 @@ import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/sheet.dart';
+import 'home_feed.dart';
 
 /// A titled, lazily built horizontal row aligned to the page margin.
 class RowSection extends StatelessWidget {
@@ -218,10 +219,13 @@ class ContinueTile extends ConsumerWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Artwork(
-                    url: item.still ?? backdrop ?? item.poster,
-                    fallbackText: item.name,
-                    memCacheWidth: decodeWidth(context, _stillWidth),
+                  ArtHero(
+                    videoId: item.videoId,
+                    child: Artwork(
+                      url: item.still ?? backdrop ?? item.poster,
+                      fallbackText: item.name,
+                      memCacheWidth: decodeWidth(context, _stillWidth),
+                    ),
                   ),
                   stillShade,
                   Positioned(
@@ -239,6 +243,7 @@ class ContinueTile extends ConsumerWidget {
             item.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textDirection: contentDir(item.name),
             style: KType.label.copyWith(fontWeight: FontWeight.w600),
           ),
           Text(
@@ -249,6 +254,74 @@ class ContinueTile extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Shows you follow with episodes that aired since you last watched; hidden
+/// when there are none. Tap plays the first new one.
+class NewEpisodesRow extends ConsumerWidget {
+  const NewEpisodesRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final shows = ref.watch(newEpisodesProvider).value ?? const [];
+    if (shows.isEmpty) return const SizedBox.shrink();
+    final scaler = MediaQuery.textScalerOf(context);
+    return RowSection(
+      title: 'New episodes',
+      height:
+          _stillWidth * 9 / 16 +
+          KSpace.x2 +
+          scaler.scale(18) +
+          scaler.scale(16) +
+          4,
+      itemWidth: _stillWidth,
+      itemCount: shows.length,
+      itemBuilder: (context, i) {
+        final show = shows[i];
+        final meta = show.model.meta;
+        final e = show.next;
+        final number = Fmt.episode(e.season ?? 0, e.episode ?? 0);
+        final count = show.episodes.length;
+        final what = [number, if (count == 1) 'New' else '$count new'];
+        void goToTitle() => openTitle(context, type: meta.type, id: meta.id);
+        return Pressable(
+          label: ['${meta.name}, $number', ?e.title, what.last].join(', '),
+          hint: 'Plays $number',
+          onTap: () => openPlayer(context, show.model.request(episode: e)),
+          onLongPress: goToTitle,
+          actions: {
+            const CustomSemanticsAction(label: 'Go to title'): goToTitle,
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Artwork(
+                url: e.thumbnail ?? meta.background ?? meta.poster,
+                fallbackText: meta.name,
+                radius: KRadius.still,
+                aspectRatio: 16 / 9,
+                memCacheWidth: decodeWidth(context, _stillWidth),
+              ),
+              const SizedBox(height: KSpace.x2),
+              Text(
+                meta.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textDirection: contentDir(meta.name),
+                style: KType.label.copyWith(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                what.join('  '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: KType.tabular(KType.small),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -289,7 +362,11 @@ class _ContinueMenu extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.name, style: KType.h2),
+                Text(
+                  item.name,
+                  style: KType.h2,
+                  textDirection: contentDir(item.name),
+                ),
                 if (subtitle != null || item.episodeTitle != null)
                   Text(
                     [?subtitle, ?item.episodeTitle].join('  '),

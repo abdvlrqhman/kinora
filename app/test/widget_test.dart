@@ -9,7 +9,7 @@ void main() {
   testWidgets('first launch opens onboarding', (tester) async {
     await tester.pumpWidget(const ProviderScope(child: KinoraApp()));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome'), findsOneWidget);
+    expect(find.text('Your own cinema'), findsOneWidget);
   });
 
   testWidgets('onboarded users land on Home and can switch tabs', (
