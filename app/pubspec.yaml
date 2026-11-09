@@ -20,6 +20,12 @@ dependencies:
   http: ^1.6.0
   kinora_engine:
     path: ../packages/engine
+  stremio:
+    path: ../packages/stremio
+  swarm:
+    path: ../packages/swarm
+  dlna:
+    path: ../packages/dlna
   liquid_glass_renderer: 1.0.0-dev.2
   media_kit: ^1.2.6
   media_kit_libs_video: ^1.0.7

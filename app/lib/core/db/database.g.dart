@@ -3,7 +3,7 @@
 part of 'database.dart';
 
 // ignore_for_file: type=lint
-class $AddonsTable extends Addons with TableInfo<$AddonsTable, Addon> {
+class $AddonsTable extends Addons with TableInfo<$AddonsTable, AddonRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -99,7 +99,7 @@ class $AddonsTable extends Addons with TableInfo<$AddonsTable, Addon> {
   static const String $name = 'addons';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Addon> instance, {
+    Insertable<AddonRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -153,9 +153,9 @@ class $AddonsTable extends Addons with TableInfo<$AddonsTable, Addon> {
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Addon map(Map<String, dynamic> data, {String? tablePrefix}) {
+  AddonRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Addon(
+    return AddonRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}id'],
@@ -189,7 +189,7 @@ class $AddonsTable extends Addons with TableInfo<$AddonsTable, Addon> {
   }
 }
 
-class Addon extends DataClass implements Insertable<Addon> {
+class AddonRow extends DataClass implements Insertable<AddonRow> {
   final int id;
 
   /// Base URL (manifest URL without `/manifest.json`), config segments kept.
@@ -198,7 +198,7 @@ class Addon extends DataClass implements Insertable<Addon> {
   final bool enabled;
   final int position;
   final DateTime addedAt;
-  const Addon({
+  const AddonRow({
     required this.id,
     required this.transportUrl,
     required this.manifestJson,
@@ -229,12 +229,12 @@ class Addon extends DataClass implements Insertable<Addon> {
     );
   }
 
-  factory Addon.fromJson(
+  factory AddonRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Addon(
+    return AddonRow(
       id: serializer.fromJson<int>(json['id']),
       transportUrl: serializer.fromJson<String>(json['transportUrl']),
       manifestJson: serializer.fromJson<String>(json['manifestJson']),
@@ -256,14 +256,14 @@ class Addon extends DataClass implements Insertable<Addon> {
     };
   }
 
-  Addon copyWith({
+  AddonRow copyWith({
     int? id,
     String? transportUrl,
     String? manifestJson,
     bool? enabled,
     int? position,
     DateTime? addedAt,
-  }) => Addon(
+  }) => AddonRow(
     id: id ?? this.id,
     transportUrl: transportUrl ?? this.transportUrl,
     manifestJson: manifestJson ?? this.manifestJson,
@@ -271,8 +271,8 @@ class Addon extends DataClass implements Insertable<Addon> {
     position: position ?? this.position,
     addedAt: addedAt ?? this.addedAt,
   );
-  Addon copyWithCompanion(AddonsCompanion data) {
-    return Addon(
+  AddonRow copyWithCompanion(AddonsCompanion data) {
+    return AddonRow(
       id: data.id.present ? data.id.value : this.id,
       transportUrl: data.transportUrl.present
           ? data.transportUrl.value
@@ -288,7 +288,7 @@ class Addon extends DataClass implements Insertable<Addon> {
 
   @override
   String toString() {
-    return (StringBuffer('Addon(')
+    return (StringBuffer('AddonRow(')
           ..write('id: $id, ')
           ..write('transportUrl: $transportUrl, ')
           ..write('manifestJson: $manifestJson, ')
@@ -305,7 +305,7 @@ class Addon extends DataClass implements Insertable<Addon> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Addon &&
+      (other is AddonRow &&
           other.id == this.id &&
           other.transportUrl == this.transportUrl &&
           other.manifestJson == this.manifestJson &&
@@ -314,7 +314,7 @@ class Addon extends DataClass implements Insertable<Addon> {
           other.addedAt == this.addedAt);
 }
 
-class AddonsCompanion extends UpdateCompanion<Addon> {
+class AddonsCompanion extends UpdateCompanion<AddonRow> {
   final Value<int> id;
   final Value<String> transportUrl;
   final Value<String> manifestJson;
@@ -338,7 +338,7 @@ class AddonsCompanion extends UpdateCompanion<Addon> {
     this.addedAt = const Value.absent(),
   }) : transportUrl = Value(transportUrl),
        manifestJson = Value(manifestJson);
-  static Insertable<Addon> custom({
+  static Insertable<AddonRow> custom({
     Expression<int>? id,
     Expression<String>? transportUrl,
     Expression<String>? manifestJson,
@@ -2136,7 +2136,7 @@ class TrackMemoryCompanion extends UpdateCompanion<TrackMemoryData> {
 }
 
 class $DownloadsTable extends Downloads
-    with TableInfo<$DownloadsTable, Download> {
+    with TableInfo<$DownloadsTable, DownloadRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -2433,7 +2433,7 @@ class $DownloadsTable extends Downloads
   static const String $name = 'downloads';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Download> instance, {
+    Insertable<DownloadRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -2621,9 +2621,9 @@ class $DownloadsTable extends Downloads
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Download map(Map<String, dynamic> data, {String? tablePrefix}) {
+  DownloadRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Download(
+    return DownloadRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -2733,7 +2733,7 @@ class $DownloadsTable extends Downloads
   }
 }
 
-class Download extends DataClass implements Insertable<Download> {
+class DownloadRow extends DataClass implements Insertable<DownloadRow> {
   final String id;
   final String mediaId;
   final String videoId;
@@ -2769,7 +2769,7 @@ class Download extends DataClass implements Insertable<Download> {
   final String subtitlesJson;
   final DateTime createdAt;
   final DateTime? completedAt;
-  const Download({
+  const DownloadRow({
     required this.id,
     required this.mediaId,
     required this.videoId,
@@ -2903,12 +2903,12 @@ class Download extends DataClass implements Insertable<Download> {
     );
   }
 
-  factory Download.fromJson(
+  factory DownloadRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Download(
+    return DownloadRow(
       id: serializer.fromJson<String>(json['id']),
       mediaId: serializer.fromJson<String>(json['mediaId']),
       videoId: serializer.fromJson<String>(json['videoId']),
@@ -2968,7 +2968,7 @@ class Download extends DataClass implements Insertable<Download> {
     };
   }
 
-  Download copyWith({
+  DownloadRow copyWith({
     String? id,
     String? mediaId,
     String? videoId,
@@ -2994,7 +2994,7 @@ class Download extends DataClass implements Insertable<Download> {
     String? subtitlesJson,
     DateTime? createdAt,
     Value<DateTime?> completedAt = const Value.absent(),
-  }) => Download(
+  }) => DownloadRow(
     id: id ?? this.id,
     mediaId: mediaId ?? this.mediaId,
     videoId: videoId ?? this.videoId,
@@ -3021,8 +3021,8 @@ class Download extends DataClass implements Insertable<Download> {
     createdAt: createdAt ?? this.createdAt,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
   );
-  Download copyWithCompanion(DownloadsCompanion data) {
-    return Download(
+  DownloadRow copyWithCompanion(DownloadsCompanion data) {
+    return DownloadRow(
       id: data.id.present ? data.id.value : this.id,
       mediaId: data.mediaId.present ? data.mediaId.value : this.mediaId,
       videoId: data.videoId.present ? data.videoId.value : this.videoId,
@@ -3063,7 +3063,7 @@ class Download extends DataClass implements Insertable<Download> {
 
   @override
   String toString() {
-    return (StringBuffer('Download(')
+    return (StringBuffer('DownloadRow(')
           ..write('id: $id, ')
           ..write('mediaId: $mediaId, ')
           ..write('videoId: $videoId, ')
@@ -3124,7 +3124,7 @@ class Download extends DataClass implements Insertable<Download> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Download &&
+      (other is DownloadRow &&
           other.id == this.id &&
           other.mediaId == this.mediaId &&
           other.videoId == this.videoId &&
@@ -3152,7 +3152,7 @@ class Download extends DataClass implements Insertable<Download> {
           other.completedAt == this.completedAt);
 }
 
-class DownloadsCompanion extends UpdateCompanion<Download> {
+class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   final Value<String> id;
   final Value<String> mediaId;
   final Value<String> videoId;
@@ -3243,7 +3243,7 @@ class DownloadsCompanion extends UpdateCompanion<Download> {
        kind = Value(kind),
        directory = Value(directory),
        state = Value(state);
-  static Insertable<Download> custom({
+  static Insertable<DownloadRow> custom({
     Expression<String>? id,
     Expression<String>? mediaId,
     Expression<String>? videoId,
@@ -4046,14 +4046,14 @@ class $$AddonsTableTableManager
         RootTableManager<
           _$AppDatabase,
           $AddonsTable,
-          Addon,
+          AddonRow,
           $$AddonsTableFilterComposer,
           $$AddonsTableOrderingComposer,
           $$AddonsTableAnnotationComposer,
           $$AddonsTableCreateCompanionBuilder,
           $$AddonsTableUpdateCompanionBuilder,
-          (Addon, BaseReferences<_$AppDatabase, $AddonsTable, Addon>),
-          Addon,
+          (AddonRow, BaseReferences<_$AppDatabase, $AddonsTable, AddonRow>),
+          AddonRow,
           PrefetchHooks Function()
         > {
   $$AddonsTableTableManager(_$AppDatabase db, $AddonsTable table)
@@ -4102,8 +4102,8 @@ class $$AddonsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$AddonsTable, Addon>(table),
-                  BaseReferences<_$AppDatabase, $AddonsTable, Addon>(
+                  e.readTable<$AddonsTable, AddonRow>(table),
+                  BaseReferences<_$AppDatabase, $AddonsTable, AddonRow>(
                     db,
                     table,
                     e,
@@ -4120,14 +4120,14 @@ typedef $$AddonsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $AddonsTable,
-      Addon,
+      AddonRow,
       $$AddonsTableFilterComposer,
       $$AddonsTableOrderingComposer,
       $$AddonsTableAnnotationComposer,
       $$AddonsTableCreateCompanionBuilder,
       $$AddonsTableUpdateCompanionBuilder,
-      (Addon, BaseReferences<_$AppDatabase, $AddonsTable, Addon>),
-      Addon,
+      (AddonRow, BaseReferences<_$AppDatabase, $AddonsTable, AddonRow>),
+      AddonRow,
       PrefetchHooks Function()
     >;
 typedef $$LibraryItemsTableCreateCompanionBuilder =
@@ -5436,14 +5436,17 @@ class $$DownloadsTableTableManager
         RootTableManager<
           _$AppDatabase,
           $DownloadsTable,
-          Download,
+          DownloadRow,
           $$DownloadsTableFilterComposer,
           $$DownloadsTableOrderingComposer,
           $$DownloadsTableAnnotationComposer,
           $$DownloadsTableCreateCompanionBuilder,
           $$DownloadsTableUpdateCompanionBuilder,
-          (Download, BaseReferences<_$AppDatabase, $DownloadsTable, Download>),
-          Download,
+          (
+            DownloadRow,
+            BaseReferences<_$AppDatabase, $DownloadsTable, DownloadRow>,
+          ),
+          DownloadRow,
           PrefetchHooks Function()
         > {
   $$DownloadsTableTableManager(_$AppDatabase db, $DownloadsTable table)
@@ -5572,8 +5575,8 @@ class $$DownloadsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$DownloadsTable, Download>(table),
-                  BaseReferences<_$AppDatabase, $DownloadsTable, Download>(
+                  e.readTable<$DownloadsTable, DownloadRow>(table),
+                  BaseReferences<_$AppDatabase, $DownloadsTable, DownloadRow>(
                     db,
                     table,
                     e,
@@ -5590,14 +5593,17 @@ typedef $$DownloadsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $DownloadsTable,
-      Download,
+      DownloadRow,
       $$DownloadsTableFilterComposer,
       $$DownloadsTableOrderingComposer,
       $$DownloadsTableAnnotationComposer,
       $$DownloadsTableCreateCompanionBuilder,
       $$DownloadsTableUpdateCompanionBuilder,
-      (Download, BaseReferences<_$AppDatabase, $DownloadsTable, Download>),
-      Download,
+      (
+        DownloadRow,
+        BaseReferences<_$AppDatabase, $DownloadsTable, DownloadRow>,
+      ),
+      DownloadRow,
       PrefetchHooks Function()
     >;
 typedef $$KeyValuesTableCreateCompanionBuilder = KeyValuesCompanion Function({

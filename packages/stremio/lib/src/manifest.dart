@@ -18,6 +18,7 @@ final class AddonManifest {
     this.p2p = false,
     this.configurable = false,
     this.configurationRequired = false,
+    this.raw,
   });
 
   /// Parses a manifest; throws `AddonResponseException` when `id` or `name`
@@ -52,8 +53,12 @@ final class AddonManifest {
       p2p: readBool(hints, 'p2p'),
       configurable: readBool(hints, 'configurable'),
       configurationRequired: readBool(hints, 'configurationRequired'),
+      raw: json,
     );
   }
+
+  /// The decoded JSON this manifest was parsed from (for persisting it).
+  final Map<String, Object?>? raw;
 
   /// Dot-separated identifier, e.g. `com.linvo.cinemeta`.
   final String id;

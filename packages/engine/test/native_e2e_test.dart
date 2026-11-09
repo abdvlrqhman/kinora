@@ -195,6 +195,25 @@ void main() {
       expect(headers['content-type'], 'text/srt');
       expect(String.fromCharCodes(body), contains('Hi'));
 
+      // Keep it: move the data while the stream stays readable.
+      final keepDir = '${root.path}/kept';
+      final events = <EngineEvent>[];
+      leecher.moveStorage(ih, keepDir);
+      await _until(() {
+        events.addAll(leecher.pollEvents());
+        return events.whereType<StorageMoved>().isNotEmpty;
+      });
+      expect(File('$keepDir/$name').existsSync(), isTrue);
+      (code, _, body) = await _get(uri, range: 'bytes=0-99');
+      expect(code, 206);
+      expect(body, Uint8List.sublistView(data, 0, 100));
+      // Move back so the resume part below finds the data where it expects.
+      leecher.moveStorage(ih, dlDir);
+      await _until(() {
+        events.addAll(leecher.pollEvents());
+        return events.whereType<StorageMoved>().length >= 2;
+      });
+
       leecher.closeStream(stream.token);
       (code, _, _) = await _get(uri, method: 'HEAD');
       expect(code, 404);

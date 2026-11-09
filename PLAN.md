@@ -85,6 +85,8 @@ Scoring weights live in one tested module (`ranking/`), with fixtures of real re
 
 Audio tracks named "Arabic · E-AC3 5.1"; preferred/original-audio auto-pick; audio delay; night mode (dynamic range compression) and boost; speed; zoom/crop/aspect; chapters; PiP; gestures (seek, volume, brightness); lock-screen/notification controls; sleep timer; skip intro/recap/credits (chapters + community timestamps); Up Next countdown; continue watching; screenshot.
 
+**Episodes inside the player**: a Next episode button (and Up Next countdown near the credits, with the next episode's best release resolved and pre-buffered in the background); an episode panel in the player to jump to any episode or season without leaving playback; previous episode too. Switching keeps the remembered audio/subtitle choice and saves progress of the one you left.
+
 ## 7. Background downloads (researched)
 
 **Android**
@@ -96,6 +98,8 @@ Audio tracks named "Arabic · E-AC3 5.1"; preferred/original-audio auto-pick; au
 - Debrid/HTTPS: background `URLSession` (continues after the app is suspended or killed). Most reliable path on iPhone.
 - Torrents: iOS suspends apps after ~30 s. Proven sideload approach (iTorrent, actively maintained): opt-in audio keep-alive + optional location keep-alive services. On iOS 26+ also `BGContinuedProcessingTask` (user-started, system progress UI; community reports it can expire early, so it's a bonus, not the base).
 - Honest limit: torrent downloads on iPhone stay best-effort in background; debrid downloads are solid.
+
+**Streams that finish become downloads**: when a streamed episode/movie is 100% on the device (watched or just fully buffered), it is moved into Downloads automatically (no re-download), registered with its show/episode, and its best-fit subtitles for your languages are saved next to it. On by default; Settings › Downloads has the switch. Streams that didn't finish follow the stream-cache rule (deleted when you leave, or kept N hours).
 
 **Both**: queue with Wi-Fi-only, storage cap, free-space guard, per-file priorities, auto-download next episode, auto-delete watched (opt-in).
 

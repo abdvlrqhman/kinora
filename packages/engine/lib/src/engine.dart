@@ -190,6 +190,15 @@ final class KinoraEngine {
     _withBytes(bencode(config.toMap()), (p, n) => _b.sessionApply(_s, p, n)),
   );
 
+  /// Moves a torrent's data to [path]; a [StorageMoved] (or
+  /// [StorageMoveFailed]) event follows. Open streams keep working.
+  void moveStorage(String infoHash, String path) => _check(
+    _withStr(
+      infoHash,
+      (ih) => _withStr(path, (p) => _b.moveStorage(_s, ih, p)),
+    ),
+  );
+
   /// BitTorrent listen port (0 until listening).
   int get listenPort => _b.listenPort(_s);
 

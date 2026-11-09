@@ -71,6 +71,16 @@ typedef _PeerD = int Function(
   Pointer<Utf8>,
   int,
 );
+typedef _PeerLikeN = Int32 Function(
+  Pointer<KnSession>,
+  Pointer<Utf8>,
+  Pointer<Utf8>,
+);
+typedef _PeerLikeD = int Function(
+  Pointer<KnSession>,
+  Pointer<Utf8>,
+  Pointer<Utf8>,
+);
 typedef _OpenN = Pointer<Utf8> Function(
   Pointer<KnSession>,
   Pointer<Utf8>,
@@ -139,6 +149,9 @@ final class EngineBindings {
         'kn_save_resume',
       ),
       connectPeer = lib.lookupFunction<_PeerN, _PeerD>('kn_connect_peer'),
+      moveStorage = lib.lookupFunction<_PeerLikeN, _PeerLikeD>(
+        'kn_move_storage',
+      ),
       serverPort = lib.lookupFunction<_SesIntN, _SesIntD>('kn_server_port'),
       streamOpen = lib.lookupFunction<_OpenN, _OpenD>('kn_stream_open'),
       streamClose = lib.lookupFunction<_SesStrIntN, _SesStrIntD>(
@@ -188,6 +201,7 @@ final class EngineBindings {
   final _SesStrD pollEvents;
   final _SesStrIntD saveResume;
   final _PeerD connectPeer;
+  final _PeerLikeD moveStorage;
   final _SesIntD serverPort;
   final _OpenD streamOpen;
   final _SesStrIntD streamClose;

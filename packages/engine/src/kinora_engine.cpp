@@ -443,6 +443,30 @@ void handle_alert(kn_session* s, lt::alert* a) {
                       json_escape(fe->error.message() + " " + fe->filename()) + "}");
     return;
   }
+  if (auto* mv = lt::alert_cast<lt::storage_moved_alert>(a)) {
+    std::lock_guard<std::mutex> lk(s->mu);
+    auto it = s->by_handle.find(mv->handle);
+    std::string ih = it == s->by_handle.end() ? "" : it->second;
+    push_event(s, "{\"type\":\"moved\",\"ih\":\"" + ih + "\",\"path\":" +
+                      json_escape(mv->storage_path()) + "}");
+    // Open streams read from the old path; repoint them.
+    for (auto& kv : s->routes) {
+      if (kv.second->ih != ih || !kv.second->is_stream) continue;
+      auto ti = mv->handle.torrent_file();
+      if (!ti) continue;
+      kv.second->disk_path = mv->handle.get_renamed_files().file_path(
+          ti->layout(), lt::file_index_t{kv.second->file_index}, mv->storage_path());
+    }
+    return;
+  }
+  if (auto* mf = lt::alert_cast<lt::storage_moved_failed_alert>(a)) {
+    std::lock_guard<std::mutex> lk(s->mu);
+    auto it = s->by_handle.find(mf->handle);
+    std::string ih = it == s->by_handle.end() ? "" : it->second;
+    push_event(s, "{\"type\":\"move_failed\",\"ih\":\"" + ih + "\",\"message\":" +
+                      json_escape(mf->error.message() + " " + mf->file_path()) + "}");
+    return;
+  }
   if (auto* ls = lt::alert_cast<lt::listen_succeeded_alert>(a)) {
     std::lock_guard<std::mutex> lk(s->mu);
     push_event(s, "{\"type\":\"listen\",\"port\":" + std::to_string(ls->port) + "}");
@@ -807,9 +831,14 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
     move_window(s, *r, w, piece);
     if (!wait_piece(s, *r, w, piece, fd)) break;
     if (file_fd < 0) {
-      file_fd = ::open(r->disk_path.c_str(), O_RDONLY | O_CLOEXEC);
+      std::string path;
+      {
+        std::lock_guard<std::mutex> lk(s->mu);  // move_storage may repoint it
+        path = r->disk_path;
+      }
+      file_fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
       if (file_fd < 0) {
-        push_log(s, "stream open failed: " + r->disk_path + " " + std::strerror(errno));
+        push_log(s, "stream open failed: " + path + " " + std::strerror(errno));
         break;
       }
     }
@@ -1385,6 +1414,17 @@ int32_t kn_connect_peer(kn_session* s, const char* ih, const char* ip, int32_t p
     auto addr = lt::make_address(ip, ec);
     if (ec) return -1;
     h.connect_peer(lt::tcp::endpoint(addr, static_cast<std::uint16_t>(port)));
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+int32_t kn_move_storage(kn_session* s, const char* ih, const char* path) {
+  try {
+    lt::torrent_handle h = handle_of(s, ih);
+    if (!h.is_valid() || path == nullptr || *path == '\0') return -1;
+    h.move_storage(path, lt::move_flags_t::always_replace_files);
     return 0;
   } catch (...) {
     return -1;

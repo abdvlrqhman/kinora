@@ -4,6 +4,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 part 'database.g.dart';
 
 /// Stremio-compatible addons the user added. Nothing is added by default.
+@DataClassName('AddonRow')
 class Addons extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -67,6 +68,7 @@ class TrackMemory extends Table {
 }
 
 /// Downloads, torrent or HTTP (debrid).
+@DataClassName('DownloadRow')
 class Downloads extends Table {
   TextColumn get id => text()();
   TextColumn get mediaId => text()();

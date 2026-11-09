@@ -376,6 +376,8 @@ sealed class EngineEvent {
       'error' => TorrentFailed(ih, message),
       'file_error' => TorrentFileError(ih, message),
       'listen' => ListenSucceeded((j['port'] as num? ?? 0).toInt()),
+      'moved' => StorageMoved(ih, j['path'] as String? ?? ''),
+      'move_failed' => StorageMoveFailed(ih, message),
       _ => EngineLog(message),
     };
   }
@@ -415,6 +417,20 @@ final class TorrentFailed extends EngineEvent {
 /// A disk error (full disk, permissions…).
 final class TorrentFileError extends EngineEvent {
   const TorrentFileError(this.infoHash, this.message);
+  final String infoHash;
+  final String message;
+}
+
+/// Data moved to a new folder.
+final class StorageMoved extends EngineEvent {
+  const StorageMoved(this.infoHash, this.path);
+  final String infoHash;
+  final String path;
+}
+
+/// Moving data failed (disk full, permissions).
+final class StorageMoveFailed extends EngineEvent {
+  const StorageMoveFailed(this.infoHash, this.message);
   final String infoHash;
   final String message;
 }
