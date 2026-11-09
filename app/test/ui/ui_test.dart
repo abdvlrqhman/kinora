@@ -52,6 +52,10 @@ void main() {
       'No source has details for this title.',
     );
     expect(
+      friendlyError(AddonHttpException(404, url)),
+      'Your sources have nothing for this.',
+    );
+    expect(
       friendlyError(Exception('weird')),
       'Something went wrong. Try again.',
     );

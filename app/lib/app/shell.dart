@@ -44,50 +44,55 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
+    // Typing (Search): the keyboard gets the space, not the bar and its scrim.
+    final typing = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(child: shell),
           // Content passing under the bar dims instead of competing with it.
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: bottom + 140,
-            child: const LegibilityScrim(stops: [0, 1]),
-          ),
-          Positioned(
-            left: KSpace.margin,
-            right: KSpace.margin,
-            bottom: bottom + 12,
-            child: MediaQuery.withClampedTextScaling(
-              maxScaleFactor: _maxBarTextScale,
-              child: GlassGroup(
-                child: Glass(
-                  tintStrength: 0.10,
-                  child: SizedBox(
-                    height: _barHeight(context),
-                    child: Row(
-                      children: [
-                        for (final t in AppTab.values)
-                          Expanded(
-                            child: _TabButton(
-                              key: ValueKey('tab-${t.name}'),
-                              tab: t,
-                              selected: t.index == shell.currentIndex,
-                              onTap: () => shell.goBranch(
-                                t.index,
-                                initialLocation: t.index == shell.currentIndex,
+          if (!typing)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: bottom + 140,
+              child: const LegibilityScrim(stops: [0, 1]),
+            ),
+          if (!typing)
+            Positioned(
+              left: KSpace.margin,
+              right: KSpace.margin,
+              bottom: bottom + 12,
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: _maxBarTextScale,
+                child: GlassGroup(
+                  child: Glass(
+                    tintStrength: 0.10,
+                    child: SizedBox(
+                      height: _barHeight(context),
+                      child: Row(
+                        children: [
+                          for (final t in AppTab.values)
+                            Expanded(
+                              child: _TabButton(
+                                key: ValueKey('tab-${t.name}'),
+                                tab: t,
+                                selected: t.index == shell.currentIndex,
+                                onTap: () => shell.goBranch(
+                                  t.index,
+                                  initialLocation:
+                                      t.index == shell.currentIndex,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

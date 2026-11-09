@@ -112,12 +112,16 @@ class _GlassButtonState extends State<GlassButton> {
           if (widget.label.isNotEmpty) const SizedBox(width: KSpace.x2),
         ],
         if (widget.label.isNotEmpty)
-          Text(
-            widget.label,
-            style: KType.title.copyWith(
-              color: fg,
-              fontWeight: lit ? FontWeight.w700 : null,
-              fontVariations: lit ? const [FontVariation.weight(700)] : null,
+          Flexible(
+            child: Text(
+              widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: KType.title.copyWith(
+                color: fg,
+                fontWeight: lit ? FontWeight.w700 : null,
+                fontVariations: lit ? const [FontVariation.weight(700)] : null,
+              ),
             ),
           ),
       ],

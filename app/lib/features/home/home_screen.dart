@@ -118,7 +118,9 @@ class _FeedState extends ConsumerState<_Feed> {
                 SliverToBoxAdapter(
                   child: featured != null
                       ? Billboard(meta: featured)
-                      : rows.isLoading || (rows.value?.complete == false)
+                      : rows.isLoading ||
+                            (rows.value?.complete == false) ||
+                            fresh.isLoading
                       ? const BillboardSkeleton()
                       : SizedBox(height: pad.top + 56),
                 ),

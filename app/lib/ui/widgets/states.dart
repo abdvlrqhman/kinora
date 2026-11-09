@@ -139,7 +139,18 @@ String friendlyError(Object error) {
   final s = error.toString();
   Log.w('error', s);
   return switch (error) {
-    StremioException() => addonError(error),
+    // Browsing, not adding: no link was typed, so no "check the link".
+    AddonHttpException(statusCode: 404) =>
+      'Your sources have nothing for this.',
+    AddonHttpException(:final statusCode) =>
+      'A source answered with error $statusCode. Try again later.',
+    AddonNetworkException() =>
+      'Couldn’t reach your sources. Check your connection, then try again.',
+    AddonTimeoutException() => 'A source took too long to answer. Try again.',
+    DebridKeyRejectedException() => addonError(error),
+    StremioException() =>
+      'A source sent something Kinora can’t read. Try again, or turn it off '
+          'in Settings › Sources.',
     SocketException() => 'Check your connection, then try again.',
     TimeoutException() => 'The source took too long to answer. Try again.',
     HttpException() || HandshakeException() || FormatException() =>

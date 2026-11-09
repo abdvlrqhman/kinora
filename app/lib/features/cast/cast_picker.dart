@@ -86,7 +86,7 @@ class CastButton extends StatelessWidget {
       }
       return Semantics(
         button: true,
-        label: 'Playing on ${tv.friendlyName}. Change',
+        label: 'Cast to ${tv.friendlyName} is on. Change TV',
         excludeSemantics: true,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,

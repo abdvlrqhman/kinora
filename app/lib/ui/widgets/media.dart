@@ -103,6 +103,11 @@ class _PressableState extends State<Pressable> {
 /// the player while it prepares. One per video on a page.
 String artHeroTag(String videoId) => 'art-$videoId';
 
+/// The video whose artwork is flying into the player right now. Set by
+/// `openPlayer`, cleared when the player closes; every other ArtHero stays
+/// put, so artwork never flies between Home and Title.
+final launchingArt = ValueNotifier<String?>(null);
+
 /// Artwork that flies into the player when its video starts.
 class ArtHero extends StatelessWidget {
   const ArtHero({super.key, required this.videoId, required this.child});
@@ -113,12 +118,16 @@ class ArtHero extends StatelessWidget {
   // Off in hidden tabs (go_router keeps them alive offstage, tickers off),
   // so nothing flies from a screen you can't see.
   @override
-  Widget build(BuildContext context) => HeroMode(
-    enabled: TickerMode.valuesOf(context).enabled,
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: launchingArt,
     child: Hero(
       tag: artHeroTag(videoId),
       curve: KMotion.emphasized,
       child: child,
+    ),
+    builder: (context, launching, hero) => HeroMode(
+      enabled: launching == videoId && TickerMode.valuesOf(context).enabled,
+      child: hero!,
     ),
   );
 }

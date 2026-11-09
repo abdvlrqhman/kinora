@@ -41,6 +41,9 @@ final class CastService extends ChangeNotifier {
   Duration duration = Duration.zero;
   String? message;
 
+  /// The TV's volume after the last change from the phone, while casting.
+  int? volume;
+
   DlnaRenderer? _renderer;
   StreamSubscription<RendererStatus>? _watch;
   StreamSubscription<DlnaDevice>? _ssdp;
@@ -258,6 +261,7 @@ final class CastService extends ChangeNotifier {
     device = d;
     phase = CastPhase.connecting;
     message = null;
+    volume = null;
     notifyListeners();
     _ref
         .read(castTargetCapsProvider.notifier)
@@ -462,7 +466,7 @@ final class CastService extends ChangeNotifier {
     try {
       final v = (await r.volume() + delta).clamp(0, 100);
       await r.setVolume(v);
-      message = 'TV volume $v';
+      volume = v;
       notifyListeners();
     } on DlnaException catch (e) {
       Log.w('cast', 'volume: $e');

@@ -260,14 +260,15 @@ class ReleaseLine extends ConsumerWidget {
                 KType.label.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
-            if (best.reasons.isNotEmpty)
-              TextSpan(text: '   ${best.reasons.first}', style: quiet),
-            // Kept whole ("30m left") when the line wraps.
+            // Before the reason, so a long line trims the reason, not
+            // "30m left"; kept whole when the line wraps.
             if (extra != null)
               TextSpan(
                 text: '   ${extra!.replaceAll(' ', '\u00A0')}',
                 style: KType.tabular(quiet),
               ),
+            if (best.reasons.isNotEmpty)
+              TextSpan(text: '   ${best.reasons.first}', style: quiet),
           ],
         ),
         maxLines: maxLines,

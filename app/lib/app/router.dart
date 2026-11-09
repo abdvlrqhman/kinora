@@ -11,6 +11,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/title/title_screen.dart';
 import '../services/play_request.dart';
 import '../ui/tokens.dart';
+import '../ui/widgets/media.dart';
 import 'providers.dart';
 import 'shell.dart';
 
@@ -108,5 +109,7 @@ void openTitle(
 }) => context.push('/title/$type/${Uri.encodeComponent(id)}');
 
 /// Starts playback.
-void openPlayer(BuildContext context, PlayRequest request) =>
-    context.push('/player', extra: request);
+void openPlayer(BuildContext context, PlayRequest request) {
+  launchingArt.value = request.videoId;
+  context.push('/player', extra: request);
+}

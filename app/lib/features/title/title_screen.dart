@@ -43,17 +43,20 @@ class TitleScreen extends ConsumerWidget {
           child: _TitlePage(titleKey: key, model: value),
         ),
         // No installed source describes this title: adding one fixes it.
-        AsyncError(:final error) when error is StateError => _Bare(
-          child: EmptyState(
-            icon: Icons.cloud_off_rounded,
-            title: 'No details for this',
-            message:
-                '${friendlyError(error)} Add a source that describes movies '
-                'and shows, like Cinemeta.',
-            actionLabel: 'Add a source',
-            onAction: () => context.go('/settings/sources'),
+        AsyncError(:final error)
+            when error is StateError ||
+                error is AddonHttpException && error.statusCode == 404 =>
+          _Bare(
+            child: EmptyState(
+              icon: Icons.cloud_off_rounded,
+              title: 'No details for this',
+              message:
+                  '${friendlyError(error)} Add a source that describes movies '
+                  'and shows, like Cinemeta.',
+              actionLabel: 'Add a source',
+              onAction: () => context.go('/settings/sources'),
+            ),
           ),
-        ),
         AsyncError(:final error) => _Bare(
           child: ErrorState(
             message: friendlyError(error),
@@ -232,8 +235,7 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                                           if (context.mounted) {
                                             showNote(
                                               context,
-                                              'Downloading ${releaseQuality(r)}. '
-                                              'See it in Downloads.',
+                                              'Added to Downloads.',
                                             );
                                           }
                                         },

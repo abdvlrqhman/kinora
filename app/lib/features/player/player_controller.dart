@@ -463,6 +463,7 @@ class PlayerController extends ChangeNotifier {
     if (s.subtitleLanguages.isEmpty) {
       _subtitlesDone(
         'Choose your subtitle languages in Settings to find subtitles.',
+        SubtitleFix.languages,
       );
       return;
     }
@@ -482,7 +483,7 @@ class PlayerController extends ChangeNotifier {
       if (gen != _generation || _disposed) return;
       addExternalSubtitles(options);
       final langs = s.subtitleLanguages.map(langName).join(', ');
-      final none = options.isEmpty && saved.isEmpty;
+      final none = options.isEmpty && saved.isEmpty && !_embeddedInLangs();
       _subtitlesDone(
         !none
             ? null
@@ -502,6 +503,20 @@ class PlayerController extends ChangeNotifier {
       }
     }
   }
+
+  /// Looks for subtitles again after sites or languages changed in the
+  /// player.
+  Future<void> searchSubtitlesAgain() async {
+    if (_disposed) return;
+    subtitleSearch = SubtitleSearch.searching;
+    subtitleNote = null;
+    notifyListeners();
+    await _loadExternalSubtitles(_generation);
+  }
+
+  bool _embeddedInLangs() => subtitles.any(
+    (o) => o.track != null && _settings.subtitleLanguages.contains(o.language),
+  );
 
   void _subtitlesDone(String? note, [SubtitleFix fix = SubtitleFix.none]) {
     subtitleSearch = SubtitleSearch.done;
@@ -801,6 +816,13 @@ class PlayerController extends ChangeNotifier {
     ];
     final external = subtitles.where((s) => s.track == null);
     subtitles = [...embedded, ...external];
+    // Built-in tracks in your languages arrived after "none found".
+    if (subtitleNote != null &&
+        subtitleNote!.startsWith('No subtitles') &&
+        _embeddedInLangs()) {
+      subtitleNote = null;
+      subtitleFix = SubtitleFix.none;
+    }
     notifyListeners();
     bool real(String id) => id != 'auto' && id != 'no';
     final hasTracks =

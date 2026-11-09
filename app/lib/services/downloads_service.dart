@@ -119,7 +119,11 @@ final class DownloadsService implements DownloadActions {
     try {
       final existing = await _rowForVideo(request.videoId);
       if (existing != null) {
-        if (existing.state == 'paused' || existing.state == 'failed')
+        // A row waiting for Wi-Fi keeps waiting: asking again isn't consent
+        // to use mobile data.
+        if (existing.state == 'failed' ||
+            (existing.state == 'paused' &&
+                existing.error != 'Waiting for Wi-Fi'))
           await resume(existing.id);
         return;
       }

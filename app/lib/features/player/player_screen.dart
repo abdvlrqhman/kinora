@@ -65,6 +65,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// The last cast failure already shown, so each shows once.
   String? _castNoticeShown;
 
+  /// Whether this player had a cast going at the last change.
+  bool _castWasActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +76,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       widget.request,
     )..addListener(_onChange);
     _cast = ref.read(castServiceProvider)..addListener(_onChange);
+    _castWasActive =
+        _cast.phase != CastPhase.idle &&
+        _cast.phase != CastPhase.stopped &&
+        _cast.phase != CastPhase.lost;
     unawaited(c.start());
     unawaited(WakelockPlus.enable());
     unawaited(
@@ -124,20 +131,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       c.notice = null;
       _showFlash(notice);
     }
-    // A cast that failed or lost the TV says why, once, over the phone view.
+    // A cast from this player that failed or lost the TV says why, once,
+    // over the phone view. Older failures stay in the cast picker.
+    final phase = _cast.phase;
+    final ended = phase == CastPhase.stopped || phase == CastPhase.lost;
     final castNote = _cast.message;
-    if (castNote != null &&
-        castNote != _castNoticeShown &&
-        (_cast.phase == CastPhase.stopped || _cast.phase == CastPhase.lost)) {
+    if (ended &&
+        _castWasActive &&
+        castNote != null &&
+        castNote != _castNoticeShown) {
       _castNoticeShown = castNote;
       _showFlash(castNote);
     }
+    _castWasActive = !ended && phase != CastPhase.idle;
     _syncPip();
     setState(() {});
   }
 
   @override
   void dispose() {
+    // After the return flight; listeners can't rebuild while the tree is locked.
+    scheduleMicrotask(() => launchingArt.value = null);
     _hide?.cancel();
     _flashTimer?.cancel();
     _seekReset?.cancel();
@@ -764,15 +778,12 @@ class _PrepareView extends StatelessWidget {
         Hero(
           tag: artHeroTag(req.videoId),
           curve: KMotion.emphasized,
-          // Full strength as it leaves the tile, dimmed as it lands.
-          flightShuttleBuilder: (_, animation, direction, _, _) =>
-              FadeTransition(
-                opacity: Tween<double>(
-                  begin: direction == HeroFlightDirection.push ? 1 : 0.45,
-                  end: direction == HeroFlightDirection.push ? 0.45 : 1,
-                ).animate(animation),
-                child: art,
-              ),
+          // Full strength in the tile, dimmed in the player. The route
+          // animation runs 1→0 on pop, so one tween covers both directions.
+          flightShuttleBuilder: (_, animation, _, _, _) => FadeTransition(
+            opacity: Tween<double>(begin: 1, end: 0.45).animate(animation),
+            child: art,
+          ),
           child: Opacity(opacity: 0.45, child: art),
         ),
         const LegibilityScrim(stops: [0, 1]),
@@ -838,8 +849,16 @@ class _PrepareView extends StatelessWidget {
                       ),
                     ],
                   ),
-                )
-              else ...[
+                ),
+              // A slow start doesn't have to be waited out.
+              if (!failed && c.starting != null) ...[
+                const SizedBox(height: KSpace.x3),
+                GlassButton(
+                  label: 'Choose another version',
+                  onPressed: onVersions,
+                ),
+              ],
+              if (failed) ...[
                 Semantics(
                   liveRegion: true,
                   child: Text(
@@ -1018,69 +1037,72 @@ class _UpNextState extends State<_UpNext> with SingleTickerProviderStateMixin {
         ),
         child: SizedBox(
           width: width,
-          child: Glass(
-            radius: KRadius.sheet,
-            padding: const EdgeInsets.all(KSpace.x4),
-            // Scrolls instead of overflowing when space shrinks (rotation
-            // back to portrait as the player closes, very large text).
-            child: SingleChildScrollView(
-              primary: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 112,
-                        child: Artwork(
-                          url: next.still,
-                          radius: KRadius.still,
-                          aspectRatio: 16 / 9,
-                          memCacheWidth: decodeWidth(context, 112),
-                        ),
-                      ),
-                      const SizedBox(width: KSpace.x3),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Up next  S${next.season} E${next.episode}',
-                              style: KType.tabular(KType.small),
-                            ),
-                            Text(
-                              name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textDirection: contentDir(name),
-                              style: KType.title,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: KSpace.x3),
-                  GlassGroup(
-                    child: Wrap(
-                      spacing: KSpace.x2,
-                      runSpacing: KSpace.x2,
+          child: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.5,
+            child: Glass(
+              radius: KRadius.sheet,
+              padding: const EdgeInsets.all(KSpace.x4),
+              // Scrolls instead of overflowing when space shrinks (rotation
+              // back to portrait as the player closes, very large text).
+              child: SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _CountdownButton(
-                          seconds: counting ? _left : null,
-                          drain: _drain,
-                          onPressed: widget.controller.playNext,
+                        SizedBox(
+                          width: 112,
+                          child: Artwork(
+                            url: next.still,
+                            radius: KRadius.still,
+                            aspectRatio: 16 / 9,
+                            memCacheWidth: decodeWidth(context, 112),
+                          ),
                         ),
-                        GlassButton(
-                          label: 'Keep watching',
-                          onPressed: _keepWatching,
+                        const SizedBox(width: KSpace.x3),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Up next  S${next.season} E${next.episode}',
+                                style: KType.tabular(KType.small),
+                              ),
+                              Text(
+                                name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textDirection: contentDir(name),
+                                style: KType.title,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: KSpace.x3),
+                    GlassGroup(
+                      child: Wrap(
+                        spacing: KSpace.x2,
+                        runSpacing: KSpace.x2,
+                        children: [
+                          _CountdownButton(
+                            seconds: counting ? _left : null,
+                            drain: _drain,
+                            onPressed: widget.controller.playNext,
+                          ),
+                          GlassButton(
+                            label: 'Keep watching',
+                            onPressed: _keepWatching,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1157,7 +1179,14 @@ class _CountdownButton extends StatelessWidget {
                         color: KColors.blackout,
                       ),
                       const SizedBox(width: KSpace.x2),
-                      Text('Play now', style: label),
+                      Flexible(
+                        child: Text(
+                          'Play now',
+                          style: label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       if (seconds != null)
                         Text('  $seconds', style: KType.tabular(label)),
                     ],

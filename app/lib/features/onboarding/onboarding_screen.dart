@@ -114,7 +114,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 'can change it from Home any time.',
                             children: [_TvPicker()],
                           ),
-                          _ => const _Done(),
+                          _ => _Done(onAddSource: () => _go(2)),
                         },
                       ),
                     ),
@@ -383,7 +383,9 @@ class _TvPicker extends ConsumerWidget {
 }
 
 class _Done extends ConsumerWidget {
-  const _Done();
+  const _Done({required this.onAddSource});
+
+  final VoidCallback onAddSource;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -429,12 +431,21 @@ class _Done extends ConsumerWidget {
                 ? '1 source: ${addons.first.name}'
                 : '${addons.length} sources',
           ),
-          if (!addons.any((a) => a.resources.contains('stream')))
+          if (!addons.any((a) => a.resources.contains('stream'))) ...[
             fact(
               Icons.play_disabled_rounded,
               'Nothing will play yet: add a source that provides streams.',
               color: KColors.marquee,
             ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: KSpace.x3),
+              child: GlassButton(
+                label: 'Add a source',
+                icon: Icons.add_rounded,
+                onPressed: onAddSource,
+              ),
+            ),
+          ],
         ],
         fact(
           Icons.subtitles_outlined,

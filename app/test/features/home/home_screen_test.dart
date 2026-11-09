@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/features/home/home_screen.dart';
@@ -282,6 +285,51 @@ void main() {
     expect(find.text('You’re offline'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
   });
+
+  test(
+    'a show only in My list counts as new only from its first episode',
+    () async {
+      Future<List<NewEpisodes>> freshFor(DateTime addedAt) async {
+        final db = testDb();
+        addTearDown(db.close);
+        await db
+            .into(db.libraryItems)
+            .insert(
+              LibraryItemsCompanion.insert(
+                mediaId: 'tt200',
+                type: 'series',
+                name: 'Harbor Lights',
+                addedAt: Value(addedAt),
+              ),
+            );
+        final container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            metaProvider.overrideWith((ref, key) async => seriesMeta()),
+          ],
+        );
+        addTearDown(container.dispose);
+        final sub = container.listen(newEpisodesProvider, (_, _) {});
+        addTearDown(sub.close);
+        return container.read(newEpisodesProvider.future);
+      }
+
+      final premiere = seriesMeta().videos.firstWhere(
+        (e) => e.id == 'tt200:1:1',
+      );
+      // Added during season 1, never started: S1 E3 isn't "new" to you.
+      expect(
+        await freshFor(premiere.released!.add(const Duration(days: 10))),
+        isEmpty,
+      );
+      // Added before the premiere: everything since is new, from S1 E1.
+      final before = await freshFor(
+        premiere.released!.subtract(const Duration(days: 1)),
+      );
+      expect(before.single.next.id, 'tt200:1:1');
+    },
+  );
 
   test('the billboard rotates daily and prefers shows with new episodes', () {
     final pool = [

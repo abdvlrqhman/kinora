@@ -148,13 +148,19 @@ final newEpisodesProvider = FutureProvider.autoDispose<List<NewEpisodes>>((
             ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
             ..limit(300))
           .get();
-  final since = <String, ({String type, DateTime at})>{};
+  final since = <String, ({String type, DateTime at, bool started})>{};
   for (final r in recent) {
-    since.putIfAbsent(r.mediaId, () => (type: r.type, at: r.updatedAt));
+    since.putIfAbsent(
+      r.mediaId,
+      () => (type: r.type, at: r.updatedAt, started: true),
+    );
   }
   for (final l in library) {
     if (l.type == 'movie') continue;
-    since.putIfAbsent(l.mediaId, () => (type: l.type, at: l.addedAt));
+    since.putIfAbsent(
+      l.mediaId,
+      () => (type: l.type, at: l.addedAt, started: false),
+    );
   }
   final now = DateTime.now();
   final found = await Future.wait([
@@ -179,7 +185,12 @@ final newEpisodesProvider = FutureProvider.autoDispose<List<NewEpisodes>>((
                   !watched.contains(e.id))
                 e,
           ];
-          return fresh.isEmpty ? null : NewEpisodes(model, fresh);
+          // Never started and added mid-season: S1 E5 isn't "new" to you,
+          // the show starts at S1 E1 (Title shows that).
+          if (fresh.isEmpty ||
+              (!s.started && fresh.first.id != model.order.first.id))
+            return null;
+          return NewEpisodes(model, fresh);
         } on Object {
           return null; // No details: nothing to say about this show.
         }

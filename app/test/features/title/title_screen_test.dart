@@ -344,7 +344,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Download this version, 720p HDTV'));
     await tester.pumpAndSettle();
     expect(actions.requests.single.candidateId, 'c3');
-    expect(find.textContaining('Downloading 720p HDTV'), findsOneWidget);
+    expect(find.text('Added to Downloads.'), findsOneWidget);
 
     await tester.ensureVisible(find.bySemanticsLabel('More for Season 1'));
     await tester.tap(find.bySemanticsLabel('More for Season 1'));

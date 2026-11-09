@@ -57,7 +57,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(castServiceProvider).target, livingRoom);
     expect(
-      find.bySemanticsLabel('Playing on Living Room TV. Change'),
+      find.bySemanticsLabel('Cast to Living Room TV is on. Change TV'),
       findsOneWidget,
     );
     expect(playOn('Play S1 E3', livingRoom), 'Play S1 E3 on Living Room TV');

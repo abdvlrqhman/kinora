@@ -110,7 +110,9 @@ class CastingView extends ConsumerWidget {
         final name = cast.device?.friendlyName ?? 'your TV';
         final status = switch (cast.phase) {
           CastPhase.connecting => 'Starting on $name',
-          CastPhase.playing => 'Playing on $name',
+          CastPhase.playing =>
+            'Playing on $name'
+                '${cast.volume == null ? '' : ', volume ${cast.volume}'}',
           CastPhase.paused => 'Paused on $name',
           CastPhase.lost => cast.message ?? '$name stopped answering',
           _ => cast.message ?? 'Stopped on $name',

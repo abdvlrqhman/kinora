@@ -263,7 +263,8 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    expect(find.text('Popular right now'), findsOneWidget);
+    // The first catalog under its own name.
+    expect(find.text('Popular movies'), findsWidgets);
     expect(find.bySemanticsLabel('Search for dune'), findsOneWidget);
     await tester.tap(find.bySemanticsLabel('Glass Harbor, 2024'));
     await tester.pumpAndSettle();

@@ -24,22 +24,35 @@ Future<T?> showGlassSheet<T>(
         top: false,
         minimum: const EdgeInsets.only(bottom: KSpace.x2),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: KSpace.x2),
+          // Lifts the sheet above the keyboard when a field inside has focus.
+          padding: EdgeInsets.only(
+            left: KSpace.x2,
+            right: KSpace.x2,
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.86,
             ),
-            child: GlassGroup(
-              child: Glass(
-                radius: KRadius.sheet,
-                tintStrength: 0.10,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const _Grabber(),
-                    Flexible(child: builder(sheetContext)),
-                  ],
+            // A Seat underlay so lit buttons behind don't blur through as a
+            // highlighted row.
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: KColors.seat.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(KRadius.sheet),
+              ),
+              child: GlassGroup(
+                child: Glass(
+                  radius: KRadius.sheet,
+                  tintStrength: 0.10,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _Grabber(),
+                      Flexible(child: builder(sheetContext)),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../app/providers.dart';
@@ -14,6 +13,8 @@ import '../../../ui/tint.dart';
 import '../../../ui/tokens.dart';
 import '../../../ui/widgets/artwork.dart';
 import '../../../ui/widgets/media.dart';
+import '../../settings/languages.dart';
+import '../../settings/subtitle_sites.dart';
 import '../../title/episodes.dart';
 import '../../../services/subtitle_option.dart';
 import '../player_controller.dart';
@@ -107,6 +108,24 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
       .map((s) => s.language ?? '')
       .firstOrNull;
 
+  /// The setting open in place of the list, when fixing "no subtitles".
+  SubtitleFix? _fixing;
+
+  /// Settings stay inside the player; closing them searches again.
+  Widget _fixPanel(SubtitleFix fix) => SidePanel(
+    title: fix == SubtitleFix.sites ? 'Subtitle sites' : 'Languages',
+    onClose: () {
+      setState(() => _fixing = null);
+      unawaited(widget.controller.searchSubtitlesAgain());
+    },
+    child: ListView(
+      padding: const EdgeInsets.only(bottom: KSpace.x4),
+      children: fix == SubtitleFix.sites
+          ? const [_Note(subtitleSitesIntro), SubtitleSiteList()]
+          : languageSections(),
+    ),
+  );
+
   void _step(int ms) {
     final c = widget.controller;
     unawaited(c.setSubtitleDelay(c.subtitleDelay + Duration(milliseconds: ms)));
@@ -115,6 +134,7 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
   @override
   Widget build(BuildContext context) {
     final c = widget.controller;
+    if (_fixing case final fix?) return _fixPanel(fix);
     return ListenableBuilder(
       listenable: c,
       builder: (context, _) {
@@ -170,7 +190,11 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
               if (c.subtitleSearch == SubtitleSearch.searching)
                 const _Note('Looking for subtitles in your languages…')
               else if (c.subtitleNote case final note?)
-                _SubtitleNote(note: note, fix: c.subtitleFix),
+                _SubtitleNote(
+                  note: note,
+                  fix: c.subtitleFix,
+                  onFix: () => setState(() => _fixing = c.subtitleFix),
+                ),
               for (final lang in langs) ...[
                 _LanguageRow(
                   name: langName(lang),
@@ -560,16 +584,21 @@ class _Choice extends StatelessWidget {
 
 /// What the subtitle search found nothing for, and where to fix it.
 class _SubtitleNote extends StatelessWidget {
-  const _SubtitleNote({required this.note, required this.fix});
+  const _SubtitleNote({
+    required this.note,
+    required this.fix,
+    required this.onFix,
+  });
 
   final String note;
   final SubtitleFix fix;
+  final VoidCallback onFix;
 
   @override
   Widget build(BuildContext context) {
-    final (String, String)? fix = switch (this.fix) {
-      SubtitleFix.sites => ('Open Subtitle sites', '/settings/subtitle-sites'),
-      SubtitleFix.languages => ('Open Languages', '/settings/languages'),
+    final label = switch (fix) {
+      SubtitleFix.sites => 'Choose subtitle sites',
+      SubtitleFix.languages => 'Choose languages',
       SubtitleFix.none => null,
     };
     return Padding(
@@ -586,13 +615,12 @@ class _SubtitleNote extends StatelessWidget {
             liveRegion: true,
             child: Text(note, style: KType.label.copyWith(color: KColors.haze)),
           ),
-          if (fix != null) ...[
+          if (label != null) ...[
             const SizedBox(height: KSpace.x2),
-            // Leaves the player (its progress is saved) for Settings.
             GlassButton(
-              label: fix.$1,
+              label: label,
               icon: Icons.tune_rounded,
-              onPressed: () => context.go(fix.$2),
+              onPressed: onFix,
             ),
           ],
         ],

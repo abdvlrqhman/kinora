@@ -215,9 +215,8 @@ class _Idle extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recents = ref.watch(recentSearchesProvider).value ?? const [];
-    final popular =
-        ref.watch(homeRowsProvider).value?.rows.firstOrNull?.items.take(12) ??
-        const <MetaPreview>[];
+    final row = ref.watch(homeRowsProvider).value?.rows.firstOrNull;
+    final popular = row?.items.take(12) ?? const <MetaPreview>[];
     if (recents.isEmpty && popular.isEmpty) {
       return const EmptyState(
         icon: Icons.search_rounded,
@@ -260,7 +259,8 @@ class _Idle extends ConsumerWidget {
           const SliverToBoxAdapter(child: SizedBox(height: KSpace.section)),
         ],
         if (popular.isNotEmpty) ...[
-          const _Header('Popular right now'),
+          // The source's own name for it ("Top anime"), not a guess.
+          _Header(row!.title),
           _PosterGrid(
             items: popular.toList(),
             onOpen: (m) => openTitle(context, type: m.type, id: m.id),
