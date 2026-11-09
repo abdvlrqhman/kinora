@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:dlna/testing.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,7 @@ import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/paths.dart';
 import 'package:kinora/core/settings.dart';
 import 'package:kinora/features/player/player_controller.dart';
+import 'package:kinora/features/player/player_screen.dart';
 import 'package:kinora/main.dart';
 import 'package:kinora/services/cast_service.dart';
 import 'package:kinora/services/downloads.dart';
@@ -28,6 +30,7 @@ import 'package:kinora/services/resolver.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:kinora/ui/glass_mode.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 import 'support/fake_world.dart';
 
@@ -207,6 +210,71 @@ void main() {
     await cast.stop();
     expect(tv.state, 'STOPPED');
     await c.player.play();
+
+    // Gestures through the real touch pipeline, with the controls hidden and
+    // shown (their shade must not swallow touches): a right-half swipe sets
+    // the volume, a left-half swipe the brightness, two fingers zoom.
+    final semantics = tester.ensureSemantics();
+    final screen = tester.getRect(find.byType(PlayerScreen));
+    Future<void> swipe(double x) => tester.timedDragFrom(
+      // Between the play row and the scrubber, away from the buttons.
+      Offset(screen.left + screen.width * x, screen.top + screen.height * 0.6),
+      Offset(0, -screen.height * 0.35),
+      const Duration(milliseconds: 700),
+    );
+    for (final round in ['first', 'after toggling the controls']) {
+      await swipe(0.8);
+      await pumpUntil(
+        tester,
+        () => find
+            .bySemanticsLabel(RegExp(r'^Volume \d+%$'))
+            .evaluate()
+            .isNotEmpty,
+        timeout: const Duration(seconds: 5),
+        reason: 'volume swipe ($round)',
+      );
+      await swipe(0.2);
+      await pumpUntil(
+        tester,
+        () => find
+            .bySemanticsLabel(RegExp(r'^Brightness \d+%$'))
+            .evaluate()
+            .isNotEmpty,
+        timeout: const Duration(seconds: 5),
+        reason: 'brightness swipe ($round)',
+      );
+      await tester.tapAt(screen.center);
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    double zoom() => tester
+        .widget<Transform>(
+          find
+              .ancestor(
+                of: find.byType(Video),
+                matching: find.byType(Transform),
+              )
+              .first,
+        )
+        .transform
+        .getMaxScaleOnAxis();
+    expect(zoom(), 1);
+    final f1 = await tester.startGesture(screen.center - const Offset(40, 0));
+    final f2 = await tester.startGesture(
+      screen.center + const Offset(40, 0),
+      pointer: 7,
+    );
+    for (var i = 0; i < 12; i++) {
+      await f1.moveBy(const Offset(-8, 0));
+      await f2.moveBy(const Offset(8, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await f1.up();
+    await f2.up();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(zoom(), greaterThan(1.5), reason: 'pinch zooms the picture');
+    semantics.dispose();
+    // ignore: avoid_print
+    print('E2E ok: volume, brightness and pinch zoom by touch');
 
     // Next episode inside the player.
     await pumpUntil(
