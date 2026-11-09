@@ -154,3 +154,24 @@ Total ≈ 7–9 weeks. Device testing is the bottleneck.
 - TV: Samsung 5 Series 43".
 - Keys: user-entered only (SubSource, SubDL, Wyzie available for dev tests in gitignored `.env.local`).
 - Name: Kinora, bundle/application id `io.github.abdvlrqhman.kinora`.
+
+## 14. Status (2026-11-09)
+
+Built and verified in CI on every push:
+
+| Area | State | Verified by |
+|---|---|---|
+| Engine (libtorrent 2.1.2, range server, claims, move, per-file progress) | done | native E2E on Linux (seed → magnet → byte-exact ranges → move → resume) |
+| Sources (Stremio addons), resolver (live scrape, subtitle fit, ranking) | done | unit tests + emulator E2E |
+| Player (mpv, own RTL subtitle rendering, tracks by language, sync, speed, night mode, chapters skip, next/prev/Up Next, versions, PiP on Android, audio focus/interruptions) | done | emulator E2E (plays from a live swarm, subtitles render, next episode) |
+| Subtitles (SubDL, SubSource, Wyzie, OpenSubtitles, Jimaku, Stremio addons; charset, ads, RTL, matching) | done | 287 package tests, live provider tests run once with real keys |
+| Downloads (torrent + debrid, background, claims for season packs, free-space guard, completed streams kept) | done | emulator E2E (both streamed episodes kept) |
+| Casting (DLNA, Samsung profile, captions, pick a TV before playing, keep-alive) | done | fake-Samsung tests; real TV not yet tried |
+| UI (Home, Search, Title, Onboarding, Settings, Downloads, Player) | done, polishing | widget tests + golden screenshots reviewed by a design judge |
+
+Reviews applied: code review (25 findings), QA journeys (30), UX (30).
+
+Deferred, by decision:
+- Profiles / kids mode: no reliable maturity data from sources, single household user for now.
+- Trakt sync, AI subtitle translation, iOS picture-in-picture (needs AVPlayer, not mpv).
+- Auto-resume after reboot (sideloaded Android can't start the download service at boot without a visible reason; documented in README).
