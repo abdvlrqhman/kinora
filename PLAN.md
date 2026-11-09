@@ -72,6 +72,11 @@ Scoring weights live in one tested module (`ranking/`), with fixtures of real re
 - **None enabled by default, no keys in the app or repo.** Providers are a registry; the user enables each one and enters its own key in Settings (stored in Keychain/Keystore).
 - **Picker**: languages with counts → tap a language → all its subtitles, embedded first, then ranked by hash match > release-name match > rating/downloads; tags for SDH/HI, forced, source, FPS.
 - **Auto**: your language order (e.g. Arabic → English); forced-only when audio already matches.
+- **Best fit, always**: a subtitle must be for this exact episode (season/episode parsed from its name, wrong ones rejected) and is ranked by file-hash match > same release group + source + resolution > same FPS > duration within tolerance > rating/downloads. Before showing it as "matched", the first lines are checked against speech/embedded-subtitle timing; out-of-sync ones are auto-shifted or ranked down.
+- **Remembers your choice (stream and downloaded alike)**: memory is keyed by show + episode, never by file, so it is the same whether the episode streams or plays from a download.
+  - Per show: last audio language, subtitle language, variant (SDH/forced/normal), style, and offset tendency. Every next episode applies them, picking the best-fit subtitle *in that language* for its own release.
+  - Per episode: the exact audio track and subtitle file chosen, restored on resume.
+  - Downloads fetch best-fit subtitles for your languages (plus the remembered one) next to the video, so offline playback uses the same choice.
 - **Fixes**: charset detection (Windows-1256 Arabic etc.) → UTF-8; RTL punctuation fix; ASS kept styled; "sync to this line"; auto-align an external subtitle to an embedded track's timing.
 - **Style**: size, font, color, outline, background box, position, per-language memory.
 - Optional later: AI translation into a missing language.
