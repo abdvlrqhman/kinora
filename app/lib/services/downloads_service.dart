@@ -44,6 +44,11 @@ final class DownloadsService implements DownloadActions {
   Timer? _poll;
   bool _onWifi = true;
   bool _started = false;
+  bool _disposed = false;
+
+  /// False once the app (or a test) disposed the service: async work that
+  /// was already running stops at its next step.
+  bool get _alive => !_disposed && _ref.mounted;
 
   /// Videos whose download is being set up right now (double taps).
   final _starting = <String>{};
@@ -59,7 +64,9 @@ final class DownloadsService implements DownloadActions {
   Future<void> start() async {
     if (_started) return;
     _started = true;
-    _http = FileDownloader().updates.listen(_onHttpUpdate);
+    _http = FileDownloader().updates.listen(
+      (u) => _whileAlive(() => _onHttpUpdate(u)),
+    );
     await FileDownloader().start();
     _net = Connectivity().onConnectivityChanged.listen(_onNetwork);
     _onWifi = _isWifi(await Connectivity().checkConnectivity());
@@ -522,7 +529,19 @@ final class DownloadsService implements DownloadActions {
   Future<void> adoptCompletedStream(
     PlaybackSource source,
     PlayRequest request,
-  ) async {
+  ) => _whileAlive(() => _adopt(source, request));
+
+  /// Runs [work]; failures after the service was disposed (app or test
+  /// shutting down mid-operation) are expected and dropped.
+  Future<void> _whileAlive(Future<void> Function() work) async {
+    try {
+      await work();
+    } on Object {
+      if (_alive) rethrow;
+    }
+  }
+
+  Future<void> _adopt(PlaybackSource source, PlayRequest request) async {
     final ih = source.infoHash;
     if (ih == null ||
         request.videoId.startsWith('magnet:') ||
@@ -547,6 +566,7 @@ final class DownloadsService implements DownloadActions {
     final owned = others.where((r) => r.directory.isNotEmpty).firstOrNull;
     final dir = owned?.directory ?? _folderFor(request);
     await Directory(dir).create(recursive: true);
+    if (!_alive) return;
     await _db
         .into(_db.downloads)
         .insert(
@@ -590,6 +610,7 @@ final class DownloadsService implements DownloadActions {
         onTimeout: () => false,
       );
       await sub.cancel();
+      if (!_alive) return;
       if (!ok) {
         Log.w('downloads', 'keeping a finished stream failed for $ih');
         await _update(
@@ -624,14 +645,17 @@ final class DownloadsService implements DownloadActions {
   // ------------------------------------------------------------ progress --
 
   void _ensurePolling() {
-    _events ??= _engines.engine.events.listen(_onEngineEvent);
+    _events ??= _engines.engine.events.listen(
+      (e) => _whileAlive(() => _onEngineEvent(e)),
+    );
     _poll ??= Timer.periodic(
       const Duration(seconds: 2),
-      (_) => unawaited(_tick()),
+      (_) => unawaited(_whileAlive(_tick)),
     );
   }
 
   Future<void> _tick() async {
+    if (!_alive) return;
     final rows =
         await (_db.select(_db.downloads)..where(
               (t) => t.kind.equals('torrent') & t.state.equals('downloading'),
@@ -673,6 +697,7 @@ final class DownloadsService implements DownloadActions {
   }
 
   Future<void> _onEngineEvent(EngineEvent e) async {
+    if (!_alive) return;
     if (e is TorrentFinished) {
       // Finished means every *claimed* file is done; check each row's own.
       await _tick();
@@ -750,6 +775,7 @@ final class DownloadsService implements DownloadActions {
   }
 
   Future<void> _onHttpUpdate(TaskUpdate update) async {
+    if (!_alive) return;
     final id = update.task.taskId;
     switch (update) {
       case TaskProgressUpdate(:final progress, :final expectedFileSize):
@@ -979,6 +1005,7 @@ final class DownloadsService implements DownloadActions {
   );
 
   void dispose() {
+    _disposed = true;
     _poll?.cancel();
     unawaited(_events?.cancel());
     unawaited(_http?.cancel());

@@ -201,6 +201,19 @@ void main() {
             false,
         reason: 'finished stream kept in Downloads',
       );
+      // Both episodes were streamed to the end: both are kept.
+      await pumpUntil(
+        tester,
+        () =>
+            (container
+                    .read(downloadsProvider)
+                    .value
+                    ?.where((d) => d.state == 'completed')
+                    .length ??
+                0) >=
+            2,
+        reason: 'both episodes kept',
+      );
       final kept = container
           .read(downloadsProvider)
           .value!
