@@ -26,6 +26,7 @@ enum PlayerPhase { preparing, playing, failed }
 /// Drives one playback session (and the episodes after it).
 class PlayerController extends ChangeNotifier {
   PlayerController(this._ref, PlayRequest request) : _request = request {
+    debugLast = this;
     player = Player(
       configuration: const PlayerConfiguration(
         title: 'Kinora',
@@ -45,7 +46,13 @@ class PlayerController extends ChangeNotifier {
     ];
   }
 
-  final WidgetRef _ref;
+  /// The most recent controller, for integration tests.
+  @visibleForTesting
+  static PlayerController? debugLast;
+
+  /// The app's container (outlives the screen, so cleanup after the
+  /// screen closes still works).
+  final ProviderContainer _ref;
   late final Player player;
   late final VideoController video;
   late final List<StreamSubscription<Object?>> _subs;
@@ -767,6 +774,12 @@ class PlayerController extends ChangeNotifier {
     if (src == null || src.kind != PlaybackKind.torrent) return;
     final engine = _ref.read(engineServiceProvider).engine;
     engine.closeStream(src.streamToken!);
+    // The same torrent may be a download in progress: never touch its data.
+    final db = _ref.read(databaseProvider);
+    final owned = await (db.select(
+      db.downloads,
+    )..where((t) => t.infoHash.equals(src.infoHash!))).get();
+    if (owned.isNotEmpty) return;
     final st = engine.status(src.infoHash!);
     final s = _settings;
     if (st != null && st.isComplete && s.keepCompletedStreams) {

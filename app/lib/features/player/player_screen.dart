@@ -49,7 +49,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    c = PlayerController(ref, widget.request)..addListener(_onChange);
+    c = PlayerController(
+      ProviderScope.containerOf(context, listen: false),
+      widget.request,
+    )..addListener(_onChange);
     _cast = ref.read(castServiceProvider)..addListener(_onChange);
     unawaited(c.start());
     unawaited(WakelockPlus.enable());

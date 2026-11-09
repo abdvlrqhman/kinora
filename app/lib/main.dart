@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:media_kit/media_kit.dart';
 
 import 'app/app.dart';
@@ -10,6 +11,7 @@ import 'app/providers.dart';
 import 'core/db/database.dart';
 import 'core/log.dart';
 import 'core/paths.dart';
+import 'core/settings.dart';
 import 'data/settings_store.dart';
 import 'features/player/player_controller.dart';
 import 'services/downloads.dart';
@@ -31,18 +33,7 @@ Future<void> main() async {
   final db = AppDatabase.open(paths.support.path);
   final settings = await SettingsStore(db).load();
   final container = ProviderContainer(
-    overrides: [
-      pathsProvider.overrideWithValue(paths),
-      databaseProvider.overrideWithValue(db),
-      initialSettingsProvider.overrideWithValue(settings),
-      subtitleFitOverride,
-      downloadActionsProvider.overrideWith(
-        (ref) => ref.watch(downloadsServiceProvider),
-      ),
-      completedStreamHandlerProvider.overrideWith(
-        (ref) => ref.watch(downloadsServiceProvider).adoptCompletedStream,
-      ),
-    ],
+    overrides: appOverrides(paths: paths, db: db, settings: settings),
   );
   AppLifecycleListener(
     onPause: () {
@@ -54,3 +45,21 @@ Future<void> main() async {
     UncontrolledProviderScope(container: container, child: const KinoraApp()),
   );
 }
+
+/// Every override the real app needs; integration tests reuse it.
+List<Override> appOverrides({
+  required AppPaths paths,
+  required AppDatabase db,
+  required AppSettings settings,
+}) => [
+  pathsProvider.overrideWithValue(paths),
+  databaseProvider.overrideWithValue(db),
+  initialSettingsProvider.overrideWithValue(settings),
+  subtitleFitOverride,
+  downloadActionsProvider.overrideWith(
+    (ref) => ref.watch(downloadsServiceProvider),
+  ),
+  completedStreamHandlerProvider.overrideWith(
+    (ref) => ref.watch(downloadsServiceProvider).adoptCompletedStream,
+  ),
+];
