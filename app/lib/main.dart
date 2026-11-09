@@ -49,6 +49,8 @@ Future<void> main() async {
       unawaited(Log.flush());
     },
   );
+  // Restores unfinished downloads and follows background transfers.
+  unawaited(container.read(downloadsServiceProvider).start());
   runApp(
     UncontrolledProviderScope(container: container, child: const KinoraApp()),
   );
