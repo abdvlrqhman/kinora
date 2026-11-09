@@ -220,7 +220,7 @@ void main() {
             },
           ),
         ],
-        child: const KinoraApp(),
+        child: const KinoraApp(showIntro: false),
       ),
     );
     await settleImages(tester);
