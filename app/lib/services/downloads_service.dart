@@ -278,9 +278,15 @@ final class DownloadsService implements DownloadActions {
         ),
       );
       _ensurePolling();
+      final asked = DateTime.now();
       final files = await engine.waitForFiles(
         added,
         timeout: const Duration(minutes: 3),
+      );
+      Log.i(
+        'downloads',
+        'details for ${_label(row)} in '
+            '${DateTime.now().difference(asked).inMilliseconds} ms',
       );
       if (await _row(id) == null) {
         _retire(added, owner);

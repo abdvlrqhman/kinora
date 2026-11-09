@@ -21,6 +21,7 @@ import 'package:kinora/features/player/player_controller.dart';
 import 'package:kinora/main.dart';
 import 'package:kinora/services/cast_service.dart';
 import 'package:kinora/services/downloads.dart';
+import 'package:kinora/services/engine_service.dart';
 import 'package:kinora/services/play_request.dart';
 import 'package:kinora/services/playback.dart';
 import 'package:kinora/services/resolver.dart';
@@ -35,14 +36,19 @@ Future<void> pumpUntil(
   bool Function() done, {
   Duration timeout = const Duration(seconds: 90),
   String? reason,
+  String Function()? state,
 }) async {
   final end = DateTime.now().add(timeout);
   final started = DateTime.now();
   // ignore: avoid_print
   print('E2E waiting: ${reason ?? 'condition'}');
   while (!done()) {
-    if (DateTime.now().isAfter(end))
-      fail('Timed out: ${reason ?? 'condition'}');
+    if (DateTime.now().isAfter(end)) {
+      fail(
+        'Timed out: ${reason ?? 'condition'}'
+        '${state == null ? '' : '\n${state()}'}',
+      );
+    }
     await tester.pump(const Duration(milliseconds: 250));
   }
   // ignore: avoid_print
@@ -287,6 +293,19 @@ void main() {
                 ) ??
             false,
         reason: 'explicit download finished',
+        state: () {
+          final row = container
+              .read(downloadsProvider)
+              .value
+              ?.where((d) => d.videoId == third.videoId)
+              .firstOrNull;
+          final ih = row?.infoHash;
+          final engine = container.read(engineServiceProvider).engine;
+          return 'row: ${row?.state} ${row?.error} '
+              '${row?.doneBytes}/${row?.totalBytes} file ${row?.fileIndex}\n'
+              'torrent: ${ih == null ? '-' : engine.status(ih)}\n'
+              'files: ${ih == null ? '-' : engine.files(ih)?.length}';
+        },
       );
       final saved = container
           .read(downloadsProvider)
