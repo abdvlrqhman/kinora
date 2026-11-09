@@ -13,6 +13,7 @@ Everything is built by GitHub Actions — no local toolchain needed.
 | Workflow | What |
 |---|---|
 | `engine` | libtorrent + OpenSSL + Boost static libs for Android (arm64, armv7) and iOS (arm64) |
+| `app` | analyze + test, Android APKs (arm64, armv7), unsigned iPhone IPA; tag `vX.Y.Z` → GitHub Release |
 | `bootstrap` | one-time Flutter project generation |
 
 ## Sources
