@@ -258,7 +258,8 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
                         child: Text(
                           c.subtitleDelay == Duration.zero
                               ? 'In sync'
-                              : '${c.subtitleDelay.isNegative ? '' : '+'}${(c.subtitleDelay.inMilliseconds / 1000).toStringAsFixed(1)} s',
+                              : '${(c.subtitleDelay.inMilliseconds.abs() / 1000).toStringAsFixed(1)} s '
+                                    '${c.subtitleDelay.isNegative ? 'earlier' : 'later'}',
                           textAlign: TextAlign.center,
                           style: KType.tabular(KType.title),
                         ),
@@ -285,8 +286,8 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Line appears before it’s said? Wait for it, then '
-                        'tap. Hold Earlier or Later to move a whole second.',
+                        'Out of sync? Tap “Line is spoken now” as you hear '
+                        'the line. Hold − or + to move a whole second.',
                         style: KType.small,
                       ),
                       const SizedBox(height: KSpace.x2),

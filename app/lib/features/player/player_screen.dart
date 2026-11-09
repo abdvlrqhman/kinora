@@ -434,7 +434,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     onVersions: () => _open(_Panel.versions),
                   ),
                 if (c.phase == PlayerPhase.playing && _cast.isCasting)
-                  CastingView(controller: c)
+                  CastingView(
+                    controller: c,
+                    onBack: () => Navigator.of(context).maybePop(),
+                  )
                 else if (c.phase == PlayerPhase.playing) ...[
                   // Buffering and seek/volume feedback: centered while the
                   // controls are hidden, above the play row while they
@@ -607,12 +610,16 @@ class _Controls extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                stops: [0, 0.22, 0.7, 1],
+                // Dark enough behind the title and the times for AA contrast
+                // over a white scene; clear in the middle.
+                stops: [0, 0.12, 0.32, 0.5, 0.75, 1],
                 colors: [
-                  Color(0x99000000),
+                  Color(0xCC000000),
+                  Color(0xCC000000),
                   Color(0x00000000),
                   Color(0x00000000),
-                  Color(0xB3000000),
+                  Color(0xCC000000),
+                  Color(0xCC000000),
                 ],
               ),
             ),

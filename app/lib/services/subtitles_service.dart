@@ -266,7 +266,7 @@ final class PlayerSubtitles {
                 res.releaseNames.firstOrNull ??
                 res.fileName ??
                 lang.englishName,
-            detail: _providerName(res.providerId),
+            detail: _providerName(res.providerId, search.providers),
             hearingImpaired: res.hearingImpaired,
             forced: res.forced,
             fit: r.fit,
@@ -357,8 +357,12 @@ final class PlayerSubtitles {
     return saved;
   }
 
-  static String _providerName(String id) =>
-      subtitleProviderCatalog.where((i) => i.id == id).firstOrNull?.name ?? id;
+  /// The source's name as people know it ("OpenSubtitles", an add-on's
+  /// own name), never an internal id like `stremio:<host>`.
+  static String _providerName(String id, List<SubtitleProvider> providers) =>
+      subtitleProviderCatalog.where((i) => i.id == id).firstOrNull?.name ??
+      providers.where((p) => p.id == id).firstOrNull?.displayName ??
+      'A subtitle add-on';
 }
 
 final playerSubtitlesProvider = Provider<PlayerSubtitles>(PlayerSubtitles.new);

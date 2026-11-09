@@ -250,12 +250,13 @@ class ContinueTile extends ConsumerWidget {
                     ),
                   ),
                   stillShade,
-                  Positioned(
-                    left: KSpace.x3,
-                    right: KSpace.x3,
-                    bottom: KSpace.x3,
-                    child: ProgressLine(fraction: fraction),
-                  ),
+                  if (!fresh)
+                    Positioned(
+                      left: KSpace.x3,
+                      right: KSpace.x3,
+                      bottom: KSpace.x3,
+                      child: ProgressLine(fraction: fraction),
+                    ),
                 ],
               ),
             ),

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../services/updates.dart';
@@ -107,7 +108,7 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
       setState(() {
         _progress = null;
         _error =
-            'The update couldn’t be downloaded. Try again, or get it '
+            'The update couldn’t be downloaded. Try again, or download it '
             'from the release page.';
       });
     }
@@ -142,7 +143,9 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
             child: Text('Kinora ${r.version} is out', style: KType.h1),
           ),
           Text(
-            'You have $kinoraVersion.',
+            Platform.isIOS
+                ? 'You have $kinoraVersion. SideStore opens to install it.'
+                : 'You have $kinoraVersion.',
             style: KType.body.copyWith(color: KColors.haze),
           ),
           const SizedBox(height: KSpace.x4),
@@ -185,14 +188,30 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
               runSpacing: KSpace.x2,
               children: [
                 GlassButton(
-                  label: busy ? 'Downloading…' : 'Update now',
+                  label: busy
+                      ? 'Downloading…'
+                      : _error != null
+                      ? 'Try again'
+                      : Platform.isIOS
+                      ? 'Update with SideStore'
+                      : 'Update now',
                   icon: Icons.system_update_rounded,
                   prominent: true,
                   onPressed: busy ? null : () => unawaited(_update()),
                 ),
+                if (_error != null)
+                  GlassButton(
+                    label: 'Open release page',
+                    icon: Icons.open_in_new_rounded,
+                    onPressed: () => unawaited(
+                      launchUrl(r.page, mode: LaunchMode.externalApplication),
+                    ),
+                  ),
+                // (Not while downloading: the installer would open later,
+                // unasked.)
                 GlassButton(
                   label: 'Later',
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: busy ? null : () => Navigator.pop(context),
                 ),
               ],
             ),

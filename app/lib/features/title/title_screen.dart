@@ -212,8 +212,8 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                               ),
                             Expanded(
                               child: ActionTile(
-                                icon: Icons.tune_rounded,
-                                label: 'Versions',
+                                icon: Icons.layers_rounded,
+                                label: 'Other versions',
                                 semanticLabel: 'Choose another version',
                                 onPressed: next == null
                                     ? null
@@ -353,7 +353,8 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
   }
 }
 
-/// "⋯" after the season picker: actions for the whole season.
+/// A download button after the season picker; its sheet confirms, since a
+/// season can be many gigabytes.
 class _SeasonMenu extends StatelessWidget {
   const _SeasonMenu({required this.season, required this.onDownload});
 
@@ -365,7 +366,7 @@ class _SeasonMenu extends StatelessWidget {
     final name = season == 0 ? 'the specials' : 'season $season';
     return Semantics(
       button: true,
-      label: 'More for ${season == 0 ? 'Specials' : 'Season $season'}',
+      label: 'Download $name',
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -391,7 +392,7 @@ class _SeasonMenu extends StatelessWidget {
         ),
         child: const SizedBox.square(
           dimension: 48,
-          child: Icon(Icons.more_horiz_rounded, color: KColors.haze),
+          child: Icon(Icons.download_rounded, color: KColors.haze),
         ),
       ),
     );

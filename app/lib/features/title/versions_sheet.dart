@@ -84,6 +84,11 @@ class _VersionsSheetState extends ConsumerState<VersionsSheet> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          // Rows only show a Download button: say what tapping one does.
+          Text(
+            'Tap a version to play it.',
+            style: KType.label.copyWith(color: KColors.haze),
+          ),
         ],
       ),
     );
@@ -229,7 +234,7 @@ class _Filters extends StatelessWidget {
                     text: '  $count',
                     style: KType.tabular(
                       KType.small.copyWith(
-                        color: on ? KColors.haze : KColors.reel,
+                        color: on ? KColors.lamp : KColors.haze,
                       ),
                     ),
                   ),

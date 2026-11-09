@@ -293,8 +293,9 @@ class _CastDeviceListState extends ConsumerState<CastDeviceList> {
           ...widget.trailing,
           const SizedBox(height: KSpace.x2),
           _Line(
-            'TV not listed? Enter its address. The TV shows it in '
-            'Settings › Network.',
+            // (The example lives here: a placeholder is too faint to read.)
+            'TV not listed? Enter its address, like 192.168.1.20. The TV '
+            'shows it in Settings › Network.',
             style: KType.label.copyWith(color: KColors.haze),
           ),
           GlassField(

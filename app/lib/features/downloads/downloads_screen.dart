@@ -96,7 +96,8 @@ DownloadStatus downloadStatus(DownloadRow r, {double? rate}) {
       ? null
       : r.doneBytes > 0
       ? '${Fmt.bytes(r.doneBytes)} of ${Fmt.bytes(r.totalBytes)}'
-      : Fmt.bytes(r.totalBytes);
+      // (Not on the phone yet, so the show's total leaves it out.)
+      : '${Fmt.bytes(r.totalBytes)} to download';
   return switch (r.state) {
     'completed' => (
       strong: 'Downloaded',

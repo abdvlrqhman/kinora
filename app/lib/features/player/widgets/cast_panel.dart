@@ -4,7 +4,6 @@ import 'package:dlna/dlna.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/format.dart';
 import '../../cast/cast_picker.dart';
 import '../../../services/cast_service.dart';
 import '../../../ui/glass.dart';
@@ -95,9 +94,16 @@ class CastPanel extends ConsumerWidget {
 
 /// Shown while the TV plays: remote control for it.
 class CastingView extends ConsumerWidget {
-  const CastingView({super.key, required this.controller});
+  const CastingView({
+    super.key,
+    required this.controller,
+    required this.onBack,
+  });
 
   final PlayerController controller;
+
+  /// Closes the player (which stops the TV too).
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -109,9 +115,13 @@ class CastingView extends ConsumerWidget {
       listenable: cast,
       builder: (context, _) {
         final name = cast.device?.friendlyName ?? 'your TV';
+        final lost = cast.phase == CastPhase.lost;
+        // The TV can't take commands yet (starting) or now (silent).
+        final live = cast.phase != CastPhase.connecting && !lost;
         final status = switch (cast.phase) {
-          CastPhase.connecting => 'Starting on $name',
-          CastPhase.lost => '$name isn’t answering. Waiting for it…',
+          CastPhase.connecting => 'Starting on $name…',
+          CastPhase.lost =>
+            '$name isn’t answering. Check that it’s on, or watch on this phone.',
           _ when cast.reconnecting => 'Reconnecting to $name…',
           CastPhase.playing =>
             'Playing on $name'
@@ -122,6 +132,8 @@ class CastingView extends ConsumerWidget {
         return Stack(
           fit: StackFit.expand,
           children: [
+            // Opaque: the paused phone picture never shows through.
+            const ColoredBox(color: KColors.seat),
             Opacity(
               opacity: 0.4,
               child: Artwork(
@@ -141,7 +153,17 @@ class CastingView extends ConsumerWidget {
                 ),
                 top: Row(
                   children: [
-                    Icon(Icons.tv_rounded, color: KinoraTint.of(context)),
+                    GlassIconButton(
+                      icon: Icons.chevron_left_rounded,
+                      label: 'Stop casting and close',
+                      onPressed: onBack,
+                      size: 44,
+                    ),
+                    const SizedBox(width: KSpace.x3),
+                    Icon(
+                      lost ? Icons.tv_off_rounded : Icons.tv_rounded,
+                      color: lost ? KColors.caution : KinoraTint.of(context),
+                    ),
                     const SizedBox(width: KSpace.x2),
                     Expanded(
                       child: Semantics(
@@ -176,7 +198,9 @@ class CastingView extends ConsumerWidget {
                       position: cast.position,
                       duration: cast.duration,
                       buffered: cast.duration,
-                      onSeek: cast.seek,
+                      onSeek: (to) {
+                        if (live) unawaited(cast.seek(to));
+                      },
                     ),
                     const SizedBox(height: KSpace.x3),
                     Wrap(
@@ -187,9 +211,11 @@ class CastingView extends ConsumerWidget {
                         GlassIconButton(
                           icon: Icons.replay_10_rounded,
                           label: 'Back 10 seconds',
-                          onPressed: () => cast.seek(
-                            cast.position - const Duration(seconds: 10),
-                          ),
+                          onPressed: !live
+                              ? null
+                              : () => cast.seek(
+                                  cast.position - const Duration(seconds: 10),
+                                ),
                         ),
                         GlassIconButton(
                           icon: cast.phase == CastPhase.playing
@@ -198,26 +224,28 @@ class CastingView extends ConsumerWidget {
                           label: cast.phase == CastPhase.playing
                               ? 'Pause'
                               : 'Play',
-                          onPressed: cast.togglePlay,
+                          onPressed: live ? cast.togglePlay : null,
                           size: 64,
                         ),
                         GlassIconButton(
                           icon: Icons.forward_10_rounded,
                           label: 'Forward 10 seconds',
-                          onPressed: () => cast.seek(
-                            cast.position + const Duration(seconds: 10),
-                          ),
+                          onPressed: !live
+                              ? null
+                              : () => cast.seek(
+                                  cast.position + const Duration(seconds: 10),
+                                ),
                         ),
                         const SizedBox(width: KSpace.x4),
                         GlassIconButton(
                           icon: Icons.volume_down_rounded,
                           label: 'TV volume down',
-                          onPressed: () => cast.changeVolume(-5),
+                          onPressed: !live ? null : () => cast.changeVolume(-5),
                         ),
                         GlassIconButton(
                           icon: Icons.volume_up_rounded,
                           label: 'TV volume up',
-                          onPressed: () => cast.changeVolume(5),
+                          onPressed: !live ? null : () => cast.changeVolume(5),
                         ),
                         const SizedBox(width: KSpace.x4),
                         GlassButton(
@@ -236,14 +264,6 @@ class CastingView extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    if (cast.position > Duration.zero)
-                      Padding(
-                        padding: const EdgeInsets.only(top: KSpace.x2),
-                        child: Text(
-                          '${Fmt.timecode(cast.position)} of ${Fmt.timecode(cast.duration)}',
-                          style: KType.tabular(KType.small),
-                        ),
-                      ),
                   ],
                 ),
               ),

@@ -340,7 +340,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     // "Versions" on screen; the full phrase for screen readers.
-    expect(find.text('Versions'), findsOneWidget);
+    expect(find.text('Other versions'), findsOneWidget);
     expect(find.text('Download E1'), findsOneWidget);
 
     await tester.tap(find.bySemanticsLabel('Choose another version'));
@@ -350,10 +350,10 @@ void main() {
     expect(actions.requests.single.candidateId, 'c3');
     expect(find.text('Added to Downloads.'), findsOneWidget);
 
-    await tester.ensureVisible(find.bySemanticsLabel('More for Season 1'));
-    await tester.tap(find.bySemanticsLabel('More for Season 1'));
+    await tester.ensureVisible(find.bySemanticsLabel('Download season 1'));
+    await tester.tap(find.bySemanticsLabel('Download season 1'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download season 1'));
+    await tester.tap(find.text('Download season 1')); // the sheet confirms
     await tester.pumpAndSettle();
     expect(
       [for (final r in actions.requests.skip(1)) r.videoId],
