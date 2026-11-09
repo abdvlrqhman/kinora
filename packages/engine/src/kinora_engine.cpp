@@ -1592,7 +1592,7 @@ char* kn_stream_open(kn_session* s, const char* ih, int32_t file_index, const ui
     lt::bdecode_node o = decode(opts, opts_len, ec);
     if (!ec && o.type() == lt::bdecode_node::dict_t) {
       route->bitrate = std::max<std::int64_t>(0, int_of(o, "bitrate", 0));
-      std::int64_t secs = int_of(o, "readahead_secs", 90);
+      std::int64_t secs = int_of(o, "readahead_secs", 180);
       if (route->bitrate > 0) route->readahead = route->bitrate * secs;
     }
     route->readahead = std::clamp(route->readahead, kMinReadahead, kMaxReadahead);
@@ -1607,6 +1607,10 @@ char* kn_stream_open(kn_session* s, const char* ih, int32_t file_index, const ui
     for (int p = std::max(first, last - 1); p <= last; ++p) {
       if (!h.have_piece(lt::piece_index_t{p})) h.set_piece_deadline(lt::piece_index_t{p}, 100);
     }
+    // Keep buffering while it plays: past the deadline window, download in
+    // order (rarest-first would spend the bandwidth all over the file, and
+    // playback would stall at the window's edge).
+    h.set_flags(lt::torrent_flags::sequential_download);
     {
       std::lock_guard<std::mutex> lk(s->mu);
       Torrent* t = find_torrent(s, ih);

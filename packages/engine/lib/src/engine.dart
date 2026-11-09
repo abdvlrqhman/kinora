@@ -236,7 +236,7 @@ final class KinoraEngine {
     String infoHash,
     int fileIndex, {
     int? bitrate,
-    int readaheadSecs = 90,
+    int readaheadSecs = 180,
   }) {
     final opts = bencode({'bitrate': bitrate, 'readahead_secs': readaheadSecs});
     final json = _withStr(

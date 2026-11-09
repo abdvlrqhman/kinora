@@ -420,7 +420,9 @@ class PlayerController extends ChangeNotifier {
     await set('cache-secs', '120');
     await set('demuxer-max-bytes', '${150 << 20}');
     await set('demuxer-max-back-bytes', '${48 << 20}');
-    await set('demuxer-readahead-secs', '60');
+    // Two minutes read ahead (within the 150 MB cap): the engine keeps the
+    // next three minutes after that downloading in order.
+    await set('demuxer-readahead-secs', '120');
     await set('network-timeout', '120');
     await set(
       'stream-lavf-o',
