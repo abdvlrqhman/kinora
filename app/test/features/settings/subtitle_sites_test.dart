@@ -50,7 +50,7 @@ void main() {
   ) async {
     final kit = await pumpKit(tester, location: '/settings/subtitle-sites');
     await tester.pumpAndSettle();
-    expect(kit.settings.enabledSubtitleProviders, isEmpty);
+    expect(kit.settings.enabledSubtitleProviders, [freeOpenSubtitlesId]);
 
     await tester.tap(find.text('SubDL'));
     await tester.pumpAndSettle();
@@ -61,12 +61,15 @@ void main() {
     await tester.tap(find.text('Save and turn on'));
     await tester.pumpAndSettle();
     expect(find.text('Enter your API key to turn on SubDL.'), findsOneWidget);
-    expect(kit.settings.enabledSubtitleProviders, isEmpty);
+    expect(kit.settings.enabledSubtitleProviders, [freeOpenSubtitlesId]);
 
     await tester.enterText(find.byKey(const ValueKey('key-subdl')), ' abc123 ');
     await tester.tap(find.text('Save and turn on'));
     await tester.pumpAndSettle();
-    expect(kit.settings.enabledSubtitleProviders, ['subdl']);
+    expect(kit.settings.enabledSubtitleProviders, [
+      freeOpenSubtitlesId,
+      'subdl',
+    ]);
     final saved = jsonDecode(kit.storage.values['provider.subdl']!) as Map;
     expect(saved['apiKey'], 'abc123');
     expect(find.textContaining('Your key is saved on this phone.'), findsOne);
@@ -75,7 +78,7 @@ void main() {
 
     await tester.tap(find.text('SubDL'));
     await tester.pumpAndSettle();
-    expect(kit.settings.enabledSubtitleProviders, isEmpty);
+    expect(kit.settings.enabledSubtitleProviders, [freeOpenSubtitlesId]);
     expect(kit.storage.values, isEmpty);
   });
 
@@ -88,7 +91,7 @@ void main() {
       size: const Size(390, 1600),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('OpenSubtitles.com'));
+    await tester.tap(find.text('OpenSubtitles.com with your key'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('key-opensubtitles')),
@@ -110,7 +113,10 @@ void main() {
     );
     await tester.tap(find.text('Save and turn on'));
     await tester.pumpAndSettle();
-    expect(kit.settings.enabledSubtitleProviders, ['opensubtitles']);
+    expect(kit.settings.enabledSubtitleProviders, [
+      freeOpenSubtitlesId,
+      'opensubtitles',
+    ]);
   });
 
   kitTest('Test runs one search and reports the result in words', (
@@ -183,7 +189,10 @@ void main() {
     );
     await tester.tap(find.text('Free Subs'));
     await tester.pumpAndSettle();
-    expect(container.read(settingsProvider).enabledSubtitleProviders, ['free']);
+    expect(container.read(settingsProvider).enabledSubtitleProviders, [
+      freeOpenSubtitlesId,
+      'free',
+    ]);
     expect(find.byType(TextField), findsNothing);
     expect(find.textContaining('Your key is saved'), findsNothing);
     await unmount(tester);

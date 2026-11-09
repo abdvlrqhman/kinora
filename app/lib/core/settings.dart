@@ -82,6 +82,9 @@ final class SubtitleStyle {
 }
 
 /// Everything the user can change. Stored as one JSON document.
+/// The keyless OpenSubtitles source (on unless the user turns it off).
+const freeOpenSubtitlesId = 'opensubtitles-free';
+
 final class AppSettings {
   const AppSettings({
     this.onboarded = false,
@@ -104,7 +107,7 @@ final class AppSettings {
     this.downloadLimitKBps = 0,
     this.keepStreamsHours = 0,
     this.vpnInterface = '',
-    this.enabledSubtitleProviders = const [],
+    this.enabledSubtitleProviders = const [freeOpenSubtitlesId],
     this.lastCastDevice,
   });
 
@@ -132,7 +135,11 @@ final class AppSettings {
     downloadLimitKBps: (j['downloadLimitKBps'] as num? ?? 0).toInt(),
     keepStreamsHours: (j['keepStreamsHours'] as num? ?? 0).toInt(),
     vpnInterface: j['vpnInterface'] as String? ?? '',
-    enabledSubtitleProviders: _strings(j['enabledSubtitleProviders']),
+    // Settings saved before the keyless OpenSubtitles existed get it on once.
+    enabledSubtitleProviders: [
+      ..._strings(j['enabledSubtitleProviders']),
+      if (j['freeOpenSubtitlesOffered'] != true) freeOpenSubtitlesId,
+    ],
     lastCastDevice: j['lastCastDevice'] as Map<String, Object?>?,
   );
 
@@ -208,6 +215,7 @@ final class AppSettings {
     'keepStreamsHours': keepStreamsHours,
     'vpnInterface': vpnInterface,
     'enabledSubtitleProviders': enabledSubtitleProviders,
+    'freeOpenSubtitlesOffered': true,
     'lastCastDevice': lastCastDevice,
   };
 

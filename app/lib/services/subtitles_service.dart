@@ -10,6 +10,7 @@ import 'package:subtitles/subtitles.dart';
 import '../app/providers.dart';
 import '../core/lang.dart';
 import '../core/log.dart';
+import '../core/settings.dart';
 import 'resolver.dart';
 import 'sources.dart';
 import 'subtitle_option.dart';
@@ -40,6 +41,15 @@ final class ProviderInfo {
 
 const subtitleProviderCatalog = [
   ProviderInfo(
+    id: freeOpenSubtitlesId,
+    name: 'OpenSubtitles',
+    description:
+        'No key needed. The largest library, through Stremio’s free '
+        'OpenSubtitles service.',
+    keyLabel: '',
+    needsKey: false,
+  ),
+  ProviderInfo(
     id: 'subdl',
     name: 'SubDL',
     description: 'Large library for movies and shows, many languages.',
@@ -62,8 +72,8 @@ const subtitleProviderCatalog = [
   ),
   ProviderInfo(
     id: 'opensubtitles',
-    name: 'OpenSubtitles.com',
-    description: 'Matches the exact file by its fingerprint.',
+    name: 'OpenSubtitles.com with your key',
+    description: 'Adds matching the exact file by its fingerprint.',
     keyLabel: 'API key',
     supportsLogin: true,
     keyHelp: 'opensubtitles.com › Profile › API consumers',
@@ -121,12 +131,20 @@ final subtitleProvidersProvider = FutureProvider<List<SubtitleProvider>>((
         client: http,
       ),
       'jimaku' => JimakuProvider(apiKey: c.apiKey, client: http),
+      freeOpenSubtitlesId => StremioSubtitlesProvider(
+        url: Uri.parse('https://opensubtitles-v3.strem.io/manifest.json'),
+        name: 'OpenSubtitles',
+        client: http,
+      ),
       // Podnapisi's site is offline (2026); its client stays in the package.
       _ => throw StateError('unknown provider $id'),
     });
   }
   final addons = await ref.watch(enabledAddonsProvider.future);
+  final freeOn = out.any((p) => p is StremioSubtitlesProvider);
   for (final a in addons) {
+    // The same service installed as an addon would list everything twice.
+    if (freeOn && a.transportUrl.host == 'opensubtitles-v3.strem.io') continue;
     if (a.manifest.resources.any((r) => r.name == 'subtitles')) {
       out.add(
         StremioSubtitlesProvider(
