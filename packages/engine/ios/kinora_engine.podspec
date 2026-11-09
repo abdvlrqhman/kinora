@@ -1,5 +1,6 @@
 # libtorrent engine + HTTP range server. The static libraries in prebuilt/ are
-# produced by the `engine` CI workflow (vcpkg, arm64-ios).
+# produced by the `engine` CI workflow (vcpkg: arm64-ios, or
+# arm64-ios-simulator for the simulator E2E).
 Pod::Spec.new do |s|
   s.name             = 'kinora_engine'
   s.version          = '0.1.0'

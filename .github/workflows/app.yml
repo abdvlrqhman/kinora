@@ -141,28 +141,59 @@ jobs:
             cd app && (timeout 600 flutter test integration_test/glass_test.dart -d emulator-5554 --reporter expanded || echo "::warning::Real liquid glass did not render on the emulator (see log)")
       - name: Player screenshots from the run
         if: always()
-        run: |
-          python3 - <<'PY'
-          import base64, collections, os, re
-          parts = collections.defaultdict(dict)
-          if os.path.exists('e2e.log'):
-              for line in open('e2e.log', errors='replace'):
-                  m = re.search(r'E2E-SHOT (\S+) (\d+)/(\d+) (\S+)', line)
-                  if m:
-                      parts[m[1]][int(m[2])] = (int(m[3]), m[4])
-          os.makedirs('e2e-shots', exist_ok=True)
-          for name, chunks in parts.items():
-              total = next(iter(chunks.values()))[0]
-              if len(chunks) == total:
-                  data = ''.join(chunks[i][1] for i in range(1, total + 1))
-                  with open(f'e2e-shots/{name}.png', 'wb') as f:
-                      f.write(base64.b64decode(data))
-          print('screenshots:', sorted(os.listdir('e2e-shots')))
-          PY
+        run: python3 .github/scripts/e2e_shots.py e2e.log e2e-shots
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-player-screenshots
+          path: e2e-shots
+          if-no-files-found: ignore
+          retention-days: 14
+
+  e2e-ios:
+    name: end-to-end (iPhone simulator)
+    needs: [check, engine]
+    runs-on: macos-26
+    timeout-minutes: 60
+    # New: it doesn't hold back a release until it has proven steady.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: libtorrent-arm64-ios-simulator
+          path: packages/engine/ios/prebuilt
+      - uses: maxim-lobanov/setup-xcode@v1.7.0
+        with:
+          xcode-version: latest-stable
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Boot an iPhone simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          ios = sorted((r for r in d if "iOS" in r), reverse=True)
+          print(next(x["udid"] for r in ios for x in d[r] if x["name"].startswith("iPhone")))')
+          xcrun simctl list devices | grep "$udid"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Run the end-to-end test on the simulator
+        working-directory: app
+        run: |
+          set -o pipefail
+          flutter test integration_test/app_test.dart -d "${{ steps.sim.outputs.udid }}" --reporter expanded 2>&1 | tee ../e2e-ios.log
+      - name: Player screenshots from the run
+        if: always()
+        run: python3 .github/scripts/e2e_shots.py e2e-ios.log e2e-shots
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-iphone-screenshots
           path: e2e-shots
           if-no-files-found: ignore
           retention-days: 14

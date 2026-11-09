@@ -24,6 +24,7 @@ jobs:
           - { triplet: x64-android, os: ubuntu-24.04 }
           - { triplet: x64-linux, os: ubuntu-24.04 }
           - { triplet: arm64-ios, os: macos-15 }
+          - { triplet: arm64-ios-simulator, os: macos-15 } # the iPhone simulator E2E
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     defaults:
@@ -43,7 +44,7 @@ jobs:
           path: |
             packages/engine/out/${{ matrix.triplet }}/include
             packages/engine/out/${{ matrix.triplet }}/lib
-          key: libtorrent-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-${{ env.ANDROID_NDK_VERSION }}-${{ hashFiles('packages/engine/vcpkg.json', 'packages/engine/triplets/**') }}
+          key: libtorrent-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-${{ env.ANDROID_NDK_VERSION }}-${{ hashFiles('packages/engine/vcpkg.json', format('packages/engine/triplets/{0}.cmake', matrix.triplet)) }}
 
       - name: Fetch vcpkg at pinned commit
         if: steps.libs.outputs.cache-hit != 'true'
@@ -65,16 +66,27 @@ jobs:
         if: steps.libs.outputs.cache-hit != 'true'
         with:
           path: .vcpkg-bin
-          key: vcpkg-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-${{ env.ANDROID_NDK_VERSION }}-${{ hashFiles('packages/engine/vcpkg.json', 'packages/engine/triplets/**') }}
+          key: vcpkg-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-${{ env.ANDROID_NDK_VERSION }}-${{ hashFiles('packages/engine/vcpkg.json', format('packages/engine/triplets/{0}.cmake', matrix.triplet)) }}
           restore-keys: vcpkg-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-
 
       - name: Build
         if: steps.libs.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$GITHUB_WORKSPACE/.vcpkg-bin"
+          overlay=()
+          if [ "${{ matrix.triplet }}" = arm64-ios-simulator ]; then
+            # vcpkg builds OpenSSL for iPhones on every arm64 iOS triplet;
+            # the simulator has its own OpenSSL target.
+            mkdir -p "$RUNNER_TEMP/ports"
+            cp -R "$RUNNER_TEMP/vcpkg/ports/openssl" "$RUNNER_TEMP/ports/"
+            f="$RUNNER_TEMP/ports/openssl/unix/portfile.cmake"
+            sed -i '' 's/set(OPENSSL_ARCH ios64-xcrun)/set(OPENSSL_ARCH iossimulator-arm64-xcrun)/' "$f"
+            grep -q iossimulator-arm64-xcrun "$f"
+            overlay=(--overlay-ports="$RUNNER_TEMP/ports")
+          fi
           "$RUNNER_TEMP/vcpkg/vcpkg" install \
             --triplet "${{ matrix.triplet }}" \
-            --overlay-triplets=triplets \
+            --overlay-triplets=triplets "${overlay[@]}" \
             --x-install-root=out \
             --clean-after-build
 
