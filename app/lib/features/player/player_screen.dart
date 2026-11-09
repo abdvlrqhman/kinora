@@ -15,12 +15,14 @@ import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
+import '../../services/cast_service.dart';
 import 'player_controller.dart';
+import 'widgets/cast_panel.dart';
 import 'widgets/panels.dart';
 import 'widgets/scrubber.dart';
 import 'widgets/subtitle_overlay.dart';
 
-enum _Panel { none, tracks, episodes, speed, versions }
+enum _Panel { none, tracks, episodes, speed, versions, cast }
 
 /// Full-screen player for streams and downloads alike.
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -34,6 +36,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late final PlayerController c;
+  late final CastService _cast;
   bool _controls = true;
   bool _locked = false;
   bool _scrubbing = false;
@@ -47,6 +50,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void initState() {
     super.initState();
     c = PlayerController(ref, widget.request)..addListener(_onChange);
+    _cast = ref.read(castServiceProvider)..addListener(_onChange);
     unawaited(c.start());
     unawaited(WakelockPlus.enable());
     unawaited(
@@ -75,6 +79,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void dispose() {
     _hide?.cancel();
     _flashTimer?.cancel();
+    _cast.removeListener(_onChange);
+    // The stream route closes with the player, so the TV would stall: stop it.
+    if (_cast.isCasting) unawaited(_cast.stop());
     c
       ..removeListener(_onChange)
       ..dispose();
@@ -217,7 +224,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     onBack: () => Navigator.of(context).maybePop(),
                     onVersions: () => _open(_Panel.versions),
                   ),
-                if (c.phase == PlayerPhase.playing) ...[
+                if (c.phase == PlayerPhase.playing && _cast.isCasting)
+                  CastingView(controller: c)
+                else if (c.phase == PlayerPhase.playing) ...[
                   _BufferingHint(controller: c),
                   if (_flash != null) Center(child: _FlashLabel(text: _flash!)),
                   AnimatedOpacity(
@@ -278,6 +287,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       _Panel.speed => SpeedPanel(
                         controller: c,
                         onClose: _closePanel,
+                      ),
+                      _Panel.cast => CastPanel(
+                        controller: c,
+                        onClose: _closePanel,
+                        onVersions: () => _open(_Panel.versions),
                       ),
                       _Panel.versions => _VersionsPanel(
                         controller: c,
@@ -378,6 +392,12 @@ class _Controls extends StatelessWidget {
                     ),
                   ),
                   if (c.engineStats != null) _EngineChip(controller: c),
+                  const SizedBox(width: KSpace.x2),
+                  GlassIconButton(
+                    icon: Icons.cast_rounded,
+                    label: 'Play on TV',
+                    onPressed: () => onPanel(_Panel.cast),
+                  ),
                   const SizedBox(width: KSpace.x2),
                   GlassIconButton(
                     icon: Icons.lock_outline_rounded,

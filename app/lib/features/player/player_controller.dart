@@ -564,6 +564,30 @@ class PlayerController extends ChangeNotifier {
 
   final _loaded = <String, String>{};
 
+  /// A text subtitle file for the TV: the active external one, or the best
+  /// external one in the active embedded track's language (TVs can't read
+  /// subtitles inside the video stream we serve).
+  Future<({String path, String? language})?> subtitleForTv() async {
+    final active = subtitles.where((s) => s.id == activeSubtitleId).firstOrNull;
+    if (active == null) return null;
+    final option = active.track == null
+        ? active
+        : subtitles
+              .where(
+                (s) => s.track == null && sameLang(s.language, active.language),
+              )
+              .fold<SubtitleOption?>(
+                null,
+                (best, s) =>
+                    best == null || (s.fit ?? 0) > (best.fit ?? 0) ? s : best,
+              );
+    if (option == null) return null;
+    final path = option.uri ?? _loaded[option.id] ?? await option.load?.call();
+    if (path == null) return null;
+    _loaded[option.id] = path;
+    return (path: path, language: option.language);
+  }
+
   /// A short message for the viewer (shown briefly by the screen).
   String? notice;
 
