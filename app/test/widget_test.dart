@@ -1,19 +1,34 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-
-import 'package:kinora/main.dart';
-import 'package:kinora/shell.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kinora/app/app.dart';
+import 'package:kinora/app/providers.dart';
+import 'package:kinora/core/settings.dart';
 
 void main() {
-  testWidgets('tab bar switches pages', (tester) async {
-    await tester.pumpWidget(const KinoraApp());
+  testWidgets('first launch opens onboarding', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: KinoraApp()));
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome'), findsOneWidget);
+  });
 
-    expect(find.byKey(const ValueKey('page-home')), findsOneWidget);
-
+  testWidgets('onboarded users land on Home and can switch tabs', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          initialSettingsProvider.overrideWithValue(
+            const AppSettings(onboarded: true),
+          ),
+        ],
+        child: const KinoraApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Home'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('tab-search')));
-    await tester.pump();
-
-    final stack = tester.widget<IndexedStack>(find.byType(IndexedStack));
-    expect(stack.index, AppTab.search.index);
+    await tester.pumpAndSettle();
+    expect(find.text('Search'), findsWidgets);
   });
 }

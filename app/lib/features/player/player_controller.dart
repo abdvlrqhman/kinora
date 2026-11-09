@@ -1,0 +1,783 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:stremio/stremio.dart';
+
+import '../../app/providers.dart';
+import '../../core/lang.dart';
+import '../../core/log.dart';
+import '../../core/settings.dart';
+import '../../data/repositories.dart';
+import '../../services/engine_service.dart';
+import '../../services/library.dart';
+import '../../services/play_request.dart';
+import '../../services/playback.dart';
+import '../../services/downloads.dart';
+import '../../services/resolver.dart';
+import '../../services/sources.dart';
+
+enum PlayerPhase { preparing, playing, failed }
+
+/// A subtitle the viewer can pick: embedded track or external file.
+final class SubtitleOption {
+  const SubtitleOption({
+    required this.id,
+    required this.language,
+    required this.label,
+    this.track,
+    this.uri,
+    this.hearingImpaired = false,
+    this.forced = false,
+    this.detail,
+    this.fit,
+  });
+
+  final String id;
+
+  /// Normalized code ("ar"), null when unknown.
+  final String? language;
+  final String label;
+
+  /// Embedded track.
+  final SubtitleTrack? track;
+
+  /// External file or URL.
+  final String? uri;
+  final bool hearingImpaired;
+  final bool forced;
+
+  /// Provider / release name line.
+  final String? detail;
+
+  /// 0..1 how well it fits this release (external only).
+  final double? fit;
+
+  String get variant =>
+      forced ? 'forced' : (hearingImpaired ? 'sdh' : 'normal');
+}
+
+/// Drives one playback session (and the episodes after it).
+class PlayerController extends ChangeNotifier {
+  PlayerController(this._ref, PlayRequest request) : _request = request {
+    player = Player(
+      configuration: const PlayerConfiguration(
+        title: 'Kinora',
+        bufferSize: 64 * 1024 * 1024,
+        logLevel: MPVLogLevel.warn,
+      ),
+    );
+    video = VideoController(player);
+    _subs = [
+      player.stream.error.listen((e) => Log.w('player', e)),
+      player.stream.tracks.listen((_) => _onTracks()),
+      player.stream.completed.listen((done) {
+        if (done) unawaited(_onCompleted());
+      }),
+      player.stream.playing.listen((_) => notifyListeners()),
+      player.stream.position.listen(_onPosition),
+    ];
+  }
+
+  final WidgetRef _ref;
+  late final Player player;
+  late final VideoController video;
+  late final List<StreamSubscription<Object?>> _subs;
+
+  PlayRequest _request;
+  PlayRequest get request => _request;
+
+  PlayerPhase phase = PlayerPhase.preparing;
+  String status = 'Finding the best version';
+  String? error;
+  PlaybackSource? source;
+  MetaDetail? meta;
+
+  /// Embedded + external subtitles, grouped by language in the UI.
+  List<SubtitleOption> subtitles = const [];
+  String? activeSubtitleId;
+  Duration subtitleDelay = Duration.zero;
+  bool nightMode = false;
+  double rate = 1;
+
+  /// Up Next is offered near the end of an episode.
+  bool upNextDismissed = false;
+  PlayRequest? nextEpisode;
+  PlayRequest? previousEpisode;
+
+  Timer? _saveTimer;
+  Timer? _statusTimer;
+  bool _tracksApplied = false;
+  bool _disposed = false;
+  bool _prefetchedNext = false;
+  int _generation = 0;
+  Completer<void>? _cancelPrepare;
+
+  AppSettings get _settings => _ref.read(settingsProvider);
+
+  // ------------------------------------------------------------ lifecycle --
+
+  Future<void> start() => _load(_request);
+
+  Future<void> _load(PlayRequest req) async {
+    final gen = ++_generation;
+    _cancelPrepare?.complete();
+    _cancelPrepare = Completer<void>();
+    if (req.localFile == null) {
+      final local = await completedDownloadFile(
+        _ref.read(databaseProvider),
+        req.videoId,
+      );
+      if (local != null) req = req.copyWith(localFile: local);
+    }
+    if (gen != _generation || _disposed) return;
+    _request = req;
+    phase = PlayerPhase.preparing;
+    status = req.localFile != null ? 'Opening' : 'Finding the best version';
+    error = null;
+    _tracksApplied = false;
+    _pending = null;
+    upNextDismissed = false;
+    _prefetchedNext = false;
+    subtitles = const [];
+    activeSubtitleId = null;
+    notifyListeners();
+    unawaited(_loadMeta());
+    await _configureMpv();
+    try {
+      final runtime = _runtimeMinutes();
+      final src = await _ref
+          .read(playbackServiceProvider)
+          .prepare(
+            req,
+            runtimeMinutes: runtime,
+            cancel: _cancelPrepare!.future,
+            onStatus: (s) {
+              if (gen != _generation) return;
+              status = switch (s) {
+                Resolving() => 'Finding the best version',
+                FindingPeers(:final peers, :final seeds) =>
+                  peers == 0
+                      ? 'Looking for people sharing it'
+                      : 'Connecting to $peers people ($seeds with the full file)',
+                TryingNext() => 'Trying another version',
+              };
+              notifyListeners();
+            },
+          );
+      if (gen != _generation || _disposed) return;
+      source = src;
+      final start = req.startAt ?? await _savedPosition(req.videoId);
+      status = 'Buffering';
+      notifyListeners();
+      await player.open(
+        Media(src.uri.toString(), httpHeaders: src.headers, start: start),
+      );
+      phase = PlayerPhase.playing;
+      _startTimers();
+      notifyListeners();
+    } on PlaybackException catch (e) {
+      if (gen != _generation) return;
+      phase = PlayerPhase.failed;
+      error = e.message;
+      notifyListeners();
+    } on Object catch (e, st) {
+      Log.e('player', 'prepare failed', e, st);
+      if (gen != _generation) return;
+      phase = PlayerPhase.failed;
+      error = 'Playback couldn’t start. Choose another version or try again.';
+      notifyListeners();
+    }
+  }
+
+  Future<void> _configureMpv() async {
+    final p = player.platform;
+    if (p is! NativePlayer) return;
+    final s = _settings;
+    Future<void> set(String k, String v) async {
+      try {
+        await p.setProperty(k, v);
+      } on Object catch (e) {
+        Log.d('player', 'mpv $k: $e');
+      }
+    }
+
+    await set('cache', 'yes');
+    await set('cache-secs', '120');
+    await set('demuxer-max-bytes', '${150 << 20}');
+    await set('demuxer-max-back-bytes', '${48 << 20}');
+    await set('demuxer-readahead-secs', '60');
+    await set('network-timeout', '120');
+    await set(
+      'stream-lavf-o',
+      'reconnect=1,reconnect_on_network_error=1,reconnect_delay_max=10',
+    );
+    await set('volume-max', '200');
+    final audio = [
+      for (final l in s.audioLanguages)
+        if (l != 'original') ...mpvLangCodes(l),
+    ];
+    if (audio.isNotEmpty) await set('alang', audio.join(','));
+    await set('sid', 'no'); // subtitles are chosen by Kinora, not mpv
+  }
+
+  int? _runtimeMinutes() {
+    final r = meta?.runtime;
+    if (r == null) return null;
+    final m = RegExp(r'(\d+)').firstMatch(r);
+    return m == null ? null : int.tryParse(m.group(1)!);
+  }
+
+  Future<void> _loadMeta() async {
+    if (_request.videoId.startsWith('magnet:') ||
+        _request.videoId.startsWith('http'))
+      return;
+    try {
+      meta = await _ref.read(
+        metaProvider((type: _request.type, id: _request.mediaId)).future,
+      );
+      _computeNeighbours();
+      notifyListeners();
+    } on Object catch (e) {
+      Log.d('player', 'meta unavailable: $e');
+    }
+  }
+
+  // ------------------------------------------------------------- episodes --
+
+  /// Episodes in watching order (specials last).
+  List<Episode> get episodes {
+    final list = [
+      ...?meta?.videos.where((v) => v.season != null && v.episode != null),
+    ];
+    list.sort((a, b) {
+      final sa = a.season == 0 ? 1 << 20 : a.season!,
+          sb = b.season == 0 ? 1 << 20 : b.season!;
+      return sa != sb ? sa.compareTo(sb) : a.episode!.compareTo(b.episode!);
+    });
+    return list;
+  }
+
+  PlayRequest requestFor(Episode e) => _request
+      .copyWith(
+        videoId: e.id,
+        season: e.season,
+        episode: e.episode,
+        episodeTitle: e.title,
+        still: e.thumbnail,
+        clearCandidate: true,
+        clearLocal: true,
+      )
+      .withStart(null);
+
+  void _computeNeighbours() {
+    if (!_request.isEpisode) return;
+    final list = episodes;
+    final i = list.indexWhere((e) => e.id == _request.videoId);
+    nextEpisode = i >= 0 && i + 1 < list.length
+        ? requestFor(list[i + 1])
+        : null;
+    previousEpisode = i > 0 ? requestFor(list[i - 1]) : null;
+  }
+
+  /// Switches to another episode or version without leaving the player.
+  Future<void> switchTo(PlayRequest next) async {
+    await _saveProgress();
+    await _releaseSource();
+    await player.stop();
+    await _load(next);
+    _computeNeighbours();
+  }
+
+  Future<void> playNext() async {
+    final n = nextEpisode;
+    if (n != null) await switchTo(n);
+  }
+
+  Future<void> playPrevious() async {
+    final p = previousEpisode;
+    if (p != null) await switchTo(p);
+  }
+
+  /// True in the last stretch of an episode, when Up Next shows.
+  bool get inCredits {
+    final d = player.state.duration;
+    if (d == Duration.zero || nextEpisode == null) return false;
+    final left = d - player.state.position;
+    final window = Duration(
+      seconds: (d.inSeconds * 0.04).clamp(25, 90).toInt(),
+    );
+    return left <= window;
+  }
+
+  void _onPosition(Duration pos) {
+    final d = player.state.duration;
+    if (d == Duration.zero) return;
+    if (!_prefetchedNext &&
+        pos.inSeconds > d.inSeconds * 0.8 &&
+        nextEpisode != null) {
+      _prefetchedNext = true;
+      unawaited(_prefetch(nextEpisode!));
+    }
+  }
+
+  /// Resolves the next episode and fetches its torrent metadata so Next
+  /// starts in seconds.
+  Future<void> _prefetch(PlayRequest next) async {
+    try {
+      final result = await _ref.read(
+        resolveProvider(
+          VideoRef(
+            type: next.type,
+            mediaId: next.mediaId,
+            videoId: next.videoId,
+            season: next.season,
+            episode: next.episode,
+            runtimeMinutes: _runtimeMinutes(),
+          ),
+        ).future,
+      );
+      final best = result.best?.stream;
+      if (best?.infoHash != null) {
+        _ref
+            .read(engineServiceProvider)
+            .add(
+              infoHash: best!.infoHash!,
+              name: best.filename,
+              trackers: best.trackers.map((t) => t.toString()).toList(),
+            );
+      }
+    } on Object catch (e) {
+      Log.d('player', 'prefetch next failed: $e');
+    }
+  }
+
+  Future<void> _onCompleted() async {
+    await _saveProgress();
+    if (nextEpisode != null && _settings.autoplayNext && !upNextDismissed) {
+      await playNext();
+    }
+  }
+
+  // --------------------------------------------------------------- tracks --
+
+  Future<void> _onTracks() async {
+    final tracks = player.state.tracks;
+    final embedded = [
+      for (final t in tracks.subtitle)
+        if (t.id != 'auto' && t.id != 'no' && !t.uri && !t.data)
+          SubtitleOption(
+            id: 'emb:${t.id}',
+            language: normalizeLang(t.language),
+            label: _trackTitle(t.title, t.language),
+            track: t,
+            forced: (t.title ?? '').toLowerCase().contains('forced'),
+            hearingImpaired: RegExp(
+              r'\b(sdh|hi|cc)\b',
+              caseSensitive: false,
+            ).hasMatch(t.title ?? ''),
+            detail: 'In the video file',
+          ),
+    ];
+    final external = subtitles.where((s) => s.uri != null);
+    subtitles = [...embedded, ...external];
+    notifyListeners();
+    bool real(String id) => id != 'auto' && id != 'no';
+    final hasTracks =
+        tracks.audio.any((a) => real(a.id)) ||
+        tracks.video.any((v) => real(v.id));
+    if (_tracksApplied || !hasTracks) return;
+    _tracksApplied = true;
+    await _applyRemembered();
+  }
+
+  String _trackTitle(String? title, String? lang) {
+    final name = langName(lang);
+    final t = title?.trim();
+    if (t == null || t.isEmpty || t.toLowerCase() == name.toLowerCase())
+      return name;
+    return '$name, $t';
+  }
+
+  /// Applies the episode's (or show's) remembered choice, else preferences.
+  Future<void> _applyRemembered() async {
+    final memory = _ref.read(trackMemoryProvider);
+    final choice = await memory.resolve(
+      mediaId: _request.mediaId,
+      videoId: _request.videoId,
+    );
+    final s = _settings;
+    final audios = player.state.tracks.audio
+        .where((a) => a.id != 'auto' && a.id != 'no')
+        .toList();
+
+    AudioTrack? audio;
+    if (choice?.audioTrackId != null) {
+      audio = audios
+          .where(
+            (a) =>
+                a.id == choice!.audioTrackId &&
+                sameLang(a.language, choice.audioLanguage),
+          )
+          .firstOrNull;
+    }
+    audio ??= choice?.audioLanguage == null
+        ? null
+        : audios
+              .where((a) => sameLang(a.language, choice!.audioLanguage))
+              .firstOrNull;
+    if (audio == null) {
+      for (final l in s.audioLanguages) {
+        if (l == 'original') break;
+        audio = audios.where((a) => sameLang(a.language, l)).firstOrNull;
+        if (audio != null) break;
+      }
+    }
+    if (audio != null) await player.setAudioTrack(audio);
+
+    final audioLang = normalizeLang(
+      (audio ?? player.state.track.audio).language,
+    );
+    SubtitleOption? sub;
+    if (choice != null && choice.subtitlesOff) {
+      sub = null;
+    } else if (choice?.subtitleLanguage != null) {
+      sub = _bestSubtitle(
+        choice!.subtitleLanguage!,
+        variant: choice.subtitleVariant,
+        id: choice.subtitleId,
+      );
+      if (sub == null) {
+        _pending = (
+          lang: choice.subtitleLanguage!,
+          variant: choice.subtitleVariant,
+          id: choice.subtitleId,
+        );
+      }
+    } else {
+      sub = _subtitleFromPreferences(s, audioLang);
+      final want = s.primaryLanguage;
+      if (sub == null &&
+          want != null &&
+          s.subtitleMode != SubtitleMode.off &&
+          !(s.subtitleMode == SubtitleMode.auto && sameLang(audioLang, want))) {
+        _pending = (
+          lang: want,
+          variant: s.preferHearingImpaired ? 'sdh' : 'normal',
+          id: null,
+        );
+      }
+    }
+    await _activate(sub, remember: false);
+    if (choice != null && choice.subtitleOffsetMs != 0) {
+      await setSubtitleDelay(
+        Duration(milliseconds: choice.subtitleOffsetMs),
+        remember: false,
+      );
+    }
+  }
+
+  SubtitleOption? _subtitleFromPreferences(AppSettings s, String? audioLang) {
+    final primary = s.primaryLanguage;
+    switch (s.subtitleMode) {
+      case SubtitleMode.off:
+        return null;
+      case SubtitleMode.forcedOnly:
+        return primary == null
+            ? null
+            : _bestSubtitle(primary, variant: 'forced', strictVariant: true);
+      case SubtitleMode.auto:
+        if (primary == null) return null;
+        if (sameLang(audioLang, primary)) {
+          return _bestSubtitle(primary, variant: 'forced', strictVariant: true);
+        }
+      case SubtitleMode.always:
+    }
+    for (final l in s.subtitleLanguages) {
+      final pick = _bestSubtitle(
+        l,
+        variant: s.preferHearingImpaired ? 'sdh' : 'normal',
+      );
+      if (pick != null) return pick;
+    }
+    return null;
+  }
+
+  /// Best option in [lang]: exact id, then variant, embedded before
+  /// external at equal fit, then highest fit.
+  SubtitleOption? _bestSubtitle(
+    String lang, {
+    String? variant,
+    String? id,
+    bool strictVariant = false,
+  }) {
+    final inLang = subtitles.where((o) => sameLang(o.language, lang)).toList();
+    if (inLang.isEmpty) return null;
+    if (id != null) {
+      final exact = inLang.where((o) => o.id == id).firstOrNull;
+      if (exact != null) return exact;
+    }
+    final wanted = variant ?? 'normal';
+    final sameVariant = inLang.where((o) => o.variant == wanted).toList();
+    if (strictVariant && sameVariant.isEmpty) return null;
+    final pool = sameVariant.isNotEmpty
+        ? sameVariant
+        : inLang.where((o) => !o.forced).toList();
+    if (pool.isEmpty) return null;
+    pool.sort((a, b) {
+      final fa = a.track != null ? 0.9 : (a.fit ?? 0.5),
+          fb = b.track != null ? 0.9 : (b.fit ?? 0.5);
+      return fb.compareTo(fa);
+    });
+    return pool.first;
+  }
+
+  /// A wanted subtitle language that wasn't available yet (external
+  /// subtitles arrive after the video starts).
+  ({String lang, String? variant, String? id})? _pending;
+
+  /// Adds external subtitles (from providers) to the list, and turns on the
+  /// remembered/preferred language if it just became available.
+  void addExternalSubtitles(List<SubtitleOption> options) {
+    final ids = {for (final s in subtitles) s.id};
+    subtitles = [...subtitles, ...options.where((o) => ids.add(o.id))];
+    notifyListeners();
+    final want = _pending;
+    if (want != null && activeSubtitleId == null) {
+      final pick = _bestSubtitle(want.lang, variant: want.variant, id: want.id);
+      if (pick != null) {
+        _pending = null;
+        unawaited(_activate(pick, remember: false));
+      }
+    }
+  }
+
+  Future<void> selectSubtitle(SubtitleOption? option) {
+    _pending = null;
+    return _activate(option, remember: true);
+  }
+
+  Future<void> _activate(
+    SubtitleOption? option, {
+    required bool remember,
+  }) async {
+    activeSubtitleId = option?.id;
+    notifyListeners();
+    if (option == null) {
+      await player.setSubtitleTrack(SubtitleTrack.no());
+    } else if (option.track != null) {
+      await player.setSubtitleTrack(option.track!);
+    } else if (option.uri != null) {
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(
+          option.uri!,
+          title: option.label,
+          language: option.language,
+        ),
+      );
+    }
+    if (remember) await _remember();
+  }
+
+  Future<void> selectAudio(AudioTrack track) async {
+    await player.setAudioTrack(track);
+    notifyListeners();
+    await _remember();
+  }
+
+  Future<void> setSubtitleDelay(Duration delay, {bool remember = true}) async {
+    subtitleDelay = delay;
+    notifyListeners();
+    final p = player.platform;
+    if (p is NativePlayer) {
+      await p.setProperty(
+        'sub-delay',
+        (delay.inMilliseconds / 1000).toStringAsFixed(3),
+      );
+    }
+    if (remember) await _remember();
+  }
+
+  Future<void> _remember() async {
+    final active = subtitles.where((s) => s.id == activeSubtitleId).firstOrNull;
+    final audio = player.state.track.audio;
+    await _ref
+        .read(trackMemoryProvider)
+        .remember(
+          mediaId: _request.mediaId,
+          videoId: _request.videoId,
+          choice: TrackChoice(
+            audioLanguage: normalizeLang(audio.language),
+            audioTrackId: audio.id == 'auto' ? null : audio.id,
+            subtitleLanguage: active?.language,
+            subtitleVariant: active == null ? 'off' : active.variant,
+            subtitleId: active?.id,
+            subtitleOffsetMs: subtitleDelay.inMilliseconds,
+          ),
+        );
+  }
+
+  // ------------------------------------------------------------ controls --
+
+  Future<void> setRate(double value) async {
+    rate = value;
+    await player.setRate(value);
+    notifyListeners();
+  }
+
+  Future<void> toggleNightMode() async {
+    nightMode = !nightMode;
+    final p = player.platform;
+    if (p is NativePlayer) {
+      await p.setProperty(
+        'af',
+        nightMode ? 'lavfi=[dynaudnorm=f=250:g=15:p=0.9]' : '',
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> seekRelative(Duration delta) async {
+    final d = player.state.duration;
+    var target = player.state.position + delta;
+    if (target < Duration.zero) target = Duration.zero;
+    if (d > Duration.zero && target > d)
+      target = d - const Duration(seconds: 1);
+    await player.seek(target);
+  }
+
+  Future<void> retry() => _load(_request.copyWith(clearCandidate: true));
+
+  // -------------------------------------------------------------- engine --
+
+  /// Buffer numbers for torrent streams (null otherwise).
+  ({int bufferedAhead, int have, int size, int peers, int rate})? engineStats;
+
+  void _startTimers() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(_saveProgress()),
+    );
+    _statusTimer?.cancel();
+    final src = source;
+    if (src?.kind != PlaybackKind.torrent) {
+      engineStats = null;
+      return;
+    }
+    _statusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final engine = _ref.read(engineServiceProvider).engine;
+      final stats = engine.streamStats(src!.streamToken!);
+      final st = engine.status(src.infoHash!);
+      if (stats == null) return;
+      engineStats = (
+        bufferedAhead: stats.bufferedAhead,
+        have: stats.haveBytes,
+        size: stats.size,
+        peers: st?.numPeers ?? 0,
+        rate: st?.downloadRate ?? 0,
+      );
+      notifyListeners();
+    });
+  }
+
+  Future<Duration?> _savedPosition(String videoId) async {
+    final row = await _ref.read(progressRepositoryProvider).get(videoId);
+    if (row == null || row.completed) return null;
+    final pos = Duration(milliseconds: row.positionMs);
+    return pos > const Duration(seconds: 20)
+        ? pos - const Duration(seconds: 3)
+        : null;
+  }
+
+  Future<void> _saveProgress() async {
+    final d = player.state.duration;
+    final pos = player.state.position;
+    if (d == Duration.zero || pos < const Duration(seconds: 5)) return;
+    if (_request.videoId.startsWith('magnet:') ||
+        _request.videoId.startsWith('http'))
+      return;
+    await _ref
+        .read(progressRepositoryProvider)
+        .save(
+          videoId: _request.videoId,
+          mediaId: _request.mediaId,
+          type: _request.type,
+          name: _request.title,
+          episodeTitle: _request.episodeTitle,
+          season: _request.season,
+          episode: _request.episode,
+          position: pos,
+          duration: d,
+          poster: _request.poster,
+          still: _request.still ?? _request.background,
+        );
+  }
+
+  /// Ends a torrent stream: complete files are kept for Downloads (when the
+  /// setting allows), unfinished data is deleted or kept per settings.
+  Future<void> _releaseSource() async {
+    final src = source;
+    source = null;
+    _statusTimer?.cancel();
+    if (src == null || src.kind != PlaybackKind.torrent) return;
+    final engine = _ref.read(engineServiceProvider).engine;
+    engine.closeStream(src.streamToken!);
+    final st = engine.status(src.infoHash!);
+    final s = _settings;
+    if (st != null && st.isComplete && s.keepCompletedStreams) {
+      await _ref.read(completedStreamHandlerProvider)(src, _request);
+      return;
+    }
+    if (s.keepStreamsHours > 0) {
+      engine.pause(src.infoHash!);
+    } else {
+      engine.remove(src.infoHash!, deleteFiles: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _cancelPrepare?.complete();
+    _saveTimer?.cancel();
+    _statusTimer?.cancel();
+    for (final s in _subs) {
+      unawaited(s.cancel());
+    }
+    unawaited(() async {
+      await _saveProgress();
+      await _releaseSource();
+      await player.dispose();
+    }());
+    super.dispose();
+  }
+}
+
+extension on PlayRequest {
+  PlayRequest withStart(Duration? start) => PlayRequest(
+    type: type,
+    mediaId: mediaId,
+    videoId: videoId,
+    title: title,
+    episodeTitle: episodeTitle,
+    season: season,
+    episode: episode,
+    poster: poster,
+    background: background,
+    logo: logo,
+    still: still,
+    startAt: start,
+    candidateId: candidateId,
+    localFile: localFile,
+  );
+}
+
+/// Called when a stream finished downloading completely. The downloads
+/// service overrides this to move it into Downloads.
+final completedStreamHandlerProvider =
+    Provider<Future<void> Function(PlaybackSource, PlayRequest)>(
+      (ref) => (source, request) async {},
+    );
