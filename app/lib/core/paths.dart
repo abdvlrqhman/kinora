@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -56,10 +57,19 @@ final class AppPaths {
     return paths;
   }
 
-  /// Creates every directory (idempotent).
+  /// Creates every directory (idempotent) and keeps re-downloadable videos
+  /// out of iCloud backups.
   Future<void> ensure() async {
     for (final d in [support, downloads, streams, subtitles, resume, logs]) {
       await d.create(recursive: true);
+    }
+    if (Platform.isIOS) {
+      try {
+        await const MethodChannel('kinora/files')
+            .invokeMethod<bool>('excludeFromBackup', downloads.path);
+      } on Object {
+        // Not fatal: backups just include the videos.
+      }
     }
   }
 }

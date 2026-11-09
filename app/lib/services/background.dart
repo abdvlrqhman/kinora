@@ -22,7 +22,36 @@ final class BackgroundKeeper {
   bool _running = false;
   bool _androidInit = false;
 
+  /// Why the app must stay alive ('downloads', 'cast'), newest status each.
+  final _reasons = <String, ({String title, String text, double? progress})>{};
+
   bool get isRunning => _running;
+
+  /// Keeps the app alive for [reason]; several reasons share one service.
+  Future<void> hold(
+    String reason, {
+    required String title,
+    required String text,
+    double? progress,
+  }) {
+    _reasons[reason] = (title: title, text: text, progress: progress);
+    return keepAlive(title: title, text: text, progress: progress);
+  }
+
+  /// [reason] no longer needs the app alive; stops when no reason is left.
+  Future<void> drop(String reason, {bool success = true}) async {
+    if (_reasons.remove(reason) == null) return;
+    if (_reasons.isEmpty) {
+      await release(success: success);
+    } else {
+      final next = _reasons.values.last;
+      await keepAlive(
+        title: next.title,
+        text: next.text,
+        progress: next.progress,
+      );
+    }
+  }
 
   /// Starts (or updates) keeping the app alive with a status line.
   Future<void> keepAlive({

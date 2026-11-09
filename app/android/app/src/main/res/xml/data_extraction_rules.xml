@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: videos and stream buffers are re-downloadable and huge;
+     secure-storage prefs are tied to this device's keystore. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="external" path="Kinora/" />
+        <exclude domain="external" path=".kinora-streams/" />
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="external" path=".kinora-streams/" />
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+    </device-transfer>
+</data-extraction-rules>

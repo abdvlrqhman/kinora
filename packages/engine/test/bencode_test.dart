@@ -34,6 +34,6 @@ void main() {
 
   test('config map encodes only set keys', () {
     final s = b(const EngineConfig(testMode: true, dht: false).toMap());
-    expect(s, 'd3:dhti0e11:listen_porti0e9:test_modei1ee');
+    expect(s, 'd3:dhti0e11:listen_porti0e6:sharedi0e9:test_modei1ee');
   });
 }

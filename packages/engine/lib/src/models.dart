@@ -31,6 +31,7 @@ final class EngineConfig {
     this.outgoingInterfaces,
     this.anonymousMode,
     this.testMode = false,
+    this.shared = false,
   });
 
   /// File that keeps the DHT routing table between launches (fast peer
@@ -64,6 +65,10 @@ final class EngineConfig {
   /// Loopback only, no DHT/LSD/UPnP, several connections per IP (tests).
   final bool testMode;
 
+  /// Reuse the process's existing session if there is one (the app: its
+  /// UI can be recreated while a foreground service keeps the process).
+  final bool shared;
+
   /// The bencodable form the native side reads.
   Map<String, Object?> toMap() => {
     'state_path': statePath,
@@ -81,6 +86,7 @@ final class EngineConfig {
     'outgoing_interfaces': outgoingInterfaces,
     'anonymous_mode': anonymousMode,
     'test_mode': testMode,
+    'shared': shared,
   };
 }
 

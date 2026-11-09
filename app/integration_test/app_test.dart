@@ -183,6 +183,13 @@ void main() {
       );
 
       // Leaving the player: the fully downloaded stream becomes a download.
+      // Keep the downloads stream listened (Riverpod 3 pauses unlistened ones).
+      final downloads = container.listen(
+        downloadsProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(downloads.close);
       container.read(routerProvider).pop();
       await pumpUntil(
         tester,

@@ -17,6 +17,24 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "KinoraBackground") {
       KinoraBackground.shared.attach(messenger: registrar.messenger())
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "KinoraFiles") {
+      // Downloads are re-downloadable: keep them out of iCloud backups.
+      FlutterMethodChannel(name: "kinora/files", binaryMessenger: registrar.messenger())
+        .setMethodCallHandler { call, result in
+          guard call.method == "excludeFromBackup", let path = call.arguments as? String else {
+            return result(FlutterMethodNotImplemented)
+          }
+          var url = URL(fileURLWithPath: path)
+          var values = URLResourceValues()
+          values.isExcludedFromBackup = true
+          do {
+            try url.setResourceValues(values)
+            result(true)
+          } catch {
+            result(FlutterError(code: "exclude", message: error.localizedDescription, details: nil))
+          }
+        }
+    }
   }
 }
 

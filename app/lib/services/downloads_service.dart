@@ -16,6 +16,7 @@ import '../core/format.dart';
 import '../core/log.dart';
 import '../core/paths.dart';
 import '../core/settings.dart';
+import '../features/downloads/storage.dart' show freeBytes;
 import 'background.dart';
 import 'downloads.dart';
 import 'engine_service.dart';
@@ -62,6 +63,21 @@ final class DownloadsService implements DownloadActions {
     await FileDownloader().start();
     _net = Connectivity().onConnectivityChanged.listen(_onNetwork);
     _onWifi = _isWifi(await Connectivity().checkConnectivity());
+    await _flushDeferred();
+    // An HTTP row whose task the system no longer knows (killed between
+    // saving the row and queuing it) would say "downloading" forever.
+    final http =
+        await (_db.select(_db.downloads)..where(
+              (t) =>
+                  t.kind.equals('http') &
+                  t.state.isIn(['queued', 'downloading']),
+            ))
+            .get();
+    for (final row in http) {
+      if (await FileDownloader().taskForId(row.id) == null) {
+        await _fail(row.id, 'The download was interrupted. Tap to try again.');
+      }
+    }
     final active =
         await (_db.select(_db.downloads)..where(
               (t) =>
@@ -157,6 +173,28 @@ final class DownloadsService implements DownloadActions {
         await _fail(
           id,
           result.message ?? 'No version is available to download right now.',
+        );
+        return;
+      }
+      // Free-space guard: the video plus room for the phone to breathe.
+      final free = freeBytes(dir) ?? freeBytes(_paths.downloadsRoot.path);
+      final size = best.sizeBytes;
+      if (free != null && size != null && free < size + (512 << 20)) {
+        await _fail(
+          id,
+          'Not enough space: this needs ${Fmt.bytes(size)}, ${Fmt.bytes(free)} is free.',
+        );
+        return;
+      }
+      // Paused while a version was being found: remember it, don't start.
+      if ((await _row(id))?.state == 'paused') {
+        await _update(
+          id,
+          DownloadsCompanion(
+            releaseName: Value(best.releaseName),
+            infoHash: Value(stream.infoHash?.toLowerCase()),
+            fileIndex: Value(best.fileIndex ?? stream.fileIdx),
+          ),
         );
         return;
       }
@@ -390,9 +428,76 @@ final class DownloadsService implements DownloadActions {
     await (_db.delete(
       _db.downloads,
     )..where((t) => t.id.equals(downloadId))).go();
-    if (row.infoHash != null) _retire(row.infoHash!, _owner(row.id));
-    await _deleteFiles(row);
+    final ih = row.infoHash;
+    if (ih != null) _engines.release(ih, _owner(row.id));
+    final shared = ih != null && _engines.isRunning && _engines.isClaimed(ih);
+    if (shared) {
+      // Others still use this torrent: drop the row now, delete the file
+      // when the torrent retires (deleting now would fail their downloads).
+      await _deferDelete(ih, row);
+    } else {
+      if (ih != null) _retire(ih, null);
+      await _deleteFiles(row);
+    }
     await _refreshKeepAlive();
+  }
+
+  static const _deferredKey = 'downloads.deferredDeletes';
+
+  Future<void> _deferDelete(String ih, DownloadRow row) async {
+    final all = await _readDeferred();
+    (all[ih] ??= <String>[]).addAll([?row.filePath, ..._subtitlePaths(row)]);
+    await _db
+        .into(_db.keyValues)
+        .insertOnConflictUpdate(
+          KeyValue(key: _deferredKey, value: jsonEncode(all)),
+        );
+  }
+
+  Future<Map<String, List<String>>> _readDeferred() async {
+    final kv = await (_db.select(
+      _db.keyValues,
+    )..where((t) => t.key.equals(_deferredKey))).getSingleOrNull();
+    if (kv == null) return {};
+    try {
+      return {
+        for (final e in (jsonDecode(kv.value) as Map<String, Object?>).entries)
+          e.key: [for (final v in e.value! as List<Object?>) '$v'],
+      };
+    } on FormatException {
+      return {};
+    }
+  }
+
+  /// Deletes files whose deletion waited for their torrent to retire (also
+  /// at startup, before any of those torrents is added again).
+  Future<void> _flushDeferred({String? onlyHash}) async {
+    final all = await _readDeferred();
+    if (all.isEmpty) return;
+    for (final ih in [...all.keys]) {
+      if (onlyHash != null && ih != onlyHash) continue;
+      if (_engines.isRunning && _engines.isClaimed(ih)) continue;
+      for (final path in all.remove(ih)!) {
+        await _deleteIfExists(path);
+      }
+    }
+    await _db
+        .into(_db.keyValues)
+        .insertOnConflictUpdate(
+          KeyValue(key: _deferredKey, value: jsonEncode(all)),
+        );
+  }
+
+  static List<String> _subtitlePaths(DownloadRow row) {
+    try {
+      return [
+        for (final e in jsonDecode(row.subtitlesJson) as List<Object?>)
+          if (e is Map<String, Object?> && e['path'] is String)
+            e['path']! as String,
+      ];
+    } on FormatException {
+      return const [];
+    }
   }
 
   /// Deletes every download of a title (or one season of it).
@@ -555,7 +660,8 @@ final class DownloadsService implements DownloadActions {
       if (have >= r.totalBytes) await _complete(r);
     }
     final progress = total == 0 ? null : done / total;
-    await BackgroundKeeper.instance.keepAlive(
+    await BackgroundKeeper.instance.hold(
+      'downloads',
       title: rows.length == 1
           ? 'Downloading ${_label(rows.first)}'
           : 'Downloading ${rows.length} videos',
@@ -622,6 +728,7 @@ final class DownloadsService implements DownloadActions {
     final savePath = status.savePath;
     _engines.removeIfUnclaimed(ih, deleteFiles: false);
     unawaited(() async {
+      await _flushDeferred(onlyHash: ih);
       final owned = {
         for (final r in await (_db.select(
           _db.downloads,
@@ -665,9 +772,17 @@ final class DownloadsService implements DownloadActions {
               'downloads',
               'http download failed: ${exception?.description}',
             );
+            final disk =
+                exception is TaskFileSystemException ||
+                RegExp(
+                  'space|ENOSPC|disk',
+                  caseSensitive: false,
+                ).hasMatch(exception?.description ?? '');
             await _fail(
               id,
-              'The download link stopped working. Try another version.',
+              disk
+                  ? 'Your device is out of space. Free some up, then tap to try again.'
+                  : 'The download link stopped working. Try another version.',
             );
           case TaskStatus.paused:
             await _update(id, const DownloadsCompanion(state: Value('paused')));
@@ -723,12 +838,26 @@ final class DownloadsService implements DownloadActions {
   // ------------------------------------------------------------- helpers --
 
   Future<void> _refreshKeepAlive() async {
-    final active =
-        await (_db.select(_db.downloads)..where(
-              (t) => t.kind.equals('torrent') & t.state.equals('downloading'),
-            ))
-            .get();
-    if (active.isEmpty) await BackgroundKeeper.instance.release();
+    final rows = await (_db.select(
+      _db.downloads,
+    )..where((t) => t.kind.equals('torrent'))).get();
+    final active = rows.where((r) => r.state == 'downloading').length;
+    // Rows waiting for Wi-Fi keep the app alive too, or nothing would resume
+    // them when Wi-Fi returns while Kinora is in the background.
+    final waiting = rows
+        .where((r) => r.state == 'paused' && r.error == 'Waiting for Wi-Fi')
+        .length;
+    if (active == 0 && waiting == 0) {
+      await BackgroundKeeper.instance.drop('downloads');
+    } else if (active == 0) {
+      await BackgroundKeeper.instance.hold(
+        'downloads',
+        title: waiting == 1
+            ? '1 download waiting for Wi-Fi'
+            : '$waiting downloads waiting for Wi-Fi',
+        text: 'They continue when you’re back on Wi-Fi.',
+      );
+    }
   }
 
   Future<void> _saveSubtitles(

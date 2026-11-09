@@ -71,8 +71,11 @@ final class TryingNext extends PrepareStatus {
 
 /// Thrown when nothing could be played; [message] is user-facing.
 final class PlaybackException implements Exception {
-  const PlaybackException(this.message);
+  const PlaybackException(this.message, {this.noStreamSource = false});
   final String message;
+
+  /// Nothing can play until a stream source is added.
+  final bool noStreamSource;
   @override
   String toString() => message;
 }
@@ -86,11 +89,15 @@ final class PlaybackService {
 
   static const metadataTimeout = Duration(seconds: 25);
 
+  /// Versions that couldn't start during this session (skipped on retries).
+  final failedCandidates = <String>{};
+
   Future<PlaybackSource> prepare(
     PlayRequest request, {
     void Function(PrepareStatus)? onStatus,
     Future<void>? cancel,
     int? runtimeMinutes,
+    Set<String> skip = const {},
   }) async {
     if (request.localFile != null && File(request.localFile!).existsSync()) {
       return PlaybackSource(
@@ -100,7 +107,9 @@ final class PlaybackService {
     }
     final link = request.videoId;
     if (link.startsWith('magnet:')) {
-      final magnet = Magnet.parse(link);
+      final magnet = Magnet.tryParse(link);
+      if (magnet == null)
+        throw const PlaybackException('This magnet link isn’t valid.');
       final ih = magnet.infoHash;
       if (ih == null)
         throw const PlaybackException(
@@ -133,18 +142,27 @@ final class PlaybackService {
         ),
       ).future,
     );
-    final ordered = [...result.releases];
-    if (request.candidateId != null) {
-      final i = ordered.indexWhere((r) => r.candidateId == request.candidateId);
-      if (i > 0) ordered.insert(0, ordered.removeAt(i));
-    }
+    // A version the viewer picked is tried alone (and reported if dead);
+    // otherwise versions that already failed this session are skipped.
+    final picked = request.candidateId == null
+        ? null
+        : result.releases
+              .where((r) => r.candidateId == request.candidateId)
+              .firstOrNull;
+    final ordered = picked != null
+        ? [picked]
+        : [
+            for (final r in result.releases)
+              if (!skip.contains(r.candidateId)) r,
+          ];
     if (ordered.isEmpty) {
       throw PlaybackException(
         result.message ?? 'No version of this is available right now.',
+        noStreamSource: result.noStreamSource,
       );
     }
     Object? lastError;
-    for (final release in ordered.take(4)) {
+    for (final release in ordered.take(picked != null ? 1 : 4)) {
       if (cancel != null && await _isDone(cancel))
         throw const PlaybackException('Cancelled.');
       try {
@@ -152,6 +170,7 @@ final class PlaybackService {
         return await _fromRelease(release, request, runtimeMinutes, onStatus);
       } on PlaybackException catch (e) {
         lastError = e;
+        failedCandidates.add(release.candidateId);
         Log.w('playback', '${release.releaseName}: ${e.message}');
         onStatus?.call(TryingNext(e.message));
       }
@@ -220,7 +239,9 @@ final class PlaybackService {
     // Keep it warm while metadata arrives; nothing downloads yet.
     engineService.claim(ih, owner, -1);
     try {
-      final deadline = DateTime.now().add(metadataTimeout);
+      final deadline = DateTime.now().add(
+        release?.seeders == 0 ? const Duration(seconds: 10) : metadataTimeout,
+      );
       List<TorrentFile>? files;
       while ((files = engine.files(ih)) == null) {
         final st = engine.status(ih);

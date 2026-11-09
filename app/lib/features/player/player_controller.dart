@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:audio_session/audio_session.dart';
+import 'package:drift/drift.dart' show BooleanExpressionOperators;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -14,6 +17,7 @@ import '../../data/repositories.dart';
 import '../../services/engine_service.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
+import '../../services/pip.dart';
 import '../../services/playback.dart';
 import '../../services/cast_service.dart';
 import '../../services/downloads.dart';
@@ -22,6 +26,21 @@ import '../../services/sources.dart';
 import '../../ui/widgets/media.dart' show runtimeMinutes;
 import '../../services/subtitle_option.dart';
 import '../../services/subtitles_service.dart';
+
+/// What the failure screen should offer.
+enum FailureAction {
+  /// Try another version (or again).
+  versions,
+
+  /// No stream source is installed: open Settings › Sources.
+  addSource,
+
+  /// A pasted link: only trying again makes sense.
+  retry,
+}
+
+/// Where the external subtitle search stands, for the subtitles panel.
+enum SubtitleSearch { searching, done }
 
 enum PlayerPhase { preparing, playing, failed }
 
@@ -38,7 +57,10 @@ class PlayerController extends ChangeNotifier {
     );
     video = VideoController(player);
     _subs = [
-      player.stream.error.listen((e) => Log.w('player', e)),
+      player.stream.error.listen(_onPlayerError),
+      player.stream.duration.listen((d) {
+        if (d > Duration.zero) _started = true;
+      }),
       player.stream.tracks.listen((_) => _onTracks()),
       player.stream.completed.listen((done) {
         if (done) unawaited(_onCompleted());
@@ -46,6 +68,129 @@ class PlayerController extends ChangeNotifier {
       player.stream.playing.listen((_) => notifyListeners()),
       player.stream.position.listen(_onPosition),
     ];
+    _castSub = _ref.listen(castServiceProvider, (_, _) {});
+    _ref.read(castServiceProvider).addListener(_onCast);
+    _pipSub = Pip.instance.changes.listen(_onPip);
+    _lifecycle = AppLifecycleListener(onHide: _onHide);
+    unawaited(_configureAudioSession());
+  }
+
+  // ------------------------------------------------- platform & lifecycle --
+
+  bool _started = false;
+  bool _inPip = false;
+  bool _wasCasting = false;
+  Timer? _startWatchdog;
+  StreamSubscription<bool>? _pipSub;
+  StreamSubscription<AudioInterruptionEvent>? _interruptSub;
+  StreamSubscription<void>? _noisySub;
+  ProviderSubscription<CastService>? _castSub;
+  late final AppLifecycleListener _lifecycle;
+  bool _resumeAfterInterruption = false;
+
+  /// Plays like a movie: takes audio focus, pauses for calls and when
+  /// headphones are unplugged, resumes after a short interruption.
+  Future<void> _configureAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(
+        const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionMode: AVAudioSessionMode.moviePlayback,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.movie,
+            usage: AndroidAudioUsage.media,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        ),
+      );
+      await session.setActive(true);
+      _interruptSub = session.interruptionEventStream.listen((e) {
+        if (e.begin) {
+          if (e.type != AudioInterruptionType.duck && player.state.playing) {
+            _resumeAfterInterruption = true;
+            unawaited(player.pause());
+          }
+        } else if (_resumeAfterInterruption &&
+            e.type == AudioInterruptionType.pause) {
+          _resumeAfterInterruption = false;
+          unawaited(player.play());
+        }
+      });
+      _noisySub = session.becomingNoisyEventStream.listen(
+        (_) => unawaited(player.pause()),
+      );
+    } on Object catch (e) {
+      Log.d('player', 'audio session: $e');
+    }
+  }
+
+  bool get _visible =>
+      _inPip ||
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  /// Backgrounded or locked: pause, unless floating (PiP) or on the TV.
+  void _onHide() {
+    if (_inPip || _ref.read(castServiceProvider).isCasting) return;
+    if (player.state.playing) unawaited(player.pause());
+    unawaited(_saveProgress());
+  }
+
+  void _onPip(bool inPip) {
+    final wasInPip = _inPip;
+    _inPip = inPip;
+    // Closing the floating window stops the activity: stop the sound too.
+    if (wasInPip &&
+        !inPip &&
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      unawaited(player.pause());
+    }
+  }
+
+  /// When a cast ends (stopped, standby, finished), the phone takes over at
+  /// the TV's position so progress isn't overwritten with an older one.
+  void _onCast() {
+    final cast = _ref.read(castServiceProvider);
+    final casting = cast.isCasting;
+    if (_wasCasting && !casting && cast.position > Duration.zero) {
+      unawaited(() async {
+        await player.seek(cast.position);
+        await _saveProgress(at: cast.position, length: cast.duration);
+      }());
+    }
+    _wasCasting = casting;
+  }
+
+  /// An error before the first frame means this version won't start: try
+  /// the next one (resolved releases) or say so.
+  void _onPlayerError(String e) {
+    Log.w('player', e);
+    if (phase == PlayerPhase.playing && !_started) unawaited(_failStart());
+  }
+
+  Future<void> _failStart() async {
+    if (_started || phase != PlayerPhase.playing) return;
+    _startWatchdog?.cancel();
+    final src = source;
+    final req = _request;
+    final failedId = src?.release?.candidateId;
+    if (failedId != null)
+      _ref.read(playbackServiceProvider).failedCandidates.add(failedId);
+    await _releaseSource();
+    if (failedId != null && req.candidateId == null && !_isLink(req.videoId)) {
+      status = 'Trying another version';
+      notifyListeners();
+      await _load(req.copyWith(clearCandidate: true));
+      return;
+    }
+    phase = PlayerPhase.failed;
+    error = _isLink(req.videoId)
+        ? 'This link didn’t open. Check it, then try again.'
+        : 'This version didn’t start. Choose another version or try again.';
+    failureAction = _isLink(req.videoId)
+        ? FailureAction.retry
+        : FailureAction.versions;
+    notifyListeners();
   }
 
   /// The most recent controller, for integration tests.
@@ -65,6 +210,11 @@ class PlayerController extends ChangeNotifier {
   PlayerPhase phase = PlayerPhase.preparing;
   String status = 'Finding the best version';
   String? error;
+  FailureAction failureAction = FailureAction.versions;
+
+  /// External subtitle search state and, when nothing came, why.
+  SubtitleSearch subtitleSearch = SubtitleSearch.searching;
+  String? subtitleNote;
   PlaybackSource? source;
 
   /// The version being started (shown while preparing).
@@ -124,8 +274,12 @@ class PlayerController extends ChangeNotifier {
     phase = PlayerPhase.preparing;
     status = req.localFile != null ? 'Opening' : 'Finding the best version';
     starting = null;
+    subtitleSearch = SubtitleSearch.searching;
+    subtitleNote = null;
     error = null;
     _tracksApplied = false;
+    _started = false;
+    _startWatchdog?.cancel();
     _pending = null;
     upNextDismissed = false;
     _prefetchedNext = false;
@@ -141,6 +295,7 @@ class PlayerController extends ChangeNotifier {
           .read(playbackServiceProvider)
           .prepare(
             req,
+            skip: _ref.read(playbackServiceProvider).failedCandidates,
             runtimeMinutes: runtime,
             cancel: _cancelPrepare!.future,
             onStatus: (s) {
@@ -173,6 +328,10 @@ class PlayerController extends ChangeNotifier {
       );
       if (gen != _generation || _disposed) return;
       phase = PlayerPhase.playing;
+      // No picture after a long wait: treat it as a failed start.
+      _startWatchdog = Timer(const Duration(seconds: 75), () {
+        if (gen == _generation && !_started) unawaited(_failStart());
+      });
       _startTimers();
       notifyListeners();
       unawaited(_loadExternalSubtitles(gen));
@@ -181,6 +340,11 @@ class PlayerController extends ChangeNotifier {
       if (gen != _generation) return;
       phase = PlayerPhase.failed;
       error = e.message;
+      failureAction = e.noStreamSource
+          ? FailureAction.addSource
+          : (_isLink(req.videoId)
+                ? FailureAction.retry
+                : FailureAction.versions);
       notifyListeners();
     } on Object catch (e, st) {
       Log.e('player', 'prepare failed', e, st);
@@ -236,6 +400,7 @@ class PlayerController extends ChangeNotifier {
       notifyListeners();
     } on Object catch (e) {
       Log.d('player', 'meta unavailable: $e');
+      await _neighboursFromDownloads();
     }
   }
 
@@ -282,8 +447,21 @@ class PlayerController extends ChangeNotifier {
           ),
       ]);
     }
-    if (req.videoId.startsWith('magnet:') || req.videoId.startsWith('http'))
+    if (_isLink(req.videoId)) {
+      _subtitlesDone(
+        saved.isEmpty
+            ? 'Links don’t come with subtitles from your sites.'
+            : null,
+      );
       return;
+    }
+    final s = _settings;
+    if (s.subtitleLanguages.isEmpty) {
+      _subtitlesDone(
+        'Choose your subtitle languages in Settings to find subtitles.',
+      );
+      return;
+    }
     try {
       final options = await _ref
           .read(playerSubtitlesProvider)
@@ -299,10 +477,32 @@ class PlayerController extends ChangeNotifier {
           );
       if (gen != _generation || _disposed) return;
       addExternalSubtitles(options);
+      final langs = s.subtitleLanguages.map(langName).join(', ');
+      _subtitlesDone(
+        options.isNotEmpty || saved.isNotEmpty
+            ? null
+            : s.enabledSubtitleProviders.isEmpty
+            ? 'No subtitles in $langs from your sources. Turn on subtitle sites in Settings.'
+            : 'No subtitles found in $langs for this video.',
+      );
     } on Object catch (e) {
       Log.w('player', 'subtitles unavailable: $e');
+      if (gen == _generation && !_disposed) {
+        _subtitlesDone(
+          'Subtitles couldn’t be searched. Check your connection.',
+        );
+      }
     }
   }
+
+  void _subtitlesDone(String? note) {
+    subtitleSearch = SubtitleSearch.done;
+    subtitleNote = note;
+    notifyListeners();
+  }
+
+  static bool _isLink(String id) =>
+      id.startsWith('magnet:') || id.startsWith('http');
 
   Future<void> _loadChapters() async {
     final p = player.platform;
@@ -392,15 +592,72 @@ class PlayerController extends ChangeNotifier {
     if (!_request.isEpisode) return;
     final list = episodes;
     final i = list.indexWhere((e) => e.id == _request.videoId);
-    nextEpisode = i >= 0 && i + 1 < list.length
-        ? requestFor(list[i + 1])
-        : null;
-    previousEpisode = i > 0 ? requestFor(list[i - 1]) : null;
+    final now = DateTime.now();
+    bool playable(Episode e) =>
+        (e.season ?? 0) > 0 &&
+        (e.released == null || !e.released!.isAfter(now));
+    final after = i < 0
+        ? const <Episode>[]
+        : list.sublist(i + 1).where(playable);
+    nextEpisode = after.isEmpty ? null : requestFor(after.first);
+    final before = i <= 0
+        ? const <Episode>[]
+        : list.sublist(0, i).where(playable);
+    previousEpisode = before.isEmpty ? null : requestFor(before.last);
+  }
+
+  /// Offline: neighbours from finished downloads of the same show.
+  Future<void> _neighboursFromDownloads() async {
+    if (!_request.isEpisode) return;
+    final db = _ref.read(databaseProvider);
+    final rows =
+        await (db.select(db.downloads)..where(
+              (t) =>
+                  t.mediaId.equals(_request.mediaId) &
+                  t.state.equals('completed'),
+            ))
+            .get();
+    final eps =
+        [
+          for (final r in rows)
+            if (r.season != null &&
+                r.episode != null &&
+                r.filePath != null &&
+                File(r.filePath!).existsSync())
+              r,
+        ]..sort(
+          (a, b) => a.season != b.season
+              ? a.season!.compareTo(b.season!)
+              : a.episode!.compareTo(b.episode!),
+        );
+    final i = eps.indexWhere((r) => r.videoId == _request.videoId);
+    PlayRequest at(int j) => _request
+        .copyWith(
+          videoId: eps[j].videoId,
+          season: eps[j].season,
+          episode: eps[j].episode,
+          episodeTitle: eps[j].episodeTitle,
+          still: eps[j].still,
+          localFile: eps[j].filePath,
+          clearCandidate: true,
+        )
+        .withStart(null);
+    nextEpisode = i >= 0 && i + 1 < eps.length ? at(i + 1) : null;
+    previousEpisode = i > 0 ? at(i - 1) : null;
+    notifyListeners();
   }
 
   /// Switches to another episode or version without leaving the player.
   Future<void> switchTo(PlayRequest next) async {
-    await _saveProgress();
+    // Moving on during the credits counts as having watched it.
+    if (inCredits) {
+      await _saveProgress(
+        at: player.state.duration,
+        length: player.state.duration,
+      );
+    } else {
+      await _saveProgress();
+    }
     _releasePrefetch();
     await _releaseSource();
     await player.stop();
@@ -504,7 +761,11 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> _onCompleted() async {
     await _saveProgress();
-    if (nextEpisode != null && _settings.autoplayNext && !upNextDismissed) {
+    // Never move on to episodes nobody is looking at.
+    if (nextEpisode != null &&
+        _settings.autoplayNext &&
+        !upNextDismissed &&
+        _visible) {
       await playNext();
     }
   }
@@ -624,12 +885,14 @@ class PlayerController extends ChangeNotifier {
       }
     }
     await _activate(sub, remember: false);
-    if (choice != null && choice.subtitleOffsetMs != 0) {
-      await setSubtitleDelay(
-        Duration(milliseconds: choice.subtitleOffsetMs),
-        remember: false,
-      );
-    }
+    // A delay fixes one file: only this episode's own memory restores it.
+    final own = await memory.read(
+      TrackMemoryRepository.videoKey(_request.videoId),
+    );
+    await setSubtitleDelay(
+      Duration(milliseconds: own?.subtitleOffsetMs ?? 0),
+      remember: false,
+    );
   }
 
   SubtitleOption? _subtitleFromPreferences(AppSettings s, String? audioLang) {
@@ -915,11 +1178,11 @@ class PlayerController extends ChangeNotifier {
         : null;
   }
 
-  Future<void> _saveProgress() async {
+  Future<void> _saveProgress({Duration? at, Duration? length}) async {
     final cast = _ref.read(castServiceProvider);
     final casting = cast.isCasting && cast.duration > Duration.zero;
-    final d = casting ? cast.duration : player.state.duration;
-    final pos = casting ? cast.position : player.state.position;
+    final d = length ?? (casting ? cast.duration : player.state.duration);
+    final pos = at ?? (casting ? cast.position : player.state.position);
     if (d == Duration.zero || pos < const Duration(seconds: 5)) return;
     if (_request.videoId.startsWith('magnet:') ||
         _request.videoId.startsWith('http'))
@@ -1021,6 +1284,13 @@ class PlayerController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _startWatchdog?.cancel();
+    _lifecycle.dispose();
+    unawaited(_pipSub?.cancel());
+    unawaited(_interruptSub?.cancel());
+    unawaited(_noisySub?.cancel());
+    _ref.read(castServiceProvider).removeListener(_onCast);
+    _castSub?.close();
     _cancelPrepare?.complete();
     _saveTimer?.cancel();
     _statusTimer?.cancel();

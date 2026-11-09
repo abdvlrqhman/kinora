@@ -46,6 +46,11 @@ days) or any re-signing tool you trust.
   best subtitles saved next to them.
 - **Cast to your TV**: DLNA (tuned for Samsung), subtitles included, with a
   check that warns when a version can't play on the TV.
+- **Good to know**: after a phone restart, open Kinora once to resume
+  unfinished downloads (Android doesn't let a sideloaded download service
+  start itself at boot without a reason you can see). On iPhone, torrent
+  downloads keep going in the background through a silent audio session;
+  debrid downloads use the system downloader and always continue.
 - **Storage under your control**: delete any episode, season or show, and
   clear every cache from Settings › Storage.
 

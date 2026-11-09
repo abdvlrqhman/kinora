@@ -14,6 +14,7 @@ import 'package:subtitles/subtitles.dart';
 import '../app/providers.dart';
 import '../core/lang.dart';
 import '../core/log.dart';
+import 'background.dart';
 import 'engine_service.dart';
 import 'play_request.dart';
 import 'playback.dart';
@@ -147,7 +148,9 @@ final class CastService extends ChangeNotifier {
       );
     searching = false;
     if (devices.isEmpty) {
-      message ??= 'No TV found. Make sure it’s on and on the same Wi-Fi.';
+      message ??= Platform.isIOS
+          ? 'No TV found. Make sure it’s on and on the same Wi-Fi. If you turned off Local Network for Kinora, turn it on in Settings › Privacy.'
+          : 'No TV found. Make sure it’s on and on the same Wi-Fi.';
     }
     notifyListeners();
   }
@@ -324,6 +327,17 @@ final class CastService extends ChangeNotifier {
       }
       if (gen != _castGen) return false; // a newer cast took over
       phase = CastPhase.playing;
+      // The TV pulls from this phone (except debrid links): stay alive while
+      // the screen is off or Kinora is in the background.
+      if (source.kind != PlaybackKind.direct) {
+        unawaited(
+          BackgroundKeeper.instance.hold(
+            'cast',
+            title: 'Playing on ${d.friendlyName}',
+            text: request.title,
+          ),
+        );
+      }
       await _watch?.cancel();
       _watch = renderer
           .watch(interval: const Duration(seconds: 1))
@@ -335,6 +349,11 @@ final class CastService extends ChangeNotifier {
       return true;
     } on _CastFailure catch (e) {
       _fail(e.message);
+    } on DlnaUnreachableException catch (e) {
+      Log.w('cast', 'cast unreachable: $e');
+      _fail(
+        'Couldn’t reach ${d.friendlyName}. Check it’s on and on this Wi-Fi.',
+      );
     } on DlnaException catch (e) {
       Log.w('cast', 'cast failed: $e');
       _fail(
@@ -348,6 +367,7 @@ final class CastService extends ChangeNotifier {
   }
 
   void _fail(String text) {
+    unawaited(BackgroundKeeper.instance.drop('cast'));
     phase = CastPhase.stopped;
     message = text;
     device = null;
@@ -452,6 +472,7 @@ final class CastService extends ChangeNotifier {
   /// Stops on the TV; returns where it was so the phone can continue.
   Future<Duration> stop({bool silent = false}) async {
     final at = position;
+    unawaited(BackgroundKeeper.instance.drop('cast'));
     await _watch?.cancel();
     _watch = null;
     final r = _renderer;

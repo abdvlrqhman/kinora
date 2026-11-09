@@ -295,6 +295,10 @@ struct kn_session {
 
 namespace {
 
+// The process-wide session when the app asked for a shared one.
+std::mutex g_shared_mu;
+kn_session* g_shared = nullptr;
+
 void push_event(kn_session* s, std::string json) {
   // caller holds s->mu
   s->events.push_back(std::move(json));
@@ -1122,6 +1126,16 @@ kn_session* kn_session_new(const uint8_t* config, int32_t config_len, char** err
       if (error) *error = dup_string("invalid config");
       return nullptr;
     }
+    const bool shared = int_of(c, "shared", 0) != 0;
+    {
+      std::lock_guard<std::mutex> lk(g_shared_mu);
+      if (shared && g_shared != nullptr) {
+        lt::settings_pack sp;
+        apply_config(sp, c, false, g_shared->test_mode);
+        g_shared->ses->apply_settings(std::move(sp));
+        return g_shared;  // reattach after the UI was recreated
+      }
+    }
     auto s = std::make_unique<kn_session>();
     s->state_path = str_of(c, "state_path");
     s->resume_dir = str_of(c, "resume_dir");
@@ -1143,6 +1157,10 @@ kn_session* kn_session_new(const uint8_t* config, int32_t config_len, char** err
     s->ses = std::make_unique<lt::session>(std::move(params));
     kn_session* raw = s.release();
     raw->alert_thread = std::thread(alert_loop, raw);
+    if (shared) {
+      std::lock_guard<std::mutex> lk(g_shared_mu);
+      g_shared = raw;
+    }
     return raw;
   } catch (const std::exception& e) {
     if (error) *error = dup_string(e.what());
@@ -1152,6 +1170,10 @@ kn_session* kn_session_new(const uint8_t* config, int32_t config_len, char** err
 
 void kn_session_free(kn_session* s) {
   if (s == nullptr) return;
+  {
+    std::lock_guard<std::mutex> lk(g_shared_mu);
+    if (g_shared == s) g_shared = nullptr;
+  }
   try {
     std::vector<lt::torrent_handle> handles;
     {
@@ -1360,6 +1382,7 @@ int32_t kn_resume(kn_session* s, const char* ih) {
   try {
     lt::torrent_handle h = handle_of(s, ih);
     if (!h.is_valid()) return -1;
+    if (h.status().errc) h.clear_error();  // e.g. disk was full, now freed
     h.resume();
     return 0;
   } catch (...) {

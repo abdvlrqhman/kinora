@@ -99,6 +99,7 @@ final class ResolveResult {
     this.sourcesAsked = 0,
     this.sourcesFailed = 0,
     this.message,
+    this.noStreamSource = false,
   });
 
   /// Ranked, best first. Empty when nothing playable was found.
@@ -109,6 +110,10 @@ final class ResolveResult {
 
   /// Plain-English note when [releases] is empty ("Add a source…").
   final String? message;
+
+  /// No installed source provides streams (only catalogs/subtitles): the fix
+  /// is adding one, not retrying.
+  final bool noStreamSource;
 
   ResolvedRelease? get best => releases.isEmpty ? null : releases.first;
 }
@@ -232,10 +237,13 @@ Future<ResolveResult> _resolve(Ref ref, VideoRef video) async {
     for (final a in addons)
       if (a.supports('stream', video.type, video.videoId)) a,
   ];
-  if (addons.isEmpty) {
+  if (!addons.any(
+    (a) => a.manifest.resources.any((res) => res.name == 'stream'),
+  )) {
     return const ResolveResult(
       releases: [],
-      message: 'Add a source in Settings to find versions.',
+      noStreamSource: true,
+      message: 'Your sources only list titles. Add a source that provides streams to play them.',
     );
   }
   if (streamAddons.isEmpty) {

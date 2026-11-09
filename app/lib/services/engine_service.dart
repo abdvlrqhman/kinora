@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:kinora_engine/kinora_engine.dart';
 import 'package:swarm/swarm.dart';
 
@@ -38,6 +39,9 @@ final class EngineService {
           Log.w('engine', 'disk error $infoHash: $message');
         case EngineLog(:final message):
           Log.d('engine', message);
+        case MetadataReceived(:final infoHash):
+          // Files are known now: only claimed ones may download.
+          _applyPriorities(infoHash);
         default:
       }
     });
@@ -46,6 +50,14 @@ final class EngineService {
   }
 
   EngineConfig _config(AppSettings s) => EngineConfig(
+    // One session per process: the UI can be recreated (Android) while the
+    // foreground service keeps the process and its downloads alive.
+    shared: true,
+    // iOS: LSD/UPnP/NAT-PMP would raise the Local Network prompt on the
+    // first stream, out of context. Casting asks for it when it's needed.
+    lsd: !Platform.isIOS,
+    upnp: !Platform.isIOS,
+    natpmp: !Platform.isIOS,
     statePath: _paths.engineState.path,
     resumeDir: _paths.resume.path,
     userAgent: 'Kinora/$kinoraVersion',
@@ -196,6 +208,38 @@ final class EngineService {
       e.remove(infoHash, deleteFiles: deleteFiles);
     } on EngineException catch (err) {
       Log.d('engine', 'remove $infoHash: $err');
+    }
+  }
+
+  /// Clears the stream buffer safely: unclaimed stream torrents go (with
+  /// their data); data of claimed ones (playing, prefetched) stays.
+  Future<void> clearStreamCache() async {
+    final streams = _paths.streams.path;
+    final keep = <String>{};
+    final e = _engine;
+    if (e != null) {
+      for (final st in e.statuses()) {
+        if (!p.equals(streams, st.savePath) &&
+            !p.isWithin(streams, st.savePath))
+          continue;
+        if (isClaimed(st.infoHash)) {
+          for (final f in e.files(st.infoHash) ?? const <TorrentFile>[]) {
+            keep.add(p.join(st.savePath, f.path.split('/').first));
+          }
+        } else {
+          removeIfUnclaimed(st.infoHash, deleteFiles: true);
+        }
+      }
+    }
+    final dir = Directory(streams);
+    if (!dir.existsSync()) return;
+    for (final f in dir.listSync(followLinks: false)) {
+      if (keep.contains(f.path)) continue;
+      try {
+        f.deleteSync(recursive: true);
+      } on FileSystemException {
+        // In use; the next launch cleans it.
+      }
     }
   }
 
