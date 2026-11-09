@@ -21,30 +21,42 @@ class EmptyState extends StatelessWidget {
   final IconData? icon;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(KSpace.margin * 1.5),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 36, color: KColors.haze),
-            const SizedBox(height: KSpace.x4),
-          ],
-          Text(title, style: KType.h1),
-          const SizedBox(height: KSpace.x2),
-          Text(message, style: KType.body.copyWith(color: KColors.haze)),
-          if (actionLabel != null) ...[
-            const SizedBox(height: KSpace.margin),
-            GlassButton(
-              label: actionLabel!,
-              onPressed: onAction,
-              prominent: true,
-            ),
-          ],
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final content = _content();
+      // Scrolls instead of overflowing (long errors, large text sizes).
+      if (!constraints.hasBoundedHeight) return content;
+      return SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: content),
+        ),
+      );
+    },
+  );
+
+  Widget _content() => Padding(
+    padding: const EdgeInsets.all(KSpace.margin * 1.5),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 36, color: KColors.haze),
+          const SizedBox(height: KSpace.x4),
         ],
-      ),
+        Text(title, style: KType.h1),
+        const SizedBox(height: KSpace.x2),
+        Text(message, style: KType.body.copyWith(color: KColors.haze)),
+        if (actionLabel != null) ...[
+          const SizedBox(height: KSpace.margin),
+          GlassButton(
+            label: actionLabel!,
+            onPressed: onAction,
+            prominent: true,
+          ),
+        ],
+      ],
     ),
   );
 }

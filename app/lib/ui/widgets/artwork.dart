@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -14,6 +16,7 @@ class Artwork extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.aspectRatio,
     this.memCacheWidth,
+    this.alignment = Alignment.center,
   });
 
   final String? url;
@@ -24,15 +27,25 @@ class Artwork extends StatelessWidget {
 
   /// Decode width in physical pixels (keeps memory low in long rows).
   final int? memCacheWidth;
+  final Alignment alignment;
 
   @override
   Widget build(BuildContext context) {
     final placeholder = _Placeholder(text: fallbackText);
+    final local = _localProvider(url);
     Widget child = url == null || url!.isEmpty
         ? placeholder
+        : local != null
+        ? Image(
+            image: ResizeImage.resizeIfNeeded(memCacheWidth, null, local),
+            fit: fit,
+            alignment: alignment,
+            errorBuilder: (_, _, _) => placeholder,
+          )
         : CachedNetworkImage(
             imageUrl: url!,
             fit: fit,
+            alignment: alignment,
             memCacheWidth: memCacheWidth,
             fadeInDuration: KMotion.base,
             placeholder: (_, _) => placeholder,
@@ -78,6 +91,16 @@ class _Placeholder extends StatelessWidget {
   );
 }
 
-/// Image provider for tinting from a URL (null-safe).
-ImageProvider? artworkProvider(String? url) =>
-    url == null || url.isEmpty ? null : CachedNetworkImageProvider(url);
+/// Image provider for tinting from a URL (null-safe). Besides http(s) it
+/// takes `asset:<path>` and `file:` URIs (local art, tests).
+ImageProvider? artworkProvider(String? url) => url == null || url.isEmpty
+    ? null
+    : _localProvider(url) ?? CachedNetworkImageProvider(url);
+
+ImageProvider? _localProvider(String? url) {
+  if (url == null) return null;
+  if (url.startsWith('asset:')) return AssetImage(url.substring(6));
+  if (url.startsWith('file:'))
+    return FileImage(File(Uri.parse(url).toFilePath()));
+  return null;
+}

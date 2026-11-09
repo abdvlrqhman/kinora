@@ -1,0 +1,315 @@
+// Visual review screenshots; excluded from CI comparisons (pixels differ
+// between machines). Update with: flutter test --update-goldens --tags golden
+@Tags(['golden'])
+library;
+
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kinora/app/app.dart';
+import 'package:kinora/app/providers.dart';
+import 'package:kinora/core/db/database.dart';
+import 'package:kinora/core/settings.dart';
+import 'package:kinora/features/search/search_screen.dart';
+import 'package:kinora/features/title/title_screen.dart';
+import 'package:kinora/services/sources.dart';
+import 'package:stremio/stremio.dart';
+
+import '../features/harness.dart';
+import 'golden_helper.dart';
+
+// Regenerate with: flutter test --update-goldens test/goldens
+void main() {
+  setUpAll(loadAppFonts);
+
+  final day = DateTime(2026, 10);
+
+  MetaDetail series() => seriesMeta(
+    background: art('harbor_backdrop'),
+    poster: art('harbor_poster'),
+    still: (s, e) => art('still_${(s * 3 + e) % 6 + 1}'),
+  );
+
+  Future<void> seedSeries(AppDatabase db) async {
+    for (final e in [1, 2]) {
+      await saveProgress(
+        db,
+        videoId: 'tt200:1:$e',
+        mediaId: 'tt200',
+        season: 1,
+        episode: e,
+        positionMs: 3000000,
+        completed: true,
+        at: day.add(Duration(days: e)),
+      );
+    }
+    await saveProgress(
+      db,
+      videoId: 'tt200:1:3',
+      mediaId: 'tt200',
+      season: 1,
+      episode: 3,
+      positionMs: 1150000,
+      at: day.add(const Duration(days: 3)),
+    );
+    for (final (id, state, done) in [
+      ('tt200:1:2', 'completed', 100),
+      ('tt200:1:4', 'downloading', 38),
+    ]) {
+      await db
+          .into(db.downloads)
+          .insert(
+            DownloadsCompanion.insert(
+              id: id,
+              mediaId: 'tt200',
+              videoId: id,
+              type: 'series',
+              title: 'Harbor Lights',
+              releaseName: 'x',
+              kind: 'torrent',
+              directory: '/tmp',
+              state: state,
+              totalBytes: const Value(100),
+              doneBytes: Value(done),
+            ),
+          );
+    }
+  }
+
+  Future<Nav> pumpTitle(WidgetTester tester) async {
+    final db = testDb();
+    await seedSeries(db);
+    await warmUp(tester, [art('harbor_backdrop')]);
+    final nav = await pumpScreen(
+      tester,
+      const TitleScreen(type: 'series', id: 'tt200'),
+      db: db,
+      overrides: [
+        ...withSource(),
+        metaProvider.overrideWith((ref, key) async => series()),
+        resolveWith(fakeReleases),
+      ],
+    );
+    phoneInsets(tester);
+    await settleImages(tester);
+    return nav;
+  }
+
+  testScreen('home', (tester) async {
+    tester.view
+      ..physicalSize = const Size(390, 844) * 3
+      ..devicePixelRatio = 3;
+    phoneInsets(tester);
+    addTearDown(tester.view.reset);
+
+    final db = testDb();
+    await saveProgress(
+      db,
+      videoId: 'tt200:1:3',
+      mediaId: 'tt200',
+      season: 1,
+      episode: 3,
+      episodeTitle: 'Salt and Iron',
+      positionMs: 1150000,
+      still: art('still_3'),
+      at: day.add(const Duration(days: 3)),
+    );
+    await saveProgress(
+      db,
+      videoId: 'tt101',
+      mediaId: 'tt101',
+      type: 'movie',
+      name: 'Glass Harbor',
+      positionMs: 4100000,
+      durationMs: 6600000,
+      at: day.add(const Duration(days: 2)),
+    );
+    await saveProgress(
+      db,
+      videoId: 'tt201:2:1',
+      mediaId: 'tt201',
+      name: 'North Wind',
+      season: 2,
+      episode: 1,
+      positionMs: 600000,
+      still: art('still_4'),
+      at: day.add(const Duration(days: 1)),
+    );
+    for (final (id, name, poster) in [
+      ('tt103', 'Glacier', 'glacier_poster'),
+      ('tt104', 'Bloom', 'bloom_poster'),
+    ]) {
+      await db
+          .into(db.libraryItems)
+          .insert(
+            LibraryItemsCompanion.insert(
+              mediaId: id,
+              type: 'movie',
+              name: name,
+              poster: Value(art(poster)),
+            ),
+          );
+    }
+
+    final movies = catalogRow('Popular movies', [
+      preview(
+        'tt100',
+        'The Long Light',
+        poster: art('dune_poster'),
+        background: art('dune_backdrop'),
+      ),
+      preview('tt101', 'Glass Harbor', poster: art('harbor_poster')),
+      preview('tt102', 'Ember', poster: art('ember_poster')),
+      preview('tt103', 'Glacier', poster: art('glacier_poster')),
+    ]);
+    final shows = catalogRow('Popular shows', [
+      preview(
+        'tt200',
+        'Harbor Lights',
+        type: 'series',
+        poster: art('tide_poster'),
+      ),
+      preview(
+        'tt201',
+        'North Wind',
+        type: 'series',
+        poster: art('forest_poster'),
+      ),
+      preview(
+        'tt202',
+        'Neon Coast',
+        type: 'series',
+        poster: art('neon_poster'),
+      ),
+    ]);
+
+    await warmUp(tester, [art('dune_backdrop')]);
+    await tester.pumpWidget(
+      ProviderScope(
+        retry: (_, _) => null,
+        overrides: [
+          initialSettingsProvider.overrideWithValue(
+            const AppSettings(onboarded: true),
+          ),
+          databaseProvider.overrideWithValue(db),
+          ...withSource(),
+          homeCatalogsProvider.overrideWith((ref) async => [movies, shows]),
+          metaProvider.overrideWith(
+            (ref, key) async => switch (key.id) {
+              'tt100' => movieMeta(
+                background: art('dune_backdrop'),
+                poster: art('dune_poster'),
+              ),
+              'tt101' => MetaDetail(
+                id: 'tt101',
+                type: 'movie',
+                name: 'Glass Harbor',
+                background: art('harbor_backdrop'),
+              ),
+              _ => throw StateError('No details'),
+            },
+          ),
+        ],
+        child: const KinoraApp(),
+      ),
+    );
+    await settleImages(tester);
+    await expectLater(
+      find.byType(KinoraApp),
+      matchesGoldenFile('screens/home.png'),
+    );
+  });
+
+  testScreen('title, series', (tester) async {
+    await pumpTitle(tester);
+    await expectLater(
+      find.byType(TitleScreen),
+      matchesGoldenFile('screens/title_series.png'),
+    );
+  });
+
+  testScreen('title, series episodes', (tester) async {
+    await pumpTitle(tester);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await settleImages(tester);
+    await expectLater(
+      find.byType(TitleScreen),
+      matchesGoldenFile('screens/title_series_episodes.png'),
+    );
+  });
+
+  testScreen('version sheet', (tester) async {
+    await pumpTitle(tester);
+    await tester.tap(find.bySemanticsLabel('Choose another version'));
+    await settleImages(tester);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('screens/version_sheet.png'),
+    );
+  });
+
+  testScreen('search results', (tester) async {
+    final results = [
+      preview(
+        'tt101',
+        'Glass Harbor',
+        poster: art('harbor_poster'),
+        year: '2019',
+      ),
+      preview(
+        'tt105',
+        'Harbor at Dusk',
+        poster: art('dune_poster'),
+        year: '2022',
+      ),
+      preview(
+        'tt200',
+        'Harbor Lights',
+        type: 'series',
+        poster: art('tide_poster'),
+        year: '2023–',
+      ),
+      preview(
+        'tt203',
+        'Harbor Patrol',
+        type: 'series',
+        poster: art('glacier_poster'),
+        year: '2011–2015',
+      ),
+      preview(
+        'tt204',
+        'The Harbormaster',
+        type: 'series',
+        poster: art('ember_poster'),
+        year: '2020',
+      ),
+      preview(
+        'kitsu:9',
+        'Harbor Spirits',
+        type: 'anime',
+        poster: art('bloom_poster'),
+        year: '2018',
+      ),
+    ];
+    await warmUp(tester, const []);
+    await pumpScreen(
+      tester,
+      const SearchScreen(),
+      db: testDb(),
+      overrides: [
+        ...withSource(),
+        searchProvider.overrideWith((ref, q) async => results),
+      ],
+    );
+    phoneInsets(tester);
+    await tester.enterText(find.byType(TextField), 'harbor');
+    await tester.pump(SearchScreen.debounce);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await settleImages(tester);
+    await expectLater(
+      find.byType(SearchScreen),
+      matchesGoldenFile('screens/search_results.png'),
+    );
+  });
+}
