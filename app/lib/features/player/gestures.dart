@@ -1,6 +1,16 @@
+import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/painting.dart' show EdgeInsets;
+import 'package:flutter/widgets.dart';
+
+/// Side insets for everything in the player. In landscape an iPhone reports
+/// its Dynamic Island inset (59 pt) on both sides, though the island only
+/// takes the first ~48 pt of one edge: capped at 32, plus each element's
+/// own margin (20 or more), nothing reaches it and the controls use the
+/// screen's width. Android reports its cutout's real side, so its insets
+/// stay. Every overlay uses this, so their edges line up.
+EdgeInsets playerEdges(BuildContext context) =>
+    PlayerGestures.edges(MediaQuery.paddingOf(context), ios: Platform.isIOS);
 
 /// Gesture math for the player, kept pure so it can be tested.
 abstract final class PlayerGestures {

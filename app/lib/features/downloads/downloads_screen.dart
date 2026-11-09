@@ -575,7 +575,7 @@ class _Trailing extends StatelessWidget {
       'failed' => (Icons.refresh_rounded, 'Try again', onToggle),
       // Waiting for Wi-Fi: asks before using mobile data.
       _ when _waiting(row) => (
-        Icons.network_cell_rounded,
+        Icons.more_horiz_rounded,
         'Download options',
         onToggle,
       ),

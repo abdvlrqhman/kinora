@@ -78,8 +78,10 @@ ThemeData kinoraTheme() {
         (s) => s.contains(WidgetState.selected) ? KColors.lamp : KColors.haze,
       ),
       trackColor: WidgetStateProperty.resolveWith(
-        (s) =>
-            s.contains(WidgetState.selected) ? KColors.marquee : KColors.seat,
+        // Off: the slider's inactive track (Seat on black was ~1.1:1).
+        (s) => s.contains(WidgetState.selected)
+            ? KColors.marquee
+            : KColors.lamp.withValues(alpha: 0.18),
       ),
       trackOutlineColor: const WidgetStatePropertyAll(Color(0x00000000)),
     ),

@@ -18,6 +18,7 @@ class SubtitleOverlay extends ConsumerWidget {
     required this.player,
     required this.clearance,
     this.belowCenter = 0,
+    this.rightCover = 0,
   });
 
   final Player player;
@@ -29,6 +30,10 @@ class SubtitleOverlay extends ConsumerWidget {
   /// must stay (the play row's half-height). Large lines scale down to fit
   /// instead of sliding behind it.
   final double belowCenter;
+
+  /// Width a side panel covers on the right: lines center in the rest, so
+  /// they stay readable (and show style changes) while it's open.
+  final double rightCover;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -67,7 +72,7 @@ class SubtitleOverlay extends ConsumerWidget {
             return Padding(
               padding: EdgeInsets.only(
                 left: c.maxWidth * 0.08,
-                right: c.maxWidth * 0.08,
+                right: math.max(c.maxWidth * 0.08, rightCover + KSpace.x3),
                 bottom: bottom,
               ),
               // The style sets the size (as in its preview), not the system

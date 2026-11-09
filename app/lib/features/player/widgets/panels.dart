@@ -18,6 +18,7 @@ import '../../settings/subtitle_sites.dart';
 import '../../settings/subtitle_style_page.dart';
 import '../../title/episodes.dart';
 import '../../../services/subtitle_option.dart';
+import '../gestures.dart';
 import '../player_controller.dart';
 
 /// A glass panel that slides in from the right edge.
@@ -33,18 +34,27 @@ class SidePanel extends StatelessWidget {
   final VoidCallback onClose;
   final Widget child;
 
+  /// Up to 380 pt, never more than half the screen.
+  static double widthOf(BuildContext context) =>
+      math.min(380, MediaQuery.sizeOf(context).width * 0.5);
+
+  /// Room it takes from the right edge, for content that must stay beside
+  /// it (subtitles).
+  static double coverOf(BuildContext context) =>
+      widthOf(context) + playerEdges(context).right + KSpace.margin;
+
   @override
   Widget build(BuildContext context) {
-    final pad = MediaQuery.paddingOf(context);
+    final pad = playerEdges(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
         0,
         pad.top + KSpace.x3,
-        pad.right + KSpace.x3,
+        pad.right + KSpace.margin,
         pad.bottom + KSpace.x3,
       ),
       child: SizedBox(
-        width: 380,
+        width: widthOf(context),
         child: Glass(
           radius: KRadius.sheet,
           tintStrength: 0.08,
@@ -143,7 +153,11 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
         onClose: () => setState(() => _styling = false),
         child: ListView(
           padding: const EdgeInsets.only(bottom: KSpace.x4),
-          children: const [SubtitleStyleControls()],
+          children: [
+            SubtitleStyleControls(
+              preview: MediaQuery.sizeOf(context).height > 500,
+            ),
+          ],
         ),
       );
     }
@@ -184,15 +198,6 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
           child: ListView(
             padding: const EdgeInsets.only(bottom: KSpace.x4),
             children: [
-              const _Heading('Audio'),
-              if (audios.isEmpty) const _Note('Only one audio track.'),
-              for (final a in audios)
-                _Choice(
-                  label: _audioLabel(a),
-                  detail: a.title,
-                  selected: a == current,
-                  onTap: () => c.selectAudio(a),
-                ),
               const _Heading('Subtitles'),
               _Choice(
                 label: 'Off',
@@ -302,7 +307,25 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
                 ),
                 onTap: () => setState(() => _styling = true),
               ),
+              // Audio after subtitles: on a short screen, the choice people
+              // make most stays above the fold. One track needs no choice.
+              if (audios.length > 1) ...[
+                const _Heading('Audio'),
+                for (final a in audios)
+                  _Choice(
+                    label: _audioLabel(a),
+                    detail: _audioDetail(a),
+                    selected: c.audioNow != null
+                        ? a.id == c.audioNow
+                        : a == current,
+                    onTap: () => c.selectAudio(a),
+                  ),
+              ],
               const _Heading('Sound'),
+              if (audios.length == 1)
+                _Note(
+                  'Audio: ${[_audioLabel(audios.single), _audioDetail(audios.single)].nonNulls.join(', ')}',
+                ),
               _Choice(
                 label: 'Night mode',
                 detail: 'Quieter loud scenes, clearer dialogue',
@@ -317,30 +340,26 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
     );
   }
 
+  /// The language ("English"): what people pick by.
   String _audioLabel(AudioTrack a) {
-    final codec = switch ((a.codec ?? '').toLowerCase()) {
-      'eac3' => 'E-AC3',
-      'ac3' => 'AC3',
-      'aac' => 'AAC',
-      'dts' => 'DTS',
-      'truehd' => 'TrueHD',
-      'opus' => 'Opus',
-      'flac' => 'FLAC',
-      final other => other.toUpperCase(),
-    };
+    final lang = langName(a.language);
+    return lang.isEmpty ? 'Audio track ${a.id}' : lang;
+  }
+
+  /// "Stereo", "5.1 surround", plus the track's own title (commentary, a
+  /// dub's studio); codec names left out.
+  String? _audioDetail(AudioTrack a) {
     final ch = switch (a.channelscount) {
-      1 => 'mono',
-      2 => 'stereo',
-      6 => '5.1',
-      8 => '7.1',
-      null => '',
-      final n => '$n ch',
+      1 => 'Mono',
+      2 => 'Stereo',
+      6 => '5.1 surround',
+      8 => '7.1 surround',
+      null => null,
+      final n => '$n channels',
     };
-    return [
-      langName(a.language),
-      codec,
-      ch,
-    ].where((s) => s.isNotEmpty).join(' ');
+    final title = a.title?.trim();
+    final parts = [?ch, if (title != null && title.isNotEmpty) title];
+    return parts.isEmpty ? null : parts.join('  ');
   }
 }
 

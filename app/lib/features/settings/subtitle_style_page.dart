@@ -47,7 +47,12 @@ class SubtitleStylePage extends StatelessWidget {
 /// preview. One style for everything you watch: used by Settings and by the
 /// player's Audio and subtitles panel.
 class SubtitleStyleControls extends ConsumerStatefulWidget {
-  const SubtitleStyleControls({super.key});
+  const SubtitleStyleControls({super.key, this.preview = true});
+
+  /// The still preview. Off in the player on short screens: the live
+  /// subtitles beside the panel show the changes, and the controls get the
+  /// room.
+  final bool preview;
 
   @override
   ConsumerState<SubtitleStyleControls> createState() =>
@@ -77,15 +82,16 @@ class _SubtitleStyleControlsState extends ConsumerState<SubtitleStyleControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            KSpace.margin,
-            KSpace.x2,
-            KSpace.margin,
-            KSpace.x2,
+        if (widget.preview)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              KSpace.margin,
+              KSpace.x2,
+              KSpace.margin,
+              KSpace.x2,
+            ),
+            child: SubtitlePreview(style: s, rtl: rtl),
           ),
-          child: SubtitlePreview(style: s, rtl: rtl),
-        ),
         _SliderRow(
           label: 'Size',
           valueText: '${(s.scale * 100).round()}%',

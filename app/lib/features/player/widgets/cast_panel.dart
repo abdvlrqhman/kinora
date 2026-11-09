@@ -10,6 +10,7 @@ import '../../../services/cast_service.dart';
 import '../../../ui/glass.dart';
 import '../../../ui/tint.dart';
 import '../../../ui/tokens.dart';
+import '../gestures.dart';
 import '../../../ui/widgets/artwork.dart';
 import '../../../ui/widgets/media.dart';
 import '../player_controller.dart';
@@ -102,7 +103,7 @@ class CastingView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cast = ref.watch(castServiceProvider);
     final req = controller.request;
-    final pad = MediaQuery.paddingOf(context);
+    final pad = playerEdges(context);
     final width = MediaQuery.sizeOf(context).width;
     return ListenableBuilder(
       listenable: cast,
@@ -130,10 +131,11 @@ class CastingView extends ConsumerWidget {
             const LegibilityScrim(stops: [0, 1]),
             GlassGroup(
               child: FillOrScroll(
+                // The controls' edges.
                 padding: EdgeInsets.fromLTRB(
-                  pad.left + KSpace.margin * 2,
-                  pad.top + KSpace.x4,
-                  pad.right + KSpace.margin * 2,
+                  pad.left + KSpace.margin,
+                  pad.top + KSpace.x3,
+                  pad.right + KSpace.margin,
                   pad.bottom + KSpace.margin,
                 ),
                 top: Row(

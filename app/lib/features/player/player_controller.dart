@@ -865,6 +865,7 @@ class PlayerController extends ChangeNotifier {
     ];
     final external = subtitles.where((s) => s.track == null);
     subtitles = [...embedded, ...external];
+    await _readAudioNow();
     // Built-in tracks in your languages arrived after "none found".
     if (subtitleNote != null &&
         subtitleNote!.startsWith('No subtitles') &&
@@ -1118,8 +1119,24 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> selectAudio(AudioTrack track) async {
     await player.setAudioTrack(track);
+    await _readAudioNow();
     notifyListeners();
     await _remember();
+  }
+
+  /// The audio track actually playing (mpv's `aid`): the player reports
+  /// "auto" until one is picked, so the panel could check nothing.
+  String? audioNow;
+
+  Future<void> _readAudioNow() async {
+    final p = player.platform;
+    if (p is! NativePlayer) return;
+    try {
+      final id = await p.getProperty('aid');
+      audioNow = id == 'no' || id == 'auto' || id.isEmpty ? null : id;
+    } on Object {
+      audioNow = null;
+    }
   }
 
   Future<void> setSubtitleDelay(Duration delay, {bool remember = true}) async {

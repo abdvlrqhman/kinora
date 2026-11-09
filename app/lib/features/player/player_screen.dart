@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -31,14 +30,6 @@ import 'widgets/scrubber.dart';
 import 'widgets/subtitle_overlay.dart';
 
 enum _Panel { none, tracks, episodes, speed, versions, cast }
-
-/// Side insets for the player. In landscape an iPhone reports its Dynamic
-/// Island inset (59 pt) on both sides, though the island only takes the
-/// first ~48 pt of one edge: capped at 32, plus each element's own margin
-/// (20 or more), nothing reaches it, and the controls use the screen's
-/// width. Android reports its cutout's real side, so its insets stay.
-EdgeInsets playerEdges(BuildContext context) =>
-    PlayerGestures.edges(MediaQuery.paddingOf(context), ios: Platform.isIOS);
 
 /// Full-screen player for streams and downloads alike.
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -396,6 +387,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 clearance: _controls && !_inPip ? _controlsHeight(context) : 0,
                 // Play row (76) and its buffering ring (86), plus a gap.
                 belowCenter: _controls && !_inPip && !_locked ? 52 : 0,
+                rightCover: _panel == _Panel.none || _inPip
+                    ? 0
+                    : SidePanel.coverOf(context),
               ),
               if (!_inPip) ...[
                 // Gesture layer. The Listener counts fingers for the
@@ -693,49 +687,6 @@ class _Controls extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GlassIconButton(
-                      icon: Icons.replay_10_rounded,
-                      label: 'Back 10 seconds',
-                      onPressed: () {
-                        onInteract();
-                        onSeekBy(-10);
-                      },
-                      size: 56,
-                    ),
-                    const SizedBox(width: KSpace.section),
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        _BufferRing(controller: c),
-                        GlassIconButton(
-                          icon: playing
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          label: playing ? 'Pause' : 'Play',
-                          onPressed: () {
-                            onInteract();
-                            c.player.playOrPause();
-                          },
-                          size: 76,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: KSpace.section),
-                    GlassIconButton(
-                      icon: Icons.forward_10_rounded,
-                      label: 'Forward 10 seconds',
-                      onPressed: () {
-                        onInteract();
-                        onSeekBy(10);
-                      },
-                      size: 56,
-                    ),
-                  ],
-                ),
-                const Spacer(),
                 StreamBuilder<Duration>(
                   stream: c.player.stream.position,
                   builder: (context, _) {
@@ -786,7 +737,9 @@ class _Controls extends StatelessWidget {
                     GlassIconButton(
                       icon: fill
                           ? Icons.fit_screen_rounded
-                          : Icons.fullscreen_rounded,
+                          // Fill (crop to the screen), not "fullscreen":
+                          // the player already is.
+                          : Icons.aspect_ratio_rounded,
                       label: fill ? 'Fit to screen' : 'Fill screen',
                       onPressed: onFill,
                     ),
@@ -800,12 +753,64 @@ class _Controls extends StatelessWidget {
                             : GlassButton(
                                 label: 'Next episode',
                                 icon: Icons.skip_next_rounded,
-                                prominent: true,
+                                // Quiet glass until the credits: during the
+                                // episode Play leads, and a stray thumb in
+                                // this corner shouldn't land on a lit button.
+                                prominent: c.inCredits,
                                 onPressed: c.playNext,
                               ),
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        // The play row at the screen's exact middle (between bars of
+        // different heights it sat high), where the buffering status shows
+        // when the controls hide.
+        Center(
+          child: GlassGroup(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                GlassIconButton(
+                  icon: Icons.replay_10_rounded,
+                  label: 'Back 10 seconds',
+                  onPressed: () {
+                    onInteract();
+                    onSeekBy(-10);
+                  },
+                  size: 56,
+                ),
+                const SizedBox(width: KSpace.section),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _BufferRing(controller: c),
+                    GlassIconButton(
+                      icon: playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      label: playing ? 'Pause' : 'Play',
+                      onPressed: () {
+                        onInteract();
+                        c.player.playOrPause();
+                      },
+                      size: 76,
+                    ),
+                  ],
+                ),
+                const SizedBox(width: KSpace.section),
+                GlassIconButton(
+                  icon: Icons.forward_10_rounded,
+                  label: 'Forward 10 seconds',
+                  onPressed: () {
+                    onInteract();
+                    onSeekBy(10);
+                  },
+                  size: 56,
                 ),
               ],
             ),
@@ -826,7 +831,7 @@ class _LevelIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pad = MediaQuery.paddingOf(context);
+    final pad = playerEdges(context);
     final icon = brightness
         ? Icons.light_mode_rounded
         : value == 0
@@ -838,8 +843,8 @@ class _LevelIndicator extends StatelessWidget {
       alignment: brightness ? Alignment.centerLeft : Alignment.centerRight,
       child: Padding(
         padding: EdgeInsets.only(
-          left: pad.left + KSpace.section,
-          right: pad.right + KSpace.section,
+          left: pad.left + KSpace.margin,
+          right: pad.right + KSpace.margin,
         ),
         child: IgnorePointer(
           child: Semantics(
@@ -881,7 +886,7 @@ class _LevelIndicator extends StatelessWidget {
                   ),
                   const SizedBox(height: KSpace.x2),
                   Text(
-                    '${(value * 100).round()}',
+                    '${(value * 100).round()}%',
                     style: KType.tabular(
                       KType.small.copyWith(color: KColors.lamp),
                     ),
@@ -984,20 +989,25 @@ class _LockedControls extends StatelessWidget {
   const _LockedControls({required this.onUnlock});
   final VoidCallback onUnlock;
 
+  // Where the Lock button was.
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Align(
+  Widget build(BuildContext context) {
+    final pad = playerEdges(context);
+    return Align(
       alignment: Alignment.topRight,
       child: Padding(
-        padding: const EdgeInsets.all(KSpace.margin),
+        padding: EdgeInsets.only(
+          top: pad.top + KSpace.x3,
+          right: pad.right + KSpace.margin,
+        ),
         child: GlassButton(
           label: 'Unlock',
           icon: Icons.lock_open_rounded,
           onPressed: onUnlock,
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _FlashLabel extends StatelessWidget {
