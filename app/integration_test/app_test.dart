@@ -278,10 +278,8 @@ void main() {
     // Above the play row, clear of every control.
     final pinch = Offset(screen.center.dx, screen.top + screen.height * 0.3);
     final f1 = await tester.startGesture(pinch - const Offset(40, 0));
-    final f2 = await tester.startGesture(
-      pinch + const Offset(40, 0),
-      pointer: 7,
-    );
+    // (Pointer ids are assigned by the tester: one picked by hand can clash.)
+    final f2 = await tester.startGesture(pinch + const Offset(40, 0));
     for (var i = 0; i < 12; i++) {
       await f1.moveBy(const Offset(-8, 0));
       await f2.moveBy(const Offset(8, 0));
