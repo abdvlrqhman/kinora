@@ -653,9 +653,13 @@ class _BufferingHint extends StatelessWidget {
     builder: (context, snap) {
       if (snap.data != true) return const SizedBox.shrink();
       final s = controller.engineStats;
+      // Progress toward 8 MB ready ahead: something that visibly moves.
+      final pct = s == null
+          ? null
+          : (s.bufferedAhead / (8 << 20) * 100).clamp(0, 99).round();
       final detail = s == null
           ? ''
-          : '  ${s.peers} peers  ${Fmt.speed(s.rate)}';
+          : ' $pct%  ${s.peers} peers  ${Fmt.speed(s.rate)}';
       return Center(
         child: IgnorePointer(
           child: Glass(
@@ -722,6 +726,18 @@ class _PrepareView extends StatelessWidget {
                   style: KType.title.copyWith(color: KColors.haze),
                 ),
               const SizedBox(height: KSpace.margin),
+              if (!failed && c.starting != null) ...[
+                Text(
+                  [
+                    c.starting!.headline,
+                    ...c.starting!.reasons.take(1),
+                  ].join('  '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: KType.label.copyWith(color: KColors.haze),
+                ),
+                const SizedBox(height: KSpace.x2),
+              ],
               if (!failed)
                 Glass(
                   padding: const EdgeInsets.symmetric(

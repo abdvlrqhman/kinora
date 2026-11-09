@@ -58,6 +58,12 @@ final class FindingPeers extends PrepareStatus {
   final int seeds;
 }
 
+/// Starting a specific version (named on the preparing screen).
+final class Starting extends PrepareStatus {
+  const Starting(this.release);
+  final ResolvedRelease release;
+}
+
 final class TryingNext extends PrepareStatus {
   const TryingNext(this.reason);
   final String reason;
@@ -142,6 +148,7 @@ final class PlaybackService {
       if (cancel != null && await _isDone(cancel))
         throw const PlaybackException('Cancelled.');
       try {
+        onStatus?.call(Starting(release));
         return await _fromRelease(release, request, runtimeMinutes, onStatus);
       } on PlaybackException catch (e) {
         lastError = e;

@@ -66,6 +66,9 @@ class PlayerController extends ChangeNotifier {
   String status = 'Finding the best version';
   String? error;
   PlaybackSource? source;
+
+  /// The version being started (shown while preparing).
+  ResolvedRelease? starting;
   MetaDetail? meta;
 
   /// Embedded + external subtitles, grouped by language in the UI.
@@ -120,6 +123,7 @@ class PlayerController extends ChangeNotifier {
     _request = req;
     phase = PlayerPhase.preparing;
     status = req.localFile != null ? 'Opening' : 'Finding the best version';
+    starting = null;
     error = null;
     _tracksApplied = false;
     _pending = null;
@@ -148,6 +152,10 @@ class PlayerController extends ChangeNotifier {
                       ? 'Looking for people sharing it'
                       : 'Connecting to $peers people ($seeds with the full file)',
                 TryingNext() => 'Trying another version',
+                Starting(:final release) => () {
+                  starting = release;
+                  return status;
+                }(),
               };
               notifyListeners();
             },
