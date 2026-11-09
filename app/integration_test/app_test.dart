@@ -4,10 +4,13 @@
 // keeps the fully downloaded stream in Downloads. It also casts to a fake
 // Samsung TV that pulls the stream, and plays an explicit download offline.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:dlna/testing.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,6 +61,33 @@ Future<void> pumpUntil(
   print(
     'E2E ok: ${reason ?? 'condition'} (${DateTime.now().difference(started).inMilliseconds} ms)',
   );
+}
+
+/// A picture of the player for review: printed as base64 chunks (the app
+/// is uninstalled after the run, so files on the device are lost). CI puts
+/// them back together as the e2e-player-screenshots artifact. Never fails
+/// the test.
+Future<void> shot(WidgetTester tester, String name) async {
+  try {
+    await tester.pump(const Duration(milliseconds: 300));
+    RenderObject? r = tester.renderObject(find.byType(PlayerScreen));
+    while (r != null && r is! RenderRepaintBoundary) {
+      r = r.parent;
+    }
+    final image = await (r! as RenderRepaintBoundary).toImage();
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    final data = base64Encode(png!.buffer.asUint8List());
+    const size = 2000;
+    final n = (data.length / size).ceil();
+    for (var i = 0; i < n; i++) {
+      final end = (i + 1) * size < data.length ? (i + 1) * size : data.length;
+      // ignore: avoid_print
+      print('E2E-SHOT $name ${i + 1}/$n ${data.substring(i * size, end)}');
+    }
+  } on Object catch (e) {
+    // ignore: avoid_print
+    print('E2E shot $name skipped: $e');
+  }
 }
 
 void main() {
@@ -250,6 +280,7 @@ void main() {
             .map((e) => e.target.runtimeType)
             .join(' < '),
       );
+      if (round == 'first') await shot(tester, 'player-volume');
       await swipe(0.2);
       await pumpUntil(
         tester,
@@ -289,6 +320,39 @@ void main() {
     await f2.up();
     await tester.pump(const Duration(milliseconds: 100));
     expect(zoom(), greaterThan(1.5), reason: 'pinch zooms the picture');
+    // The player as it looks, for review: controls up, the Audio and
+    // subtitles panel, and Subtitle style inside it.
+    try {
+      bool controlsUp() =>
+          tester
+              .widget<AnimatedOpacity>(
+                find
+                    .ancestor(
+                      of: find.bySemanticsLabel('Lock controls'),
+                      matching: find.byType(AnimatedOpacity),
+                    )
+                    .first,
+              )
+              .opacity ==
+          1;
+      if (!controlsUp()) {
+        await tester.tapAt(pinch);
+        await tester.pump(const Duration(milliseconds: 600));
+      }
+      await shot(tester, 'player-controls');
+      await tester.tap(find.bySemanticsLabel('Audio and subtitles'));
+      await tester.pump(const Duration(milliseconds: 600));
+      await shot(tester, 'player-tracks');
+      await tester.tap(find.bySemanticsLabel(RegExp('^Subtitle style')));
+      await tester.pump(const Duration(milliseconds: 600));
+      await shot(tester, 'player-subtitle-style');
+      // Close the panel: tap the dimmed video beside it.
+      await tester.tapAt(Offset(screen.left + 40, screen.center.dy));
+      await tester.pump(const Duration(milliseconds: 600));
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('E2E shots skipped: $e');
+    }
     semantics.dispose();
     // ignore: avoid_print
     print('E2E ok: volume, brightness and pinch zoom by touch');

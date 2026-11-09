@@ -135,9 +135,37 @@ jobs:
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           disable-animations: true
+          # (Output kept in e2e.log: the player screenshots come out of it.)
           script: |
-            cd app && flutter test integration_test/app_test.dart -d emulator-5554 --reporter expanded
+            bash -o pipefail -c 'cd app && flutter test integration_test/app_test.dart -d emulator-5554 --reporter expanded 2>&1 | tee ../e2e.log'
             cd app && (timeout 600 flutter test integration_test/glass_test.dart -d emulator-5554 --reporter expanded || echo "::warning::Real liquid glass did not render on the emulator (see log)")
+      - name: Player screenshots from the run
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import base64, collections, os, re
+          parts = collections.defaultdict(dict)
+          if os.path.exists('e2e.log'):
+              for line in open('e2e.log', errors='replace'):
+                  m = re.search(r'E2E-SHOT (\S+) (\d+)/(\d+) (\S+)', line)
+                  if m:
+                      parts[m[1]][int(m[2])] = (int(m[3]), m[4])
+          os.makedirs('e2e-shots', exist_ok=True)
+          for name, chunks in parts.items():
+              total = next(iter(chunks.values()))[0]
+              if len(chunks) == total:
+                  data = ''.join(chunks[i][1] for i in range(1, total + 1))
+                  with open(f'e2e-shots/{name}.png', 'wb') as f:
+                      f.write(base64.b64decode(data))
+          print('screenshots:', sorted(os.listdir('e2e-shots')))
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-player-screenshots
+          path: e2e-shots
+          if-no-files-found: ignore
+          retention-days: 14
 
   ios:
     needs: [check, engine]
