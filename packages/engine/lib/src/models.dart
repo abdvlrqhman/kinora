@@ -115,6 +115,7 @@ final class AddTorrent {
     bool paused = false,
     bool sequential = false,
     int? maxConnections,
+    int? uploadLimit,
   }) : this._(
          magnet: uri,
          savePath: savePath,
@@ -126,6 +127,7 @@ final class AddTorrent {
          paused: paused,
          sequential: sequential,
          maxConnections: maxConnections,
+         uploadLimit: uploadLimit,
        );
 
   /// Adds a `.torrent` file's bytes.

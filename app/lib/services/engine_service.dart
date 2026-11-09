@@ -94,6 +94,10 @@ final class EngineService {
             (forDownload ? _paths.downloads.path : _paths.streams.path),
         resumePath: resume.existsSync() ? resume.path : null,
         name: name,
+        // Not sharing while watching: a trickle keeps peers willing to send.
+        uploadLimit: !forDownload && !_settings.seedWhileWatching
+            ? 20 * 1024
+            : null,
       ),
     );
   }
