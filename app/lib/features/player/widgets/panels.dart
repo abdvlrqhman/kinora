@@ -194,6 +194,30 @@ class _TracksPanelState extends State<TracksPanel> {
                   ),
                 ),
               ],
+              if (active != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    KSpace.margin,
+                    KSpace.x3,
+                    KSpace.margin,
+                    0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Line appears before it’s said? Wait for it, then tap.',
+                        style: KType.small,
+                      ),
+                      const SizedBox(height: KSpace.x2),
+                      GlassButton(
+                        label: 'Line is spoken now',
+                        icon: Icons.record_voice_over_rounded,
+                        onPressed: c.syncToCurrentLine,
+                      ),
+                    ],
+                  ),
+                ),
               const _Heading('Sound'),
               SwitchListTile(
                 contentPadding: const EdgeInsets.symmetric(

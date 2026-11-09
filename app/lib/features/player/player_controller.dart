@@ -792,6 +792,29 @@ class PlayerController extends ChangeNotifier {
     if (remember) await _remember();
   }
 
+  /// "The line on screen is spoken now": shifts subtitles so the visible
+  /// line starts at this moment. Returns false when no line is showing.
+  Future<bool> syncToCurrentLine() async {
+    final p = player.platform;
+    if (p is! NativePlayer ||
+        player.state.subtitle.every((l) => l.trim().isEmpty)) {
+      notice = 'Wait until a subtitle line is on screen.';
+      notifyListeners();
+      return false;
+    }
+    final start = double.tryParse(await p.getProperty('sub-start'));
+    if (start == null) return false;
+    final now = player.state.position.inMilliseconds / 1000;
+    // mpv reports sub-start with the current delay applied.
+    final shift = Duration(milliseconds: ((now - start) * 1000).round());
+    await setSubtitleDelay(subtitleDelay + shift);
+    notice = shift.isNegative
+        ? 'Subtitles moved ${(shift.inMilliseconds.abs() / 1000).toStringAsFixed(1)} s earlier'
+        : 'Subtitles moved ${(shift.inMilliseconds / 1000).toStringAsFixed(1)} s later';
+    notifyListeners();
+    return true;
+  }
+
   Future<void> _remember() async {
     final active = subtitles.where((s) => s.id == activeSubtitleId).firstOrNull;
     final pending = active == null ? _pending : null;
