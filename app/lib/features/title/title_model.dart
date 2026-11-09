@@ -6,7 +6,7 @@ import '../../core/format.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
 import '../../services/resolver.dart';
-import '../../services/sources.dart';
+import '../../services/tmdb.dart';
 import '../../ui/widgets/media.dart';
 
 typedef TitleKey = ({String type, String id});
@@ -146,7 +146,7 @@ NextUp nextUp(
 /// The title page's model, derived synchronously from its details.
 final titleProvider = Provider.autoDispose
     .family<AsyncValue<TitleModel>, TitleKey>(
-      (ref, key) => ref.watch(metaProvider(key)).whenData(TitleModel.new),
+      (ref, key) => ref.watch(richMetaProvider(key)).whenData(TitleModel.new),
     );
 
 /// The primary button's target; null until progress has loaded.

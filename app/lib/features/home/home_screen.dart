@@ -5,6 +5,7 @@ import 'package:stremio/stremio.dart';
 
 import '../../app/shell.dart';
 import '../../services/sources.dart';
+import '../../services/tmdb.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
@@ -101,7 +102,8 @@ class _FeedState extends ConsumerState<_Feed> {
     final pick = _pick(rows.value, fresh);
     final featured = pick == null
         ? null
-        : ref.watch(metaProvider((type: pick.type, id: pick.id))).value ?? pick;
+        : ref.watch(richMetaProvider((type: pick.type, id: pick.id))).value ??
+              pick;
     final pad = MediaQuery.paddingOf(context);
     return ArtworkTintScope(
       image: artworkProvider(featured?.background ?? featured?.poster),

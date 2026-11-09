@@ -12,6 +12,7 @@ import '../../ui/widgets/sheet.dart';
 import '../../ui/widgets/states.dart';
 
 export '../../ui/widgets/states.dart' show addonError;
+import 'tmdb_key.dart';
 import 'widgets/settings_ui.dart';
 
 /// The only suggestions: official Stremio metadata and subtitle addons.
@@ -95,6 +96,7 @@ class SourcesPage extends ConsumerWidget {
           const SectionTitle('Suggestions'),
           const SuggestedAddons(),
         ],
+        const TmdbKeySection(),
       ],
     );
   }

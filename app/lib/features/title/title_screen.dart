@@ -8,6 +8,7 @@ import 'package:stremio/stremio.dart';
 
 import '../../app/router.dart';
 import '../../services/sources.dart';
+import '../../services/tmdb.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
@@ -21,6 +22,7 @@ import '../settings/widgets/settings_ui.dart';
 import 'episodes.dart';
 import 'title_actions.dart';
 import 'title_model.dart';
+import 'tmdb_rows.dart';
 import 'versions_sheet.dart';
 
 /// A movie or show: backdrop, Play (naming the version), actions, details
@@ -122,6 +124,8 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
   Widget build(BuildContext context) {
     final t = widget.model;
     final meta = t.meta;
+    // TMDB's extras (cast photos, More like this...), when a key is set.
+    final extra = ref.watch(tmdbTitleProvider(widget.titleKey)).value;
     final next = ref.watch(nextUpProvider(widget.titleKey));
     final season =
         _season ?? next?.episode?.season ?? t.seasons.firstOrNull ?? 0;
@@ -141,7 +145,11 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
           child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
-                child: _Hero(meta: meta, isMovie: !t.isSeries),
+                child: _Hero(
+                  meta: meta,
+                  isMovie: !t.isSeries,
+                  certification: extra?.certification,
+                ),
               ),
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
@@ -246,16 +254,32 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                         ),
                       ),
                       const SizedBox(height: KSpace.section),
+                      if (extra?.tagline case final tagline?) ...[
+                        Text(
+                          tagline,
+                          style: KType.title.copyWith(color: KColors.haze),
+                        ),
+                        const SizedBox(height: KSpace.x2),
+                      ],
                       if (meta.description?.trim().isNotEmpty ?? false)
                         ExpandableText(
                           meta.description!.trim(),
                           style: KType.body,
                         ),
-                      _Credits(meta: meta),
+                      _Credits(
+                        meta: meta,
+                        // The photo row below names them.
+                        showCast: extra?.cast.isEmpty ?? true,
+                      ),
                     ],
                   ),
                 ),
               ),
+              if (extra?.cast case final cast? when cast.isNotEmpty)
+                SliverToBoxAdapter(child: CastRow(people: cast)),
+              if (!t.isSeries)
+                if (extra?.similar case final s? when s.isNotEmpty)
+                  SliverToBoxAdapter(child: SimilarRow(titles: s)),
               if (t.isSeries) ...[
                 SliverPadding(
                   padding: const EdgeInsets.only(
@@ -292,6 +316,9 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                   ),
                 ),
               ],
+              if (t.isSeries)
+                if (extra?.similar case final s? when s.isNotEmpty)
+                  SliverToBoxAdapter(child: SimilarRow(titles: s)),
               SliverToBoxAdapter(
                 child: SizedBox(
                   height: MediaQuery.paddingOf(context).bottom + KSpace.section,
@@ -456,9 +483,10 @@ class _Header extends StatelessWidget {
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.meta, required this.isMovie});
+  const _Hero({required this.meta, required this.isMovie, this.certification});
 
   final MetaDetail meta;
+  final String? certification;
 
   /// A movie's backdrop grows into the player; a show's episode stills do.
   final bool isMovie;
@@ -498,7 +526,7 @@ class _Hero extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: KSpace.x3),
-                FactLine(meta: meta),
+                FactLine(meta: meta, certification: certification),
                 if (genres.isNotEmpty) ...[
                   const SizedBox(height: KSpace.x1),
                   Text(genres, style: KType.small),
@@ -580,9 +608,10 @@ class _ParallaxDelegate extends FlowDelegate {
 }
 
 class _Credits extends StatelessWidget {
-  const _Credits({required this.meta});
+  const _Credits({required this.meta, this.showCast = true});
 
   final MetaDetail meta;
+  final bool showCast;
 
   @override
   Widget build(BuildContext context) {
@@ -605,7 +634,7 @@ class _Credits extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (meta.cast.isNotEmpty) line('Cast', meta.cast),
+        if (showCast && meta.cast.isNotEmpty) line('Cast', meta.cast),
         if (meta.director.isNotEmpty)
           line(
             meta.director.length > 1 ? 'Directors' : 'Director',

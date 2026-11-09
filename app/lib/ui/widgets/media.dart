@@ -209,9 +209,12 @@ class ProgressLine extends StatelessWidget {
 
 /// Year, length and rating, separated by space and weight (never dots).
 class FactLine extends StatelessWidget {
-  const FactLine({super.key, required this.meta});
+  const FactLine({super.key, required this.meta, this.certification});
 
   final MetaPreview meta;
+
+  /// Age rating ("TV-MA"), shown in a thin outline.
+  final String? certification;
 
   @override
   Widget build(BuildContext context) {
@@ -227,6 +230,21 @@ class FactLine extends StatelessWidget {
       children: [
         if (meta.releaseInfo case final year? when year.isNotEmpty)
           Text(year, style: strong),
+        if (certification != null)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: KColors.haze),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: Text(
+                certification!,
+                style: soft,
+                semanticsLabel: 'Rated $certification',
+              ),
+            ),
+          ),
         if (length != null) Text(length, style: soft),
         if (rating != null && rating.isNotEmpty)
           Text.rich(
