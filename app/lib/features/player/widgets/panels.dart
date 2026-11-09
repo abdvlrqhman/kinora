@@ -170,7 +170,7 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
               if (c.subtitleSearch == SubtitleSearch.searching)
                 const _Note('Looking for subtitles in your languages…')
               else if (c.subtitleNote case final note?)
-                _SubtitleNote(note: note),
+                _SubtitleNote(note: note, fix: c.subtitleFix),
               for (final lang in langs) ...[
                 _LanguageRow(
                   name: langName(lang),
@@ -560,18 +560,18 @@ class _Choice extends StatelessWidget {
 
 /// What the subtitle search found nothing for, and where to fix it.
 class _SubtitleNote extends StatelessWidget {
-  const _SubtitleNote({required this.note});
+  const _SubtitleNote({required this.note, required this.fix});
 
   final String note;
+  final SubtitleFix fix;
 
   @override
   Widget build(BuildContext context) {
-    final lower = note.toLowerCase();
-    final (String, String)? fix = lower.contains('subtitle sites')
-        ? ('Open Subtitle sites', '/settings/subtitle-sites')
-        : lower.contains('languages')
-        ? ('Open Languages', '/settings/languages')
-        : null;
+    final (String, String)? fix = switch (this.fix) {
+      SubtitleFix.sites => ('Open Subtitle sites', '/settings/subtitle-sites'),
+      SubtitleFix.languages => ('Open Languages', '/settings/languages'),
+      SubtitleFix.none => null,
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         KSpace.margin,

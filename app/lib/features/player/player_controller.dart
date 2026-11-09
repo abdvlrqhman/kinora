@@ -42,6 +42,9 @@ enum FailureAction {
 /// Where the external subtitle search stands, for the subtitles panel.
 enum SubtitleSearch { searching, done }
 
+/// Which setting fixes "no subtitles" (shown as a button with the note).
+enum SubtitleFix { none, languages, sites }
+
 enum PlayerPhase { preparing, playing, failed }
 
 /// Drives one playback session (and the episodes after it).
@@ -215,6 +218,7 @@ class PlayerController extends ChangeNotifier {
   /// External subtitle search state and, when nothing came, why.
   SubtitleSearch subtitleSearch = SubtitleSearch.searching;
   String? subtitleNote;
+  SubtitleFix subtitleFix = SubtitleFix.none;
   PlaybackSource? source;
 
   /// The version being started (shown while preparing).
@@ -478,12 +482,16 @@ class PlayerController extends ChangeNotifier {
       if (gen != _generation || _disposed) return;
       addExternalSubtitles(options);
       final langs = s.subtitleLanguages.map(langName).join(', ');
+      final none = options.isEmpty && saved.isEmpty;
       _subtitlesDone(
-        options.isNotEmpty || saved.isNotEmpty
+        !none
             ? null
             : s.enabledSubtitleProviders.isEmpty
             ? 'No subtitles in $langs from your sources. Turn on subtitle sites in Settings.'
             : 'No subtitles found in $langs for this video.',
+        s.enabledSubtitleProviders.isEmpty
+            ? SubtitleFix.sites
+            : SubtitleFix.none,
       );
     } on Object catch (e) {
       Log.w('player', 'subtitles unavailable: $e');
@@ -495,9 +503,10 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  void _subtitlesDone(String? note) {
+  void _subtitlesDone(String? note, [SubtitleFix fix = SubtitleFix.none]) {
     subtitleSearch = SubtitleSearch.done;
     subtitleNote = note;
+    subtitleFix = note == null ? SubtitleFix.none : fix;
     notifyListeners();
   }
 
