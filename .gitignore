@@ -12,3 +12,6 @@ out/
 vcpkg_installed/
 build/
 .dart_tool/
+
+# per-package lockfiles (packages are libraries)
+packages/*/pubspec.lock

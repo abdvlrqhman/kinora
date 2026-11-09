@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['**.md', 'packages/engine/**', '.github/workflows/engine.yml']
+    paths-ignore: ['**.md']
   pull_request:
   workflow_dispatch:
 
@@ -18,6 +18,9 @@ env:
   FLUTTER_VERSION: 3.47.7
 
 jobs:
+  engine:
+    uses: ./.github/workflows/engine.yml
+
   check:
     runs-on: ubuntu-24.04
     defaults:
@@ -33,15 +36,30 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       - run: flutter test
+      - name: Engine (Dart layer)
+        working-directory: packages/engine
+        run: |
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+          flutter test
 
   android:
-    needs: check
+    needs: [check, engine]
     runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: libtorrent-arm64-android
+          path: packages/engine/prebuilt/arm64-android
+      - uses: actions/download-artifact@v8
+        with:
+          name: libtorrent-arm-neon-android
+          path: packages/engine/prebuilt/arm-neon-android
       - uses: subosito/flutter-action@v2.23.0
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -68,13 +86,17 @@ jobs:
           if-no-files-found: error
 
   ios:
-    needs: check
+    needs: [check, engine]
     runs-on: macos-26
     defaults:
       run:
         working-directory: app
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: libtorrent-arm64-ios
+          path: packages/engine/ios/prebuilt
       - uses: maxim-lobanov/setup-xcode@v1.7.0
         with:
           xcode-version: latest-stable
