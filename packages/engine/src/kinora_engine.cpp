@@ -585,6 +585,11 @@ void apply_config(lt::settings_pack& sp, const lt::bdecode_node& c, bool initial
     // A peer whose first connection failed is tried again after 15 s (not
     // 60): with few peers, waiting a minute is a minute of black screen.
     sp.set_int(lt::settings_pack::min_reconnect_time, 15);
+    // Torrents start with every file unwanted until the app claims one. Just
+    // after metadata arrives they look finished, and by default libtorrent
+    // drops every seed then and waits min_reconnect_time to come back:
+    // a stalled start on every stream. Keep those connections.
+    sp.set_bool(lt::settings_pack::close_redundant_connections, false);
     sp.set_int(lt::settings_pack::max_out_request_queue, 1500);
     sp.set_int(lt::settings_pack::whole_pieces_threshold, 20);
     sp.set_int(lt::settings_pack::stop_tracker_timeout, 1);
@@ -1618,28 +1623,49 @@ int32_t kn_stream_close(kn_session* s, const char* token) { return kn_route_clos
 
 char* kn_stream_stats(kn_session* s, const char* token) {
   try {
-    std::lock_guard<std::mutex> lk(s->mu);
-    auto it = s->routes.find(token ? token : "");
-    if (it == s->routes.end() || !it->second->is_stream) return nullptr;
-    const Route& r = *it->second;
-    Torrent* t = find_torrent(s, r.ih.c_str());
-    if (t == nullptr || t->piece_len <= 0) return nullptr;
-    std::int64_t plen = t->piece_len;
-    std::int64_t file_end = r.file_offset + r.size;
-    std::int64_t have_bytes = 0;
-    for (std::int64_t p = r.file_offset / plen; p * plen < file_end && p < static_cast<std::int64_t>(t->have.size()); ++p) {
-      if (!t->have[static_cast<std::size_t>(p)]) continue;
-      std::int64_t a = std::max(p * plen, r.file_offset), b = std::min((p + 1) * plen, file_end);
-      have_bytes += b - a;
-    }
-    std::int64_t pos = r.position.load();
-    std::int64_t abs = r.file_offset + pos;
-    std::int64_t p = abs / plen;
-    while (p < static_cast<std::int64_t>(t->have.size()) && p * plen < file_end && t->have[static_cast<std::size_t>(p)]) ++p;
-    std::int64_t ahead = std::max<std::int64_t>(0, std::min(p * plen, file_end) - abs);
     std::ostringstream o;
-    o << "{\"size\":" << r.size << ",\"have_bytes\":" << have_bytes << ",\"buffered_ahead\":" << ahead
-      << ",\"position\":" << pos << ",\"connections\":" << r.connections.load() << "}";
+    lt::torrent_handle h;
+    std::int64_t frontier = -1;
+    {
+      std::lock_guard<std::mutex> lk(s->mu);
+      auto it = s->routes.find(token ? token : "");
+      if (it == s->routes.end() || !it->second->is_stream) return nullptr;
+      const Route& r = *it->second;
+      Torrent* t = find_torrent(s, r.ih.c_str());
+      if (t == nullptr || t->piece_len <= 0) return nullptr;
+      std::int64_t plen = t->piece_len;
+      std::int64_t file_end = r.file_offset + r.size;
+      std::int64_t have_bytes = 0;
+      for (std::int64_t p = r.file_offset / plen; p * plen < file_end && p < static_cast<std::int64_t>(t->have.size()); ++p) {
+        if (!t->have[static_cast<std::size_t>(p)]) continue;
+        std::int64_t a = std::max(p * plen, r.file_offset), b = std::min((p + 1) * plen, file_end);
+        have_bytes += b - a;
+      }
+      std::int64_t pos = r.position.load();
+      std::int64_t abs = r.file_offset + pos;
+      std::int64_t p = abs / plen;
+      while (p < static_cast<std::int64_t>(t->have.size()) && p * plen < file_end && t->have[static_cast<std::size_t>(p)]) ++p;
+      std::int64_t ahead = std::max<std::int64_t>(0, std::min(p * plen, file_end) - abs);
+      if (p * plen < file_end && p < static_cast<std::int64_t>(t->have.size())) {
+        frontier = p;
+        h = t->handle;
+      }
+      o << "{\"size\":" << r.size << ",\"have_bytes\":" << have_bytes << ",\"buffered_ahead\":" << ahead
+        << ",\"position\":" << pos << ",\"connections\":" << r.connections.load()
+        << ",\"piece_len\":" << plen;
+    }
+    // Bytes already in for the piece the player waits on: with big pieces
+    // (up to 16 MiB) nothing is ready until it's whole, but this moves.
+    // Asked outside the lock: it waits on libtorrent's thread.
+    std::int64_t partial = 0;
+    if (frontier >= 0 && h.is_valid()) {
+      for (const auto& q : h.get_download_queue()) {
+        if (static_cast<std::int64_t>(static_cast<int>(q.piece_index)) != frontier) continue;
+        partial = static_cast<std::int64_t>(q.finished + q.writing) * lt::default_block_size;
+        break;
+      }
+    }
+    o << ",\"next_piece_bytes\":" << partial << "}";
     return dup_string(o.str());
   } catch (...) {
     return nullptr;

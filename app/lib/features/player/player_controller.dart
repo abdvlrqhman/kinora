@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -181,9 +182,12 @@ class PlayerController extends ChangeNotifier {
       _ref.read(playbackServiceProvider).failedCandidates.add(failedId);
     await _releaseSource();
     if (failedId != null && req.candidateId == null && !_isLink(req.videoId)) {
-      status = 'Trying another version';
-      notifyListeners();
-      await _load(req.copyWith(clearCandidate: true));
+      await _load(
+        req.copyWith(clearCandidate: true),
+        note:
+            'That version was too slow to start, so Kinora is trying '
+            'another one.',
+      );
       return;
     }
     phase = PlayerPhase.failed;
@@ -262,7 +266,16 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> start() => _load(_request);
 
-  Future<void> _load(PlayRequest req) async {
+  /// Why this start is happening, when Kinora chose it (a version that
+  /// was too slow gave way). Shown while preparing.
+  String? prepareNote;
+
+  /// Last time new bytes arrived for the starting stream.
+  DateTime _progressAt = DateTime.now();
+  int _bytesSeen = -1;
+
+  Future<void> _load(PlayRequest req, {String? note}) async {
+    prepareNote = note;
     final gen = ++_generation;
     _cancelPrepare?.complete();
     _cancelPrepare = Completer<void>();
@@ -332,9 +345,20 @@ class PlayerController extends ChangeNotifier {
       );
       if (gen != _generation || _disposed) return;
       phase = PlayerPhase.playing;
-      // No picture after a long wait: treat it as a failed start.
-      _startWatchdog = Timer(const Duration(seconds: 75), () {
-        if (gen == _generation && !_started) unawaited(_failStart());
+      // A slow version that is still arriving gets its chance (a big first
+      // piece can take a minute); one that stalls, or takes minutes, gives
+      // way to the next.
+      final began = DateTime.now();
+      _progressAt = began;
+      _bytesSeen = -1;
+      _startWatchdog = Timer.periodic(const Duration(seconds: 5), (t) {
+        if (gen != _generation || _started) return t.cancel();
+        final now = DateTime.now();
+        if (now.difference(_progressAt) > const Duration(seconds: 60) ||
+            now.difference(began) > const Duration(minutes: 4)) {
+          t.cancel();
+          unawaited(_failStart());
+        }
       });
       _startTimers();
       notifyListeners();
@@ -1162,8 +1186,11 @@ class PlayerController extends ChangeNotifier {
 
   // -------------------------------------------------------------- engine --
 
-  /// Buffer numbers for torrent streams (null otherwise).
-  ({int bufferedAhead, int have, int size, int peers, int rate})? engineStats;
+  /// Buffer numbers for torrent streams (null otherwise). [ready] is the
+  /// percentage toward enough data to play on: 8 MB ahead, or the whole
+  /// next piece when pieces are bigger (nothing reads before it's whole).
+  ({int bufferedAhead, int have, int size, int peers, int rate, int ready})?
+  engineStats;
 
   void _startTimers() {
     _saveTimer?.cancel();
@@ -1189,12 +1216,21 @@ class PlayerController extends ChangeNotifier {
             : _bandwidth! * 0.85 + rate * 0.15;
         _ref.read(bandwidthEstimateProvider.notifier).set(_bandwidth);
       }
+      final got = stats.haveBytes + stats.nextPieceBytes;
+      if (got > _bytesSeen) {
+        _bytesSeen = got;
+        _progressAt = DateTime.now();
+      }
+      final target = math.max(8 << 20, stats.pieceLength);
       engineStats = (
         bufferedAhead: stats.bufferedAhead,
         have: stats.haveBytes,
         size: stats.size,
         peers: st?.numPeers ?? 0,
         rate: st?.downloadRate ?? 0,
+        ready: ((stats.bufferedAhead + stats.nextPieceBytes) / target * 100)
+            .clamp(0, 99)
+            .round(),
       );
       notifyListeners();
     });

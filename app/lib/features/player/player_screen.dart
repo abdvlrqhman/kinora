@@ -332,9 +332,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   if (c.phase == PlayerPhase.playing && _cast.isCasting)
                     CastingView(controller: c)
                   else if (c.phase == PlayerPhase.playing) ...[
-                    _BufferingHint(controller: c),
-                    if (_flash != null)
-                      Center(child: _FlashLabel(text: _flash!)),
+                    // Buffering and seek/volume feedback: centered while the
+                    // controls are hidden, above the play row while they
+                    // show, so nothing covers it.
+                    if (!_controls || _locked)
+                      Center(
+                        child: _Status(controller: c, flash: _flash),
+                      ),
                     AnimatedOpacity(
                       opacity: _controls ? 1 : 0,
                       duration: motion,
@@ -346,6 +350,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                               )
                             : _Controls(
                                 controller: c,
+                                status: _Status(controller: c, flash: _flash),
+                                onSeekBy: _seekBy,
                                 fill: _fill,
                                 onBack: () => Navigator.of(context).maybePop(),
                                 onPanel: _open,
@@ -442,6 +448,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 class _Controls extends StatelessWidget {
   const _Controls({
     required this.controller,
+    required this.status,
+    required this.onSeekBy,
     required this.fill,
     required this.onBack,
     required this.onPanel,
@@ -452,6 +460,8 @@ class _Controls extends StatelessWidget {
   });
 
   final PlayerController controller;
+  final Widget status;
+  final ValueChanged<int> onSeekBy;
   final bool fill;
   final VoidCallback onBack;
   final void Function(_Panel) onPanel;
@@ -537,39 +547,52 @@ class _Controls extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              // The status sits above the row without moving it off center.
+              Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
                 children: [
-                  GlassIconButton(
-                    icon: Icons.replay_10_rounded,
-                    label: 'Back 10 seconds',
-                    onPressed: () {
-                      onInteract();
-                      c.seekRelative(const Duration(seconds: -10));
-                    },
-                    size: 56,
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 76 + KSpace.x3,
+                    child: Center(child: status),
                   ),
-                  const SizedBox(width: KSpace.section),
-                  GlassIconButton(
-                    icon: playing
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    label: playing ? 'Pause' : 'Play',
-                    onPressed: () {
-                      onInteract();
-                      c.player.playOrPause();
-                    },
-                    size: 76,
-                  ),
-                  const SizedBox(width: KSpace.section),
-                  GlassIconButton(
-                    icon: Icons.forward_10_rounded,
-                    label: 'Forward 10 seconds',
-                    onPressed: () {
-                      onInteract();
-                      c.seekRelative(const Duration(seconds: 10));
-                    },
-                    size: 56,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GlassIconButton(
+                        icon: Icons.replay_10_rounded,
+                        label: 'Back 10 seconds',
+                        onPressed: () {
+                          onInteract();
+                          onSeekBy(-10);
+                        },
+                        size: 56,
+                      ),
+                      const SizedBox(width: KSpace.section),
+                      GlassIconButton(
+                        icon: playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        label: playing ? 'Pause' : 'Play',
+                        onPressed: () {
+                          onInteract();
+                          c.player.playOrPause();
+                        },
+                        size: 76,
+                      ),
+                      const SizedBox(width: KSpace.section),
+                      GlassIconButton(
+                        icon: Icons.forward_10_rounded,
+                        label: 'Forward 10 seconds',
+                        onPressed: () {
+                          onInteract();
+                          onSeekBy(10);
+                        },
+                        size: 56,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -710,6 +733,25 @@ class _FlashLabel extends StatelessWidget {
 }
 
 /// "Buffering" pill when playback stalls mid-way.
+/// Buffering and the latest seek/volume/brightness feedback, stacked.
+class _Status extends StatelessWidget {
+  const _Status({required this.controller, required this.flash});
+  final PlayerController controller;
+  final String? flash;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _BufferingHint(controller: controller),
+      if (flash != null) ...[
+        const SizedBox(height: KSpace.x2),
+        _FlashLabel(text: flash!),
+      ],
+    ],
+  );
+}
+
 class _BufferingHint extends StatelessWidget {
   const _BufferingHint({required this.controller});
   final PlayerController controller;
@@ -721,19 +763,13 @@ class _BufferingHint extends StatelessWidget {
     builder: (context, snap) {
       if (snap.data != true) return const SizedBox.shrink();
       final s = controller.engineStats;
-      // Progress toward 8 MB ready ahead: something that visibly moves.
-      final pct = s == null
-          ? null
-          : (s.bufferedAhead / (8 << 20) * 100).clamp(0, 99).round();
       final detail = s == null
           ? ''
-          : ' $pct%  ${s.peers} peers  ${Fmt.speed(s.rate)}';
-      return Center(
-        child: IgnorePointer(
-          child: Glass(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Text('Buffering$detail', style: KType.tabular(KType.label)),
-          ),
+          : ' ${s.ready}%  ${s.peers} peers  ${Fmt.speed(s.rate)}';
+      return IgnorePointer(
+        child: Glass(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Text('Buffering$detail', style: KType.tabular(KType.label)),
         ),
       );
     },
@@ -818,6 +854,17 @@ class _PrepareView extends StatelessWidget {
                   style: KType.title.copyWith(color: KColors.haze),
                 ),
               const SizedBox(height: KSpace.margin),
+              // Kinora moved on from a version on its own: say so.
+              if (!failed && c.prepareNote != null) ...[
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    c.prepareNote!,
+                    style: KType.body.copyWith(color: KColors.marquee),
+                  ),
+                ),
+                const SizedBox(height: KSpace.x2),
+              ],
               if (!failed && c.starting != null) ...[
                 Text(
                   [

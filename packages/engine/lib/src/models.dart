@@ -488,6 +488,8 @@ final class StreamStats {
     required this.bufferedAhead,
     required this.position,
     required this.connections,
+    this.pieceLength = 0,
+    this.nextPieceBytes = 0,
   });
 
   /// Parses the engine's stream stats.
@@ -497,6 +499,8 @@ final class StreamStats {
     bufferedAhead: (j['buffered_ahead']! as num).toInt(),
     position: (j['position']! as num).toInt(),
     connections: (j['connections']! as num).toInt(),
+    pieceLength: (j['piece_len'] as num? ?? 0).toInt(),
+    nextPieceBytes: (j['next_piece_bytes'] as num? ?? 0).toInt(),
   );
 
   final int size;
@@ -512,6 +516,13 @@ final class StreamStats {
 
   /// Open player connections.
   final int connections;
+
+  /// The torrent's piece size: nothing past [bufferedAhead] can be read
+  /// until the whole next piece is in.
+  final int pieceLength;
+
+  /// Bytes already in for that next piece.
+  final int nextPieceBytes;
 }
 
 /// A local file exposed over the server (downloads, subtitles for a TV).
