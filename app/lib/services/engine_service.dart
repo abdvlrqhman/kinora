@@ -162,12 +162,14 @@ final class EngineService {
 
   /// [owner] needs [fileIndex] of [infoHash] (-1: just keep it warm).
   void claim(String infoHash, String owner, int fileIndex) {
+    Log.d('engine', 'claim ${_short(infoHash)} $owner file $fileIndex');
     (_claims[infoHash] ??= {})[owner] = fileIndex;
     _applyPriorities(infoHash);
   }
 
   /// [owner] no longer needs [infoHash]. Returns whether anyone still does.
   bool release(String infoHash, String owner) {
+    Log.d('engine', 'release ${_short(infoHash)} $owner');
     final m = _claims[infoHash];
     m?.remove(owner);
     if (m != null && m.isEmpty) _claims.remove(infoHash);
@@ -190,6 +192,10 @@ final class EngineService {
     final wanted = {
       for (final i in _claims[infoHash]?.values ?? const <int>[]) i,
     };
+    Log.d(
+      'engine',
+      'priorities ${_short(infoHash)}: files $wanted of ${files.length}',
+    );
     try {
       e.setFilePriorities(infoHash, [
         for (final f in files) wanted.contains(f.index) ? 4 : 0,
@@ -278,3 +284,6 @@ final engineServiceProvider = Provider<EngineService>((ref) {
   ref.onDispose(service.dispose);
   return service;
 });
+
+String _short(String infoHash) =>
+    infoHash.length > 6 ? infoHash.substring(0, 6) : infoHash;
