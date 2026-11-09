@@ -250,6 +250,42 @@ void main() {
     slow.close();
   });
 
+  test(
+    'each action opens a fresh connection; a dropped one is retried',
+    () async {
+      tv.dropConnections = 1;
+      await renderer.play();
+      expect(tv.actions, ['Play']);
+      expect(tv.lastConnection, 'close');
+      tv.dropConnections = 2;
+      await expectLater(
+        renderer.pause(),
+        throwsA(
+          isA<DlnaUnreachableException>().having(
+            (e) => e.isTimeout,
+            'isTimeout',
+            isFalse,
+          ),
+        ),
+      );
+    },
+  );
+
+  test('watch tells a TV player error from a stop', () async {
+    tv
+      ..state = 'STOPPED'
+      ..transportStatus = 'ERROR_OCCURRED';
+    final first = await renderer.watch().first;
+    expect(
+      first,
+      isA<RendererActive>()
+          .having((s) => s.state, 'state', TransportState.stopped)
+          .having((s) => s.error, 'error', isTrue),
+    );
+    tv.transportStatus = 'OK';
+    expect((await renderer.watch().first as RendererActive).error, isFalse);
+  });
+
   test('watch polls, reports unreachable, and stops on cancel', () async {
     await renderer.load(media, title: 'T', mimeType: 'video/mp4');
     final statuses = <RendererStatus>[];

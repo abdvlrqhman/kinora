@@ -140,6 +140,16 @@ final class FakeSamsungDmr {
   /// Delay before answering any request (to test timeouts).
   Duration delay = Duration.zero;
 
+  /// Drops this many of the next control requests without an answer (the
+  /// connection closes, as a TV's dead keep-alive connection does).
+  int dropConnections = 0;
+
+  /// The `Connection` header of the last control request.
+  String? lastConnection;
+
+  /// `CurrentTransportStatus`: 'ERROR_OCCURRED' when the TV's player failed.
+  String transportStatus = 'OK';
+
   String state = 'NO_MEDIA_PRESENT';
   String uri = '';
   int volume = 12;
@@ -172,6 +182,12 @@ final class FakeSamsungDmr {
         !request.uri.path.startsWith('/upnp/control/')) {
       response.statusCode = 404;
       return response.close();
+    }
+    lastConnection = request.headers.value('connection');
+    if (dropConnections > 0) {
+      dropConnections--;
+      (await response.detachSocket(writeHeaders: false)).destroy();
+      return;
     }
     final element = XmlDocument.parse(body).rootElement
         .descendantsNamed('Body')
@@ -232,7 +248,7 @@ final class FakeSamsungDmr {
       case 'GetTransportInfo':
         return {
           'CurrentTransportState': state,
-          'CurrentTransportStatus': 'OK',
+          'CurrentTransportStatus': transportStatus,
           'CurrentSpeed': '1',
         };
       case 'GetPositionInfo':

@@ -111,11 +111,12 @@ class CastingView extends ConsumerWidget {
         final name = cast.device?.friendlyName ?? 'your TV';
         final status = switch (cast.phase) {
           CastPhase.connecting => 'Starting on $name',
+          CastPhase.lost => '$name isn’t answering. Waiting for it…',
+          _ when cast.reconnecting => 'Reconnecting to $name…',
           CastPhase.playing =>
             'Playing on $name'
                 '${cast.volume == null ? '' : ', volume ${cast.volume}'}',
           CastPhase.paused => 'Paused on $name',
-          CastPhase.lost => cast.message ?? '$name stopped answering',
           _ => cast.message ?? 'Stopped on $name',
         };
         return Stack(
@@ -224,7 +225,11 @@ class CastingView extends ConsumerWidget {
                           icon: Icons.phone_iphone_rounded,
                           prominent: true,
                           onPressed: () async {
-                            final at = await cast.stop();
+                            final at = cast.position;
+                            // The phone takes over now; the TV's Stop
+                            // follows. Next videos play here too.
+                            unawaited(cast.stop());
+                            cast.selectTarget(null);
                             await controller.player.seek(at);
                             await controller.player.play();
                           },

@@ -134,7 +134,9 @@ class PlayerController extends ChangeNotifier {
         } else if (_resumeAfterInterruption &&
             e.type == AudioInterruptionType.pause) {
           _resumeAfterInterruption = false;
-          unawaited(player.play());
+          if (!_ref.read(castServiceProvider).isCasting) {
+            unawaited(player.play());
+          }
         }
       });
       _noisySub = session.becomingNoisyEventStream.listen(
@@ -172,6 +174,8 @@ class PlayerController extends ChangeNotifier {
   void _onCast() {
     final cast = _ref.read(castServiceProvider);
     final casting = cast.isCasting;
+    // The TV plays it: the phone never plays along, whatever resumed it.
+    if (casting && player.state.playing) unawaited(player.pause());
     if (_wasCasting && !casting && cast.position > Duration.zero) {
       unawaited(() async {
         await player.seek(cast.position);
@@ -458,12 +462,15 @@ class PlayerController extends ChangeNotifier {
   /// A TV was chosen before pressing Play: start there.
   Future<void> _castToTargetIfChosen(int gen) async {
     final cast = _ref.read(castServiceProvider);
-    final tv = cast.target;
     final src = source;
-    if (tv == null || src == null || cast.isCasting) return;
+    if (cast.target == null || src == null || cast.isCasting) return;
     // Give external subtitles a moment so the TV gets them too.
     await Future<void>.delayed(const Duration(seconds: 2));
-    if (gen != _generation || _disposed) return;
+    // (Switched to this phone meanwhile: stay here.)
+    final tv = cast.target;
+    if (gen != _generation || _disposed || tv == null || cast.isCasting) {
+      return;
+    }
     final sub = await subtitleForTv();
     await player.pause();
     await cast.cast(

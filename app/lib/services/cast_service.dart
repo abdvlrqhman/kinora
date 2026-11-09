@@ -15,13 +15,13 @@ import '../app/providers.dart';
 import '../core/lang.dart';
 import '../core/log.dart';
 import 'background.dart';
+import 'cast_tracker.dart';
 import 'engine_service.dart';
 import 'play_request.dart';
 import 'playback.dart';
 import 'resolver.dart';
 
-/// What the TV is doing.
-enum CastPhase { idle, connecting, playing, paused, stopped, lost }
+export 'cast_tracker.dart' show CastPhase;
 
 /// Finds DLNA TVs and plays Kinora's streams on them. The TV pulls the video
 /// straight from the phone's stream server (or from the debrid link), with
@@ -44,12 +44,20 @@ final class CastService extends ChangeNotifier {
   /// The TV's volume after the last change from the phone, while casting.
   int? volume;
 
+  /// The TV missed its last answer (Wi-Fi hiccup): shown as reconnecting.
+  bool reconnecting = false;
+
   DlnaRenderer? _renderer;
   StreamSubscription<RendererStatus>? _watch;
   StreamSubscription<DlnaDevice>? _ssdp;
   StreamSubscription<DlnaDevice>? _probe;
   final _routes = <String>[];
   int _castGen = 0;
+  CastTracker? _tracker;
+
+  /// What the current cast plays, to load it again after a TV error.
+  _CastArgs? _last;
+  int _reloads = 0;
 
   bool get isCasting =>
       device != null && phase != CastPhase.idle && phase != CastPhase.stopped;
@@ -245,7 +253,8 @@ final class CastService extends ChangeNotifier {
   // ------------------------------------------------------------- casting --
 
   /// Starts playing [source] on [d] at [startAt], with [subtitlePath]
-  /// (any format; converted to SRT) when given.
+  /// (any format; converted to SRT) when given. True once the TV has the
+  /// video; it then reports playing when it really starts.
   Future<bool> cast({
     required DlnaDevice d,
     required PlaybackSource source,
@@ -254,21 +263,38 @@ final class CastService extends ChangeNotifier {
     Duration? length,
     String? subtitlePath,
     String? subtitleLanguage,
-  }) async {
+  }) {
+    _reloads = 0;
+    _last = (
+      d: d,
+      source: source,
+      request: request,
+      length: length,
+      subtitlePath: subtitlePath,
+      subtitleLanguage: subtitleLanguage,
+    );
+    return _start(startAt);
+  }
+
+  Future<bool> _start(Duration startAt) async {
+    final a = _last!;
+    final d = a.d;
     final gen = ++_castGen;
-    await stop(silent: true);
-    if (gen != _castGen) return false;
+    final previous = _teardown(CastPhase.idle);
     device = d;
     phase = CastPhase.connecting;
     message = null;
     volume = null;
+    position = startAt;
     notifyListeners();
+    if (previous != null) await _stopQuietly(previous);
+    if (gen != _castGen) return false;
     _ref
         .read(castTargetCapsProvider.notifier)
         .set(d.isSamsung ? samsungFullHdCaps : null);
     try {
       final lan = await NetworkInfo().getWifiIP();
-      if (lan == null && source.kind != PlaybackKind.direct) {
+      if (lan == null && a.source.kind != PlaybackKind.direct) {
         throw const _CastFailure(
           'Connect the phone to the same Wi-Fi as the TV.',
         );
@@ -276,23 +302,23 @@ final class CastService extends ChangeNotifier {
       final engine = _ref.read(engineServiceProvider).engine;
       Uri media;
       String? routeToken;
-      switch (source.kind) {
+      switch (a.source.kind) {
         case PlaybackKind.torrent:
-          media = source.uri.replace(host: lan);
-          routeToken = source.streamToken;
+          media = a.source.uri.replace(host: lan);
+          routeToken = a.source.streamToken;
         case PlaybackKind.local:
-          final served = engine.serveFile(source.uri.toFilePath());
+          final served = engine.serveFile(a.source.uri.toFilePath());
           _routes.add(served.token);
           media = served.uri(host: lan!);
           routeToken = served.token;
         case PlaybackKind.direct:
-          media = source.uri;
+          media = a.source.uri;
       }
       Uri? caption;
-      if (subtitlePath != null && lan != null) {
-        caption = await _serveSrt(subtitlePath, subtitleLanguage, lan);
+      if (a.subtitlePath case final path? when lan != null) {
+        caption = await _serveSrt(path, a.subtitleLanguage, lan);
       }
-      final mime = _mime(source.fileName ?? media.path);
+      final mime = _mime(a.source.fileName ?? media.path);
       if (routeToken != null) {
         engine.setRouteHeaders(
           routeToken,
@@ -306,76 +332,70 @@ final class CastService extends ChangeNotifier {
       _renderer = renderer;
       await renderer.load(
         media,
-        title: request.isEpisode
-            ? '${request.title} S${request.season} E${request.episode}'
-            : request.title,
+        title: a.request.isEpisode
+            ? '${a.request.title} S${a.request.season} E${a.request.episode}'
+            : a.request.title,
         mimeType: mime,
-        sizeBytes: source.sizeBytes,
-        duration: length,
+        sizeBytes: a.source.sizeBytes,
+        duration: a.length,
         subtitleSrt: caption,
-        posterUrl: request.poster == null
+        posterUrl: a.request.poster == null
             ? null
-            : Uri.tryParse(request.poster!),
+            : Uri.tryParse(a.request.poster!),
+        autoplay: false,
       );
-      if (startAt > const Duration(seconds: 5)) {
-        // Some TVs ignore a seek until playback really starts.
-        for (var i = 0; i < 10; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 700));
-          if (await renderer.transportState() == TransportState.playing) break;
-        }
-        try {
-          await renderer.seek(startAt);
-        } on DlnaException catch (e) {
-          Log.d('cast', 'seek after load: $e');
-        }
-      }
-      if (gen != _castGen) return false; // a newer cast took over
-      phase = CastPhase.playing;
+      // Stopped meanwhile ("Watch on this phone"): don't start the TV.
+      if (gen != _castGen) return false;
+      await renderer.play();
+      if (gen != _castGen) return false;
+      // Connecting until the TV says it plays; then it seeks to [startAt].
+      _tracker = CastTracker(DateTime.now(), startAt: startAt);
       // The TV pulls from this phone (except debrid links): stay alive while
       // the screen is off or Kinora is in the background.
-      if (source.kind != PlaybackKind.direct) {
+      if (a.source.kind != PlaybackKind.direct) {
         unawaited(
           BackgroundKeeper.instance.hold(
             'cast',
             title: 'Playing on ${d.friendlyName}',
-            text: request.title,
+            text: a.request.title,
           ),
         );
       }
-      await _watch?.cancel();
       _watch = renderer
           .watch(interval: const Duration(seconds: 1))
-          .listen(_onStatus);
+          .listen(_onStatus, onError: (Object e) => Log.d('cast', 'poll: $e'));
       await _ref
           .read(settingsProvider.notifier)
           .update((s) => s.copyWith(lastCastDevice: d.toJson()));
-      notifyListeners();
       return true;
     } on _CastFailure catch (e) {
-      _fail(e.message);
+      if (gen == _castGen) _fail(e.message);
     } on DlnaUnreachableException catch (e) {
       Log.w('cast', 'cast unreachable: $e');
-      _fail(
-        'Couldn’t reach ${d.friendlyName}. Check it’s on and on this Wi-Fi.',
-      );
+      if (gen == _castGen) {
+        _fail(
+          'Couldn’t reach ${d.friendlyName}. Check it’s on and on this Wi-Fi.',
+        );
+      }
     } on DlnaException catch (e) {
       Log.w('cast', 'cast failed: $e');
-      _fail(
-        '${d.friendlyName} didn’t accept the video. Try another version, or restart the TV.',
-      );
+      if (gen == _castGen) {
+        _fail(
+          '${d.friendlyName} didn’t accept the video. Try another version, or restart the TV.',
+        );
+      }
     } on Object catch (e, st) {
       Log.e('cast', 'cast failed', e, st);
-      _fail('Casting failed. Check that the TV is on and on this Wi-Fi.');
+      if (gen == _castGen) {
+        _fail('Casting failed. Check that the TV is on and on this Wi-Fi.');
+      }
     }
     return false;
   }
 
   void _fail(String text) {
-    unawaited(BackgroundKeeper.instance.drop('cast'));
-    phase = CastPhase.stopped;
+    _teardown(CastPhase.stopped);
     message = text;
-    device = null;
-    _ref.read(castTargetCapsProvider.notifier).set(null);
     notifyListeners();
   }
 
@@ -413,23 +433,51 @@ final class CastService extends ChangeNotifier {
   }
 
   void _onStatus(RendererStatus s) {
-    switch (s) {
-      case RendererActive(:final state, :final position):
-        this.position = position.relTime ?? this.position;
-        duration = position.trackDuration ?? duration;
-        phase = switch (state) {
-          TransportState.playing => CastPhase.playing,
-          TransportState.pausedPlayback => CastPhase.paused,
-          TransportState.stopped || TransportState.noMediaPresent =>
-            phase == CastPhase.connecting
-                ? CastPhase.connecting
-                : CastPhase.stopped,
-          _ => phase,
-        };
-      case RendererUnreachable():
-        phase = CastPhase.lost;
-        message = '${device?.friendlyName ?? 'The TV'} stopped answering.';
+    final t = _tracker;
+    if (t == null) return;
+    final now = DateTime.now();
+    final wasStarted = t.started;
+    final end = switch (s) {
+      RendererActive(:final state, :final position, :final error) => t.answer(
+        state,
+        position,
+        now,
+        error: error,
+      ),
+      RendererUnreachable() => t.silence(now),
+    };
+    phase = t.phase;
+    position = t.position;
+    duration = t.duration;
+    reconnecting = t.reconnecting;
+    if (end != null) return _ended(end);
+    // TVs ignore a seek until they really play.
+    final to = t.seekTarget;
+    if (!wasStarted && t.started && to != null) unawaited(seek(to));
+    notifyListeners();
+  }
+
+  /// The TV ended the cast: the phone takes over where it was, except
+  /// after a TV player error, which loads the video again (twice at most).
+  void _ended(CastEnd end) {
+    final name = device?.friendlyName ?? 'The TV';
+    Log.i('cast', 'ended: ${end.name} at $position');
+    if (end == CastEnd.tvError && _reloads < 2 && _last != null) {
+      _reloads++;
+      unawaited(_start(position));
+      return;
     }
+    _teardown(CastPhase.stopped);
+    message = switch (end) {
+      CastEnd.finished => null,
+      CastEnd.stoppedOnTv => '$name stopped the video. It continues here.',
+      CastEnd.tvError =>
+        '$name couldn’t keep playing this video. It continues here; cast again to try once more.',
+      CastEnd.neverStarted =>
+        '$name couldn’t start this video. Try again, or choose another version.',
+      CastEnd.lost =>
+        '$name stopped answering. It continues here; cast again when the TV is back.',
+    };
     notifyListeners();
   }
 
@@ -474,20 +522,27 @@ final class CastService extends ChangeNotifier {
   }
 
   /// Stops on the TV; returns where it was so the phone can continue.
-  Future<Duration> stop({bool silent = false}) async {
+  /// Everything here ends at once (the phone can play right away); the
+  /// TV's Stop is awaited last.
+  Future<Duration> stop() async {
+    _castGen++; // a cast still connecting must not start the TV
+    _last = null;
     final at = position;
+    final r = _teardown(CastPhase.idle);
+    notifyListeners();
+    if (r != null) await _stopQuietly(r);
+    return at;
+  }
+
+  /// Ends the cast on this side: polling, the keep-alive and the served
+  /// files. Returns the renderer, for the caller to stop the TV.
+  DlnaRenderer? _teardown(CastPhase to) {
     unawaited(BackgroundKeeper.instance.drop('cast'));
-    await _watch?.cancel();
+    unawaited(_watch?.cancel());
     _watch = null;
+    _tracker = null;
     final r = _renderer;
     _renderer = null;
-    if (r != null) {
-      try {
-        await r.stop();
-      } on Object {
-        // The TV may already be off.
-      }
-    }
     final engine = _ref.read(engineServiceProvider);
     if (engine.isRunning) {
       for (final t in _routes) {
@@ -496,13 +551,21 @@ final class CastService extends ChangeNotifier {
     }
     _routes.clear();
     device = null;
-    phase = CastPhase.idle;
+    phase = to;
+    reconnecting = false;
     final t = target;
     _ref
         .read(castTargetCapsProvider.notifier)
         .set(t == null ? null : (t.isSamsung ? samsungFullHdCaps : null));
-    if (!silent) notifyListeners();
-    return at;
+    return r;
+  }
+
+  static Future<void> _stopQuietly(DlnaRenderer r) async {
+    try {
+      await r.stop();
+    } on Object {
+      // The TV may already be off.
+    }
   }
 
   static String _mime(String name) => switch (p.extension(name).toLowerCase()) {
@@ -522,6 +585,15 @@ final class CastService extends ChangeNotifier {
     super.dispose();
   }
 }
+
+typedef _CastArgs = ({
+  DlnaDevice d,
+  PlaybackSource source,
+  PlayRequest request,
+  Duration? length,
+  String? subtitlePath,
+  String? subtitleLanguage,
+});
 
 final class _CastFailure implements Exception {
   const _CastFailure(this.message);

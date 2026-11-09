@@ -88,7 +88,7 @@ final class SoapClient {
     String action,
     Map<String, String> args,
   ) async {
-    final response = await sendHttp(
+    Future<http.Response> send() => sendHttp(
       _client,
       'POST',
       controlUrl,
@@ -96,9 +96,20 @@ final class SoapClient {
       headers: {
         'Content-Type': 'text/xml; charset="utf-8"',
         'SOAPACTION': '"$serviceType#$action"',
+        // A fresh connection per action, as Samsung's own players do: TVs
+        // drop idle connections, and a reused dead one fails the action.
+        'Connection': 'close',
       },
       body: buildSoapEnvelope(serviceType, action, args),
     );
+    http.Response response;
+    try {
+      response = await send();
+    } on DlnaUnreachableException catch (e) {
+      // A dropped connection (not a silent TV) gets one more try.
+      if (e.isTimeout) rethrow;
+      response = await send();
+    }
     final text = bodyText(response);
     if (response.statusCode == 200) {
       return parseSoapResponse(action, text, controlUrl);

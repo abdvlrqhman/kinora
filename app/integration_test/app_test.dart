@@ -229,7 +229,13 @@ void main() {
       subtitleLanguage: tvSub.language,
     );
     expect(casting, isTrue, reason: cast.message);
-    expect(cast.phase, CastPhase.playing);
+    await pumpUntil(
+      tester,
+      () => cast.phase == CastPhase.playing,
+      timeout: const Duration(seconds: 30),
+      reason: 'the TV reports playing',
+      state: () => '${cast.phase} ${cast.message}',
+    );
     await tv.pulling.timeout(const Duration(seconds: 60));
     expect(tv.pullError, isNull);
     expect(tv.pulled.toBytes(), world.videoBytes);

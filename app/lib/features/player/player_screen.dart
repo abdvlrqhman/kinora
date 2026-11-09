@@ -10,6 +10,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../core/log.dart';
 import '../../core/format.dart';
 import '../../services/pip.dart';
 import '../../services/play_request.dart';
@@ -77,10 +78,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       widget.request,
     )..addListener(_onChange);
     _cast = ref.read(castServiceProvider)..addListener(_onChange);
-    _castWasActive =
-        _cast.phase != CastPhase.idle &&
-        _cast.phase != CastPhase.stopped &&
-        _cast.phase != CastPhase.lost;
+    _castWasActive = _cast.isCasting;
     unawaited(c.start());
     unawaited(WakelockPlus.enable());
     unawaited(
@@ -139,19 +137,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       c.notice = null;
       _showFlash(notice);
     }
-    // A cast from this player that failed or lost the TV says why, once,
+    // A cast from this player that ended on the TV's side says why, once,
     // over the phone view. Older failures stay in the cast picker.
-    final phase = _cast.phase;
-    final ended = phase == CastPhase.stopped || phase == CastPhase.lost;
     final castNote = _cast.message;
-    if (ended &&
+    if (_cast.phase == CastPhase.stopped &&
         _castWasActive &&
         castNote != null &&
         castNote != _castNoticeShown) {
       _castNoticeShown = castNote;
       _showFlash(castNote);
     }
-    _castWasActive = !ended && phase != CastPhase.idle;
+    _castWasActive = _cast.isCasting;
     _syncPip();
     setState(() {});
   }
@@ -306,11 +302,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
     _levelHide?.cancel();
     setState(() => _levelShown = (brightness: left, value: next));
-    if (left) {
-      await ScreenBrightness.instance.setApplicationScreenBrightness(next);
-    } else {
-      VolumeController.instance.showSystemUI = false;
-      await VolumeController.instance.setVolume(next);
+    try {
+      if (left) {
+        await ScreenBrightness.instance.setApplicationScreenBrightness(next);
+      } else {
+        VolumeController.instance.showSystemUI = false;
+        await VolumeController.instance.setVolume(next);
+      }
+    } on Object catch (e) {
+      // iOS can't always reach its volume slider (the simulator, AirPlay):
+      // the player's own volume instead. Brightness just stays.
+      Log.d('player', 'level: $e');
+      if (!left) await c.player.setVolume(next * 100);
     }
   }
 

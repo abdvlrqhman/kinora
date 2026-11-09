@@ -77,7 +77,7 @@ sealed class RendererStatus {
 /// The renderer answered: its transport state and position.
 final class RendererActive extends RendererStatus {
   /// Creates a status.
-  const RendererActive(this.state, this.position);
+  const RendererActive(this.state, this.position, {this.error = false});
 
   /// Transport state.
   final TransportState state;
@@ -85,17 +85,23 @@ final class RendererActive extends RendererStatus {
   /// Position snapshot.
   final PositionInfo position;
 
+  /// The renderer reported `ERROR_OCCURRED` (its player failed, e.g. the
+  /// stream stalled), as opposed to a stop from its remote.
+  final bool error;
+
   @override
   bool operator ==(Object other) =>
       other is RendererActive &&
       other.state == state &&
-      other.position == position;
+      other.position == position &&
+      other.error == error;
 
   @override
-  int get hashCode => Object.hash(state, position);
+  int get hashCode => Object.hash(state, position, error);
 
   @override
-  String toString() => 'RendererActive(${state.name}, $position)';
+  String toString() =>
+      'RendererActive(${state.name}${error ? ', error' : ''}, $position)';
 }
 
 /// The renderer stopped answering (TV switched off, left the Wi-Fi, …).
@@ -253,9 +259,16 @@ final class DlnaRenderer {
   }
 
   /// Current transport state (AVTransport `GetTransportInfo`).
-  Future<TransportState> transportState() async => TransportState.parse(
-    (await _avt('GetTransportInfo', const {}))['CurrentTransportState'],
-  );
+  Future<TransportState> transportState() async =>
+      (await _transportInfo()).state;
+
+  Future<({TransportState state, bool error})> _transportInfo() async {
+    final out = await _avt('GetTransportInfo', const {});
+    return (
+      state: TransportState.parse(out['CurrentTransportState']),
+      error: out['CurrentTransportStatus']?.trim() == 'ERROR_OCCURRED',
+    );
+  }
 
   /// Volume 0–100 (RenderingControl `GetVolume`).
   Future<int> volume() async {
@@ -319,10 +332,14 @@ final class DlnaRenderer {
 
     Future<void> poll() async {
       try {
-        final state = await transportState();
+        final info = await _transportInfo();
         final position = await this.position();
         failures = 0;
-        if (!cancelled) controller.add(RendererActive(state, position));
+        if (!cancelled) {
+          controller.add(
+            RendererActive(info.state, position, error: info.error),
+          );
+        }
       } on DlnaUnreachableException catch (e) {
         if (++failures >= unreachableAfter && !cancelled) {
           controller.add(RendererUnreachable(e));
