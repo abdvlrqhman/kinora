@@ -1,0 +1,14 @@
+# secrets — never commit
+.env*
+.secrets/
+*.jks
+*.p12
+*.keystore
+key.properties
+
+# build outputs
+out/
+.vcpkg-bin/
+vcpkg_installed/
+build/
+.dart_tool/

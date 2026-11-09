@@ -1,0 +1,80 @@
+name: engine
+
+# Builds libtorrent (+ OpenSSL, Boost) as static libs for every mobile target.
+# The Flutter plugin in packages/engine links these.
+on:
+  push:
+    branches: [main]
+    paths: ['packages/engine/**', '.github/workflows/engine.yml']
+  pull_request:
+    paths: ['packages/engine/**', '.github/workflows/engine.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: engine-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f # keep equal to builtin-baseline in vcpkg.json
+
+jobs:
+  libtorrent:
+    name: libtorrent ${{ matrix.triplet }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { triplet: arm64-android, os: ubuntu-24.04 }
+          - { triplet: arm-neon-android, os: ubuntu-24.04 }
+          - { triplet: arm64-ios, os: macos-15 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: packages/engine
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.vcpkg-bin,readwrite
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch vcpkg at pinned commit
+        run: |
+          git init -q "$RUNNER_TEMP/vcpkg"
+          cd "$RUNNER_TEMP/vcpkg"
+          git fetch -q --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_COMMIT"
+          git checkout -q FETCH_HEAD
+          ./bootstrap-vcpkg.sh -disableMetrics
+
+      - uses: actions/cache@v6
+        with:
+          path: .vcpkg-bin
+          key: vcpkg-${{ matrix.triplet }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('packages/engine/vcpkg.json', 'packages/engine/triplets/**') }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-
+
+      - name: Build
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.vcpkg-bin"
+          if [[ "${{ matrix.triplet }}" == *android ]]; then
+            export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+            echo "NDK: $ANDROID_NDK_HOME"
+          fi
+          "$RUNNER_TEMP/vcpkg/vcpkg" install \
+            --triplet "${{ matrix.triplet }}" \
+            --overlay-triplets=triplets \
+            --x-install-root=out \
+            --clean-after-build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: libtorrent-${{ matrix.triplet }}
+          path: |
+            packages/engine/out/${{ matrix.triplet }}/include
+            packages/engine/out/${{ matrix.triplet }}/lib
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vcpkg-logs-${{ matrix.triplet }}
+          path: ${{ runner.temp }}/vcpkg/buildtrees/**/*.log

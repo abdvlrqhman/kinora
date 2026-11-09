@@ -1,0 +1,31 @@
+name: bootstrap
+
+# One-time: generates the Flutter project in app/ with the pinned Flutter
+# version and commits it, so no local Flutter install is needed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          flutter-version: 3.47.7
+          channel: stable
+      - name: flutter create
+        run: |
+          test ! -e app || { echo "app/ already exists"; exit 1; }
+          flutter create --org io.github.abdvlrqhman --project-name kinora \
+            --platforms android,ios --description "Kinora" app
+      - name: Commit
+        run: |
+          git config user.name "Abdulrahman Ali"
+          git config user.email "abdvlrqhman@gmail.com"
+          git add app
+          git commit -m "Generate Flutter app (flutter create, Flutter 3.47.7)"
+          git push
