@@ -8,7 +8,7 @@ import '../core/settings.dart';
 import '../data/settings_store.dart';
 
 /// App version shown to addons/trackers as the user agent.
-const kinoraVersion = '0.1.1';
+const kinoraVersion = '0.1.2';
 
 /// Overridden in main() once resolved.
 final pathsProvider = Provider<AppPaths>(
