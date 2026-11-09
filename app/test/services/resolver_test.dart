@@ -53,6 +53,7 @@ void main() {
             );
           }),
         ),
+        onCellularProvider.overrideWith((ref) => Stream.value(false)),
         swarmLookupProvider.overrideWithValue((hashes, extra) async => live),
       ],
     );
@@ -116,7 +117,10 @@ void main() {
 
   test('no sources installed', () async {
     final c = ProviderContainer(
-      overrides: [enabledAddonsProvider.overrideWith((ref) async => <Addon>[])],
+      overrides: [
+        enabledAddonsProvider.overrideWith((ref) async => <Addon>[]),
+        onCellularProvider.overrideWith((ref) => Stream.value(false)),
+      ],
     );
     addTearDown(c.dispose);
     final result = await c.read(resolveProvider(ep).future);

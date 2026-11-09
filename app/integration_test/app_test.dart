@@ -70,6 +70,7 @@ void main() {
             ),
           ),
           // Live tracker scraping would reach the internet; the swarm is local.
+          onCellularProvider.overrideWith((ref) => Stream.value(false)),
           swarmLookupProvider.overrideWithValue(
             (hashes, extra) async => const {},
           ),
