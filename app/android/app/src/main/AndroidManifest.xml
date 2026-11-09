@@ -45,6 +45,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <meta-data
+            android:name="io.github.abdvlrqhman.kinora.NOTIFICATION_ICON"
+            android:resource="@drawable/ic_stat_kinora" />
         <!-- Keeps peer-to-peer downloads alive in the background. specialUse:
              no 6-hour dataSync budget (Android 15+); Kinora is sideloaded. -->
         <service

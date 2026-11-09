@@ -46,6 +46,9 @@ final class BackgroundKeeper {
           await FlutterForegroundTask.startService(
             serviceId: 4242,
             serviceTypes: [ForegroundServiceTypes.specialUse],
+            notificationIcon: const NotificationIcon(
+              metaDataName: 'io.github.abdvlrqhman.kinora.NOTIFICATION_ICON',
+            ),
             notificationTitle: title,
             notificationText: text,
           );
