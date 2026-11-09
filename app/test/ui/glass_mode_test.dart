@@ -1,4 +1,5 @@
 import 'package:drift/native.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/ui/glass_mode.dart';
@@ -6,7 +7,10 @@ import 'package:kinora/ui/glass_mode.dart';
 import '../features/harness.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  // On screen, as a normal launch is (the probe waits for that).
+  TestWidgetsFlutterBinding.ensureInitialized().handleAppLifecycleStateChanged(
+    AppLifecycleState.resumed,
+  );
 
   test('liquid glass turns off after a launch that drew nothing', () async {
     final db = testDb();

@@ -87,8 +87,13 @@ Future<void> _probeWhenVisible(AppDatabase db) async {
     _confirmFrames(db);
   }
 
+  // No state yet means "starting in the foreground" on Android only: iOS
+  // reports a state, and may launch Kinora in the background for downloads.
   final state = SchedulerBinding.instance.lifecycleState;
-  if (state == null || state == AppLifecycleState.resumed) return begin();
+  if (state == AppLifecycleState.resumed ||
+      (state == null && Platform.isAndroid)) {
+    return begin();
+  }
   late final AppLifecycleListener listener;
   listener = AppLifecycleListener(
     onResume: () {

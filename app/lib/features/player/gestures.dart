@@ -26,3 +26,50 @@ abstract final class PlayerGestures {
   static double level(double from, double dy, double height) =>
       (from - dy / height * 1.25).clamp(0.0, 1.0);
 }
+
+/// One touch session on the player, from the first finger down to the last
+/// finger up. Counted from raw pointer events: Flutter's scale gesture
+/// ends and restarts whenever a finger lifts, so a pinch would otherwise
+/// turn into a swipe with the finger left on the screen.
+final class TouchSession {
+  int _down = 0;
+  int _most = 0;
+  bool _swiping = false;
+  double _dx = 0, _dy = 0;
+
+  /// Two or more fingers were down at once in this session.
+  bool get pinching => _most >= 2;
+
+  /// This session is a one-finger vertical swipe.
+  bool get swiping => _swiping;
+
+  /// No finger is on the screen.
+  bool get idle => _down == 0;
+
+  void fingerDown() {
+    _down++;
+    if (_down > _most) _most = _down;
+  }
+
+  /// Returns true when this was the last finger: the session is over.
+  bool fingerUp() {
+    if (_down > 0) _down--;
+    if (_down > 0) return false;
+    _most = 0;
+    _swiping = false;
+    _dx = _dy = 0;
+    return true;
+  }
+
+  /// A one-finger move of [dx], [dy]; true once (and from then on) it's a
+  /// vertical swipe. Never after a pinch in the same session.
+  bool swipe(double dx, double dy) {
+    if (pinching) return false;
+    _dx += dx;
+    _dy += dy;
+    if (!_swiping && PlayerGestures.isVerticalSwipe(_dx, _dy)) {
+      _swiping = true;
+    }
+    return _swiping;
+  }
+}

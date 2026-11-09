@@ -128,6 +128,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _onChange() {
     if (!mounted) return;
+    // Another episode or version starts at the whole picture.
+    final video = '${c.request.videoId}|${c.request.candidateId}';
+    if (video != _zoomedVideo) {
+      _zoomedVideo = video;
+      _zoom = 1;
+    }
     final notice = c.notice;
     if (notice != null) {
       c.notice = null;
@@ -223,72 +229,84 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // One finger, vertical: brightness on the left half, volume on the
   // right. Two fingers: pinch to zoom the picture.
 
-  /// Picture zoom, on top of fit/fill (1× to 3×).
+  /// Picture zoom, on top of fit/fill (1× to 3×); back to 1× on another
+  /// video.
   double _zoom = 1;
   double _zoomStart = 1;
+  String? _zoomedVideo;
 
-  /// Most fingers seen in the current gesture: a pinch never turns into a
-  /// swipe when one finger lifts first.
-  int _fingers = 0;
-  bool _swipeLeftSide = false;
-  bool _swiping = false;
-  Offset _travel = Offset.zero;
+  /// Fingers on the screen, from the first down to the last up.
+  final _touch = TouchSession();
 
-  /// The brightness or volume being set.
+  /// Side of the current session's swipe (set by its first finger).
+  bool? _swipeLeftSide;
+
+  /// The brightness or volume being set by the current swipe.
   double? _level;
 
   /// Last known levels, read when the player opens and refreshed at each
-  /// gesture, so a swipe never waits on the platform before it responds.
+  /// session, so a swipe never waits on the platform before it responds.
   double? _brightnessNow, _volumeNow;
 
-  Future<void> _readLevels() async {
-    try {
-      _brightnessNow = await ScreenBrightness.instance.application;
-      _volumeNow = await VolumeController.instance.getVolume();
-    } on Object {
-      // Unknown: swipes start from the middle.
-    }
-  }
+  /// Bumped by every level a swipe sets: a read that started before it is
+  /// stale and is dropped.
+  int _levelWrites = 0;
 
   /// Shown on the side being adjusted while swiping.
   ({bool brightness, double value})? _levelShown;
   Timer? _levelHide;
 
+  /// Last double-tap position (kept on the State: a rebuild between the
+  /// two taps must not lose it).
+  TapDownDetails? _lastDown;
+
+  Future<void> _readLevels() async {
+    final writes = _levelWrites;
+    try {
+      final brightness = await ScreenBrightness.instance.application;
+      final volume = await VolumeController.instance.getVolume();
+      if (writes != _levelWrites) return; // a swipe set newer values
+      _brightnessNow = brightness;
+      _volumeNow = volume;
+    } on Object {
+      // Unknown: swipes start from the middle.
+    }
+  }
+
   void _gestureStart(ScaleStartDetails d, double width) {
-    if (!_swiping) unawaited(_readLevels()); // changed with the buttons?
-    _fingers = d.pointerCount;
+    // A finger lifted mid-pinch restarts the gesture: pinch from here.
     _zoomStart = _zoom;
-    _swipeLeftSide = d.localFocalPoint.dx < width / 2;
-    _swiping = false;
-    _travel = Offset.zero;
-    _level = null;
+    if (_swipeLeftSide == null) {
+      _swipeLeftSide = d.localFocalPoint.dx < width / 2;
+      unawaited(_readLevels()); // changed with the buttons meanwhile?
+    }
   }
 
   Future<void> _gestureUpdate(ScaleUpdateDetails d, double height) async {
-    _fingers = math.max(_fingers, d.pointerCount);
-    if (_fingers >= 2) {
+    if (_touch.pinching) {
       if (d.pointerCount < 2) return;
       final z = PlayerGestures.zoom(_zoomStart, d.scale);
       if (z != _zoom) setState(() => _zoom = z);
       _showFlash('Zoom ${(z * 100).round()}%');
       return;
     }
-    _travel += d.focalPointDelta;
-    if (!_swiping) {
-      if (!PlayerGestures.isVerticalSwipe(_travel.dx, _travel.dy)) return;
-      _swiping = true;
-      _level = (_swipeLeftSide ? _brightnessNow : _volumeNow) ?? 0.5;
-    }
-    final next = PlayerGestures.level(_level!, d.focalPointDelta.dy, height);
+    if (!_touch.swipe(d.focalPointDelta.dx, d.focalPointDelta.dy)) return;
+    final left = _swipeLeftSide ?? false;
+    final next = PlayerGestures.level(
+      _level ?? (left ? _brightnessNow : _volumeNow) ?? 0.5,
+      d.focalPointDelta.dy,
+      height,
+    );
     _level = next;
-    if (_swipeLeftSide) {
+    _levelWrites++;
+    if (left) {
       _brightnessNow = next;
     } else {
       _volumeNow = next;
     }
     _levelHide?.cancel();
-    setState(() => _levelShown = (brightness: _swipeLeftSide, value: next));
-    if (_swipeLeftSide) {
+    setState(() => _levelShown = (brightness: left, value: next));
+    if (left) {
       await ScreenBrightness.instance.setApplicationScreenBrightness(next);
     } else {
       VolumeController.instance.showSystemUI = false;
@@ -296,10 +314,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  void _gestureEnd(ScaleEndDetails d) {
+  /// The last finger lifted.
+  void _touchEnd() {
     final settled = PlayerGestures.settle(_zoom);
     if (settled != _zoom) setState(() => _zoom = settled);
-    _swiping = false;
+    _swipeLeftSide = null;
+    _level = null;
     _levelHide?.cancel();
     _levelHide = Timer(const Duration(milliseconds: 700), () {
       if (mounted) setState(() => _levelShown = null);
@@ -350,12 +370,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         backgroundColor: KColors.blackout,
         body: LayoutBuilder(
           builder: (context, box) {
-            TapDownDetails? lastDown;
             return Stack(
               fit: StackFit.expand,
               children: [
                 Transform.scale(
-                  scale: _zoom,
+                  // The floating window always shows the whole picture.
+                  scale: _inPip ? 1 : _zoom,
                   child: Video(
                     controller: c.video,
                     controls: null,
@@ -372,23 +392,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       : 0,
                 ),
                 if (!_inPip) ...[
-                  // Gesture layer.
-                  GestureDetector(
+                  // Gesture layer. The Listener counts fingers for the
+                  // whole touch (see TouchSession).
+                  Listener(
                     behavior: HitTestBehavior.translucent,
-                    onTap: _locked
-                        ? () => setState(() => _controls = !_controls)
-                        : _toggleControls,
-                    onDoubleTapDown: (d) => lastDown = d,
-                    onDoubleTap: _locked
-                        ? null
-                        : () => _doubleTap(lastDown!, box.maxWidth),
-                    onScaleStart: _locked
-                        ? null
-                        : (d) => _gestureStart(d, box.maxWidth),
-                    onScaleUpdate: _locked
-                        ? null
-                        : (d) => unawaited(_gestureUpdate(d, box.maxHeight)),
-                    onScaleEnd: _locked ? null : _gestureEnd,
+                    onPointerDown: (_) => _touch.fingerDown(),
+                    onPointerUp: (_) {
+                      if (_touch.fingerUp()) _touchEnd();
+                    },
+                    onPointerCancel: (_) {
+                      if (_touch.fingerUp()) _touchEnd();
+                    },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: _locked
+                          ? () => setState(() => _controls = !_controls)
+                          : _toggleControls,
+                      onDoubleTapDown: (d) => _lastDown = d,
+                      onDoubleTap: _locked
+                          ? null
+                          : () {
+                              if (_lastDown case final d?) {
+                                _doubleTap(d, box.maxWidth);
+                              }
+                            },
+                      onScaleStart: _locked
+                          ? null
+                          : (d) => _gestureStart(d, box.maxWidth),
+                      onScaleUpdate: _locked
+                          ? null
+                          : (d) => unawaited(_gestureUpdate(d, box.maxHeight)),
+                    ),
                   ),
                   if (c.phase != PlayerPhase.playing)
                     _PrepareView(
@@ -471,11 +505,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         _panel == _Panel.none)
                       // Under the controls it would cover Play and +10; the
                       // bar has Next episode then. Kept, so it resumes.
+                      // (With a screen reader the controls never hide, so
+                      // it stays reachable there.)
                       Offstage(
-                        offstage: _controls && !_locked,
+                        offstage: _controls && !_locked && !_accessible,
                         child: _UpNext(
                           controller: c,
-                          paused: _controls && !_locked,
+                          paused: _controls && !_locked && !_accessible,
                         ),
                       ),
                   ],
@@ -626,7 +662,7 @@ class _Controls extends StatelessWidget {
                     if (c.engineStats case final es?
                         when (es.size > 0 && es.have >= es.size) ||
                             c.player.state.buffering)
-                      _EngineChip(controller: c),
+                      Flexible(child: _EngineChip(controller: c)),
                     const SizedBox(width: KSpace.x2),
                     GlassIconButton(
                       icon: Icons.cast_rounded,
@@ -651,7 +687,11 @@ class _Controls extends StatelessWidget {
                       left: 0,
                       right: 0,
                       bottom: 76 + KSpace.x3,
-                      child: Center(child: status),
+                      // ~60 pt above the row in landscape: keep it short.
+                      child: MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1.3,
+                        child: Center(child: status),
+                      ),
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -901,6 +941,8 @@ class _EngineChip extends StatelessWidget {
       child: Glass(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Text(
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           done
               ? 'Saved on this device'
               : waiting

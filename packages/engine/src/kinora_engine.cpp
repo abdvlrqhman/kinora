@@ -1654,7 +1654,7 @@ char* kn_stream_stats(kn_session* s, const char* token) {
       std::int64_t ahead = std::max<std::int64_t>(0, std::min(p * plen, file_end) - abs);
       // Only while short of data: the query waits on libtorrent's thread
       // and is called from the UI thread every second.
-      if (ahead < (std::int64_t{8} << 20) && p * plen < file_end &&
+      if (ahead < std::max<std::int64_t>(std::int64_t{8} << 20, plen) && p * plen < file_end &&
           p < static_cast<std::int64_t>(t->have.size())) {
         frontier = p;
         h = t->handle;
