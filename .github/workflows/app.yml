@@ -259,7 +259,7 @@ jobs:
           # (Test, CI and screenshot commits aren't news for the people
           # updating.)
           git log --no-merges --reverse --invert-grep \
-            --grep='^E2E' --grep='^CI:' --grep='^Goldens:' --grep='^Engine test:' \
+            --grep='^E2E' --grep='^CI:' --grep='^Docs:' --grep='^Goldens:' --grep='^Engine test:' \
             --format='### %s%n%n%b' "$range" > notes.md
           [ -s notes.md ] || echo "Kinora ${GITHUB_REF_NAME#v}" > notes.md
       - env:

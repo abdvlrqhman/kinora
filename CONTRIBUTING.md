@@ -52,8 +52,8 @@ update screen. So write the title for the people using the app:
 - Good: `Player: subtitles stay in sync after seeking`
 - Not: `fix seek handler race`
 
-Commits that start with `E2E`, `CI:`, `Goldens:` or `Engine test:` are left
-out of the notes.
+Commits that start with `E2E`, `CI:`, `Docs:`, `Goldens:` or `Engine test:`
+are left out of the notes.
 
 ### Versions
 
