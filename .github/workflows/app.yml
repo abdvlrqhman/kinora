@@ -190,6 +190,21 @@ jobs:
       - name: Player screenshots from the run
         if: always()
         run: python3 .github/scripts/e2e_shots.py e2e-ios.log e2e-shots
+      # When the app quits mid-test ("did not complete"), the simulator's
+      # crash report says where.
+      - name: Crash reports
+        if: failure()
+        run: |
+          mkdir -p crash-reports
+          find ~/Library/Logs/DiagnosticReports -mmin -60 \( -name '*.ips' -o -name '*.crash' \) 2>/dev/null | head -20 | while read -r f; do cp "$f" crash-reports/; done
+          ls crash-reports
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: e2e-iphone-crash-reports
+          path: crash-reports
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
