@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/abdvlrqhman/kinora/security/advisories/new
+    about: Privately, so it can be fixed before anyone else knows.
+  - name: Download the latest version
+    url: https://github.com/abdvlrqhman/kinora/releases/latest
+    about: Your problem may already be fixed. Kinora also updates itself.

@@ -1,0 +1,17 @@
+name: Idea
+description: Something Kinora could do better, or could do at all.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation and what gets in the way. The problem helps more than a solution.
+      placeholder: When I watch with my family, I want to...
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Optional. How you picture it working.

@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['**.md', 'tools/glass_probe/**', '.github/workflows/glass.yml']
+    paths-ignore: ['**.md', 'docs/**', '.github/ISSUE_TEMPLATE/**', 'tools/glass_probe/**', '.github/workflows/glass.yml']
   pull_request:
   workflow_dispatch:
 

@@ -1,0 +1,61 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please don't include addon links, keys, or the names of things you were watching.
+  - type: input
+    id: version
+    attributes:
+      label: Kinora version
+      description: Settings › About.
+      placeholder: "0.1.13"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and system version
+      placeholder: "iPhone 15 Pro, iOS 27.2  /  Pixel 8, Android 16"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it happens
+      options:
+        - Playing a video
+        - Casting to a TV
+        - Downloads
+        - Subtitles
+        - Finding versions or sources
+        - Home, search or title pages
+        - Updates
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: tv
+    attributes:
+      label: TV brand and model (casting only)
+      placeholder: "Samsung 5 Series (43)"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Screenshots or a screen recording help a lot.
+      placeholder: |
+        1. Opened S1 E5 and tapped Play
+        2. ...
+        Expected: ...
+        Instead: ...
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Settings › Diagnostics › Copy diagnostics, then paste here. Keys and addon links are left out.
+      render: text
