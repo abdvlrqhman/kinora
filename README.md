@@ -226,7 +226,7 @@ Built with [Flutter](https://flutter.dev),
 [libtorrent](https://libtorrent.org), [mpv](https://mpv.io) (through
 [media_kit](https://github.com/media-kit/media-kit)) and
 [liquid_glass_renderer](https://pub.dev/packages/liquid_glass_renderer).
-Type: [Big Shoulders Display](https://fonts.google.com/specimen/Big+Shoulders+Display)
+Type: [Big Shoulders Display](https://fonts.google.com/specimen/Big+Shoulders)
 and [Figtree](https://fonts.google.com/specimen/Figtree), both under the SIL
 Open Font License.
 
