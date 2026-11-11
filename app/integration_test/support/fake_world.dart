@@ -17,6 +17,7 @@ final class FakeWorld {
     this._tracker,
     this.infoHash,
     this.infoHash3,
+    this.packHash,
     this.videoBytes,
   );
 
@@ -32,6 +33,11 @@ final class FakeWorld {
 
   /// Episode 3 has a torrent of its own (the explicit-download test).
   final String infoHash3;
+
+  /// A season pack: episodes 4–6 as three files of one torrent.
+  final String packHash;
+  static const packName = 'Kinora.E2E.S01E04-E06.1080p.WEB-DL-KNR';
+  static const packEpisodes = [4, 5, 6];
   final Uint8List videoBytes;
 
   static String fileFor(int episode) =>
@@ -48,13 +54,20 @@ final class FakeWorld {
     await File('${seedDir.path}/${fileFor(3)}').writeAsBytes(video);
     final torrent = _torrent(fileName, video);
     final torrent3 = _torrent(fileFor(3), video);
+    final packDir = await Directory('${seedDir.path}/$packName').create();
+    for (final e in packEpisodes) {
+      await File('${packDir.path}/${fileFor(e)}').writeAsBytes(video);
+    }
+    final pack = _pack(packName, [
+      for (final e in packEpisodes) (fileFor(e), video),
+    ]);
     final seeder = KinoraEngine.start(
       EngineConfig(
         testMode: true,
         resumeDir: (await Directory('${root.path}/seed-resume').create()).path,
       ),
     );
-    for (final t in [torrent, torrent3]) {
+    for (final t in [torrent, torrent3, pack]) {
       seeder.add(
         AddTorrent.torrentFile(t.bytes, savePath: seedDir.path, seedMode: true),
       );
@@ -89,6 +102,7 @@ final class FakeWorld {
       tracker,
       torrent.infoHash,
       torrent3.infoHash,
+      pack.infoHash,
       video,
     );
     addon.listen(world._serve);
@@ -130,6 +144,13 @@ final class FakeWorld {
             {'id': '$imdb:1:1', 'season': 1, 'episode': 1, 'title': 'Pilot'},
             {'id': '$imdb:1:2', 'season': 1, 'episode': 2, 'title': 'Second'},
             {'id': '$imdb:1:3', 'season': 1, 'episode': 3, 'title': 'Third'},
+            for (final e in packEpisodes)
+              {
+                'id': '$imdb:1:$e',
+                'season': 1,
+                'episode': e,
+                'title': 'Pack $e',
+              },
           ],
         },
       };
@@ -140,8 +161,12 @@ final class FakeWorld {
           {
             'name': 'E2E\n1080p',
             'title': '${fileFor(ep)}\n👤 5 💾 80 KB ⚙️ E2E',
-            'infoHash': ep == 3 ? infoHash3 : infoHash,
-            'fileIdx': 0,
+            'infoHash': packEpisodes.contains(ep)
+                ? packHash
+                : ep == 3
+                ? infoHash3
+                : infoHash,
+            'fileIdx': packEpisodes.contains(ep) ? ep - packEpisodes.first : 0,
             'behaviorHints': {'filename': fileFor(ep)},
             'sources': ['tracker:http://127.0.0.1:${_tracker.port}/announce'],
           },
@@ -172,6 +197,43 @@ final class FakeWorld {
     await _tracker.close(force: true);
     seeder.dispose();
     await root.delete(recursive: true);
+  }
+
+  /// A multi-file torrent (a folder [name] holding [files]); pieces run
+  /// across file boundaries, as in real packs.
+  static ({Uint8List bytes, String infoHash}) _pack(
+    String name,
+    List<(String, Uint8List)> files,
+  ) {
+    const pieceLength = 16384;
+    final all = BytesBuilder(copy: false);
+    for (final (_, data) in files) {
+      all.add(data);
+    }
+    final data = all.takeBytes();
+    final pieces = BytesBuilder(copy: false);
+    for (var off = 0; off < data.length; off += pieceLength) {
+      final end = off + pieceLength < data.length
+          ? off + pieceLength
+          : data.length;
+      pieces.add(sha1.convert(Uint8List.sublistView(data, off, end)).bytes);
+    }
+    final info = <String, Object?>{
+      'name': name,
+      'piece length': pieceLength,
+      'pieces': pieces.takeBytes(),
+      'files': [
+        for (final (file, bytes) in files)
+          {
+            'length': bytes.length,
+            'path': [file],
+          },
+      ],
+    };
+    return (
+      bytes: bencode({'info': info}),
+      infoHash: sha1.convert(bencode(info)).toString(),
+    );
   }
 
   static ({Uint8List bytes, String infoHash}) _torrent(

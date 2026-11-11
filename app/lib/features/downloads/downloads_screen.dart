@@ -107,7 +107,11 @@ DownloadStatus downloadStatus(DownloadRow r, {double? rate}) {
     ),
     'downloading' when pct != null => (
       strong: 'Downloading ${(pct * 100).floor()}%',
-      soft: [?sizes, ?etaLabel(r.totalBytes - r.doneBytes, rate)].join('  '),
+      soft: [
+        ?sizes,
+        if (rate != null && rate > 0) Fmt.speed(rate.round()),
+        ?etaLabel(r.totalBytes - r.doneBytes, rate),
+      ].join('  '),
       color: KColors.lamp,
       progress: pct,
     ),

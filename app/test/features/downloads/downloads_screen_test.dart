@@ -103,6 +103,11 @@ void main() {
     expect(groups.first.isShow, isTrue);
     expect(groups.last.isShow, isFalse);
     expect(downloadStatus(row('x', 1, 1)).strong, 'Downloading 40%');
+    // While it moves: the speed, then the time left.
+    expect(
+      downloadStatus(row('x', 1, 1), rate: (2 << 20).toDouble()).soft,
+      allOf(contains('2 MB/s'), contains('left')),
+    );
   });
 
   kitTest('invites the next step when empty', (tester) async {

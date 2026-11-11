@@ -1,5 +1,4 @@
 import AVFoundation
-import BackgroundTasks
 import Flutter
 import UIKit
 
@@ -38,43 +37,36 @@ import UIKit
   }
 }
 
-/// Keeps torrent downloads alive in the background: a silent audio session
-/// (what sideloaded torrent clients rely on) plus, on iOS 26+, a continued
-/// processing task that shows system progress. Every step is best-effort;
-/// failures only log.
+/// Keeps torrent downloads (and casting) alive in the background with a
+/// silent audio session, what sideloaded torrent clients rely on. (iOS 26's
+/// continued processing tasks don't fit: iOS ends them when progress stalls,
+/// as it does while a torrent finds peers, shows "Task failed", and can then
+/// stop the app.) Best-effort; failures only log.
 final class KinoraBackground {
   static let shared = KinoraBackground()
 
   private let engine = AVAudioEngine()
   private let node = AVAudioPlayerNode()
   private var audioRunning = false
-  private var channel: FlutterMethodChannel?
-  private var task: AnyObject?  // BGContinuedProcessingTask on iOS 26+
   private var observers: [NSObjectProtocol] = []
 
   func attach(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: "kinora/background", binaryMessenger: messenger)
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { return result(nil) }
-      let args = call.arguments as? [String: Any] ?? [:]
       switch call.method {
       case "start":
         self.startAudio()
-        self.beginTask(title: args["title"] as? String ?? "Downloading",
-                       text: args["text"] as? String ?? "")
         result(nil)
       case "update":
-        self.updateTask(text: args["text"] as? String, progress: args["progress"] as? Double)
-        result(nil)
+        result(nil)  // (the status shows in the app)
       case "stop":
-        self.endTask(success: args["success"] as? Bool ?? true)
         self.stopAudio()
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
     }
-    self.channel = channel
   }
 
   // MARK: silent audio
@@ -128,43 +120,5 @@ final class KinoraBackground {
       self.audioRunning = false
       self.startAudio()
     })
-  }
-
-  // MARK: continued processing (iOS 26+)
-
-  private func beginTask(title: String, text: String) {
-    guard #available(iOS 26.0, *), task == nil else { return }
-    // A handler per request: a single wildcard handler doesn't route
-    // (developer forums), registering right before submit does.
-    let id = "io.github.abdvlrqhman.kinora.downloads.\(UUID().uuidString)"
-    let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main) { [weak self] t in
-      guard let self = self, let t = t as? BGContinuedProcessingTask else { return }
-      self.task = t
-      t.progress.totalUnitCount = 1000
-      t.expirationHandler = { [weak self] in
-        self?.task = nil
-        self?.channel?.invokeMethod("expired", arguments: nil)
-      }
-    }
-    guard registered else { return }
-    let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: text)
-    request.strategy = .fail
-    do {
-      try BGTaskScheduler.shared.submit(request)
-    } catch {
-      NSLog("Kinora: continued processing unavailable: \(error)")
-    }
-  }
-
-  private func updateTask(text: String?, progress: Double?) {
-    guard #available(iOS 26.0, *), let t = task as? BGContinuedProcessingTask else { return }
-    if let text = text { t.updateTitle(t.title, subtitle: text) }
-    if let p = progress { t.progress.completedUnitCount = Int64(max(0, min(1, p)) * 1000) }
-  }
-
-  private func endTask(success: Bool) {
-    guard #available(iOS 26.0, *), let t = task as? BGContinuedProcessingTask else { return }
-    t.setTaskCompleted(success: success)
-    task = nil
   }
 }

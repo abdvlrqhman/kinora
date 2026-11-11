@@ -490,5 +490,43 @@ void main() {
       reason: 'plays from the downloaded file',
     );
     container.read(routerProvider).pop();
+
+    // A season pack: three episodes of one torrent, downloaded at the same
+    // moment, as when Download is tapped on each in quick succession.
+    final pack = [
+      for (final e in FakeWorld.packEpisodes)
+        PlayRequest(
+          type: 'series',
+          mediaId: FakeWorld.imdb,
+          videoId: '${FakeWorld.imdb}:1:$e',
+          title: FakeWorld.show,
+          season: 1,
+          episode: e,
+          episodeTitle: 'Pack $e',
+        ),
+    ];
+    final actions = container.read(downloadActionsProvider);
+    await Future.wait([for (final r in pack) actions.download(r)]);
+    List<DownloadRow> packRows() => [
+      for (final d
+          in container.read(downloadsProvider).value ?? const <DownloadRow>[])
+        if (pack.any((r) => r.videoId == d.videoId)) d,
+    ];
+    await pumpUntil(
+      tester,
+      () =>
+          packRows().length == pack.length &&
+          packRows().every((d) => d.state == 'completed'),
+      reason: 'season pack: three downloads at once',
+      state: () => [
+        for (final d in packRows())
+          '${d.videoId}: ${d.state} ${d.error} ${d.doneBytes}/${d.totalBytes} '
+              'file ${d.fileIndex} at ${d.filePath}',
+      ].join('\n'),
+    );
+    for (final d in packRows()) {
+      expect(d.filePath, startsWith(paths.downloads.path));
+      expect(File(d.filePath!).readAsBytesSync(), world.videoBytes);
+    }
   }, timeout: const Timeout(Duration(minutes: 6)));
 }

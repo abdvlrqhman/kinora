@@ -11,8 +11,7 @@ import '../core/log.dart';
 /// Android: a foreground service (type `specialUse`: no 6-hour `dataSync`
 /// budget; Kinora is sideloaded) with wake and Wi-Fi locks and a progress
 /// notification. iOS: a silent audio session keeps the process alive (the
-/// approach sideloaded torrent clients use) plus, on iOS 26+, a continued
-/// processing task with system progress UI. HTTP/debrid downloads don't need
+/// approach sideloaded torrent clients use). HTTP/debrid downloads don't need
 /// this: they use the OS background transfer services.
 final class BackgroundKeeper {
   BackgroundKeeper._();
