@@ -49,6 +49,10 @@ final class DownloadsService implements DownloadActions {
   /// Torrents moving into a download's folder: the rows of the same torrent
   /// that start meanwhile take that folder, not the one being left.
   final _movingTo = <String, String>{};
+
+  /// Turn checks run one at a time, so downloads started together count
+  /// each other (see [_takeTurn]).
+  Future<void> _turns = Future.value();
   bool _onWifi = true;
   bool _started = false;
   bool _disposed = false;
@@ -277,6 +281,7 @@ final class DownloadsService implements DownloadActions {
     final id = row.id;
     final ih = row.infoHash!;
     final owner = _owner(id);
+    if (!await _takeTurn(id)) return;
     try {
       final engine = _engines.engine;
       final added = _engines.add(
@@ -375,6 +380,7 @@ final class DownloadsService implements DownloadActions {
     String url,
     String? filename,
   ) async {
+    if (!await _takeTurn(id)) return;
     final name = _safe(filename ?? p.basename(Uri.parse(url).path));
     final task = DownloadTask(
       taskId: id,
@@ -431,6 +437,7 @@ final class DownloadsService implements DownloadActions {
       const DownloadsCompanion(state: Value('paused'), error: Value(null)),
     );
     await _refreshKeepAlive();
+    unawaited(_startNext());
   }
 
   @override
@@ -481,6 +488,7 @@ final class DownloadsService implements DownloadActions {
       await _deleteFiles(row);
     }
     await _refreshKeepAlive();
+    unawaited(_startNext());
   }
 
   static const _deferredKey = 'downloads.deferredDeletes';
@@ -604,6 +612,68 @@ final class DownloadsService implements DownloadActions {
           );
     }
   }
+
+  /// Takes a turn for [id] under Settings › Downloads at once: true when it
+  /// may start (it's marked downloading), false when it's left waiting for
+  /// its turn ([_startNext] starts it later).
+  Future<bool> _takeTurn(String id) {
+    final turn = Completer<bool>();
+    _turns = _turns.then((_) async {
+      var ok = true;
+      try {
+        final limit = _settings.downloadsAtOnce;
+        if (limit > 0) {
+          final others =
+              await (_db.select(_db.downloads)..where(
+                    (t) =>
+                        t.state.equals('downloading') & t.id.equals(id).not(),
+                  ))
+                  .get();
+          ok = others.length < limit;
+        }
+        await _update(
+          id,
+          ok
+              ? const DownloadsCompanion(
+                  state: Value('downloading'),
+                  error: Value(null),
+                )
+              : const DownloadsCompanion(
+                  state: Value('queued'),
+                  error: Value(waitingForTurn),
+                ),
+        );
+      } on Object catch (e) {
+        Log.w('downloads', 'turn: $e'); // never block a download on this
+      }
+      turn.complete(ok);
+    });
+    return turn.future;
+  }
+
+  /// Starts the downloads waiting for their turn, oldest first, while turns
+  /// are free.
+  Future<void> _startNext() async {
+    if (!_alive) return;
+    final limit = _settings.downloadsAtOnce;
+    final rows =
+        await (_db.select(_db.downloads)
+              ..where((t) => t.state.isIn(['queued', 'downloading']))
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+    var free = limit <= 0
+        ? rows.length
+        : limit - rows.where((r) => r.state == 'downloading').length;
+    for (final r in rows) {
+      if (free <= 0) break;
+      if (r.state != 'queued' || r.error != waitingForTurn) continue;
+      free--;
+      unawaited(_whileAlive(() => resume(r.id)));
+    }
+  }
+
+  /// Settings › Downloads at once changed: more turns may be free.
+  void onLimitChanged() => unawaited(_startNext());
 
   static List<String> _subtitlePaths(DownloadRow row) {
     try {
@@ -851,6 +921,7 @@ final class DownloadsService implements DownloadActions {
       ),
     );
     Log.i('downloads', 'completed ${_label(r)}');
+    unawaited(_startNext());
     if (r.infoHash != null) _finishClaim(r.infoHash!, _owner(r.id));
   }
 
@@ -1147,6 +1218,7 @@ final class DownloadsService implements DownloadActions {
       DownloadsCompanion(state: const Value('failed'), error: Value(message)),
     );
     await _refreshKeepAlive();
+    unawaited(_startNext());
   }
 
   String _folderFor(PlayRequest r) {
@@ -1197,6 +1269,10 @@ final class DownloadsService implements DownloadActions {
 
 final downloadsServiceProvider = Provider<DownloadsService>((ref) {
   final s = DownloadsService(ref);
+  ref.listen(
+    settingsProvider.select((s) => s.downloadsAtOnce),
+    (_, _) => s.onLimitChanged(),
+  );
   ref.onDispose(s.dispose);
   return s;
 });

@@ -121,6 +121,12 @@ DownloadStatus downloadStatus(DownloadRow r, {double? rate}) {
       color: KColors.lamp,
       progress: null,
     ),
+    'queued' when r.error == waitingForTurn => (
+      strong: waitingForTurn,
+      soft: sizes,
+      color: KColors.haze,
+      progress: null,
+    ),
     'paused' when r.error == waitingForWifi => (
       strong: waitingForWifi,
       soft: sizes,

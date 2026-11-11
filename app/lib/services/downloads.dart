@@ -61,6 +61,9 @@ Future<String?> completedDownloadFile(AppDatabase db, String videoId) async {
   return path != null && File(path).existsSync() ? path : null;
 }
 
+/// A download waiting for one of the others to finish (Downloads at once).
+const waitingForTurn = 'Waiting for its turn';
+
 /// A torrent download of [videoId] still under way (or waiting), with its
 /// torrent known: playing it streams that same torrent, so the downloaded
 /// part plays at once.

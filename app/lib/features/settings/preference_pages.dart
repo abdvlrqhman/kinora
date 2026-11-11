@@ -108,6 +108,16 @@ class DownloadSettingsPage extends ConsumerWidget {
           value: s.seedAfterDownload,
           onChanged: (v) => _save(ref, (s) => s.copyWith(seedAfterDownload: v)),
         ),
+        const SectionTitle('Downloads at once'),
+        const Note(
+          'One at a time finishes each episode sooner; more share your '
+          'connection. The others wait for their turn.',
+        ),
+        Segmented<int>(
+          options: const [(1, '1'), (2, '2'), (3, '3'), (0, 'All')],
+          value: s.downloadsAtOnce,
+          onChanged: (v) => _save(ref, (s) => s.copyWith(downloadsAtOnce: v)),
+        ),
         const SectionTitle('Keep streamed data for'),
         const Note(
           'Lets you rewatch without fetching it again. Off deletes it when '

@@ -1,10 +1,12 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/features/downloads/downloads_screen.dart';
 import 'package:kinora/features/downloads/storage.dart';
+import 'package:kinora/services/downloads.dart';
 
 import '../settings/settings_harness.dart';
 
@@ -103,6 +105,13 @@ void main() {
     expect(groups.first.isShow, isTrue);
     expect(groups.last.isShow, isFalse);
     expect(downloadStatus(row('x', 1, 1)).strong, 'Downloading 40%');
+    // Past Settings › Downloads at once: it waits, saying so.
+    final waiting = row(
+      'x',
+      1,
+      1,
+    ).copyWith(state: 'queued', error: const Value(waitingForTurn));
+    expect(downloadStatus(waiting).strong, 'Waiting for its turn');
     // While it moves: the speed, then the time left.
     expect(
       downloadStatus(row('x', 1, 1), rate: (2 << 20).toDouble()).soft,

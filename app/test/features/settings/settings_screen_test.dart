@@ -115,11 +115,17 @@ void main() {
     );
     await tester.tap(find.text('Keep fully streamed episodes'));
     await tester.tap(find.text('Share after downloading'));
-    await reveal(tester, find.bySemanticsLabel('1 week'));
+    // (Into the middle of the screen: the tab bar floats over the bottom.)
+    await tester.ensureVisible(find.bySemanticsLabel('2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('2'));
+    await tester.ensureVisible(find.bySemanticsLabel('1 week'));
+    await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('1 week'));
     await tester.pumpAndSettle();
     expect(dl.settings.keepCompletedStreams, isFalse);
     expect(dl.settings.seedAfterDownload, isTrue);
+    expect(dl.settings.downloadsAtOnce, 2);
     expect(dl.settings.keepStreamsHours, 168);
     // The battery row is Android-only.
     await reveal(tester, find.text('Off'));

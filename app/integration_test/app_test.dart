@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:kinora/app/app.dart';
+import 'package:kinora/app/providers.dart';
 import 'package:kinora/app/router.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/paths.dart';
@@ -511,6 +512,11 @@ void main() {
           in container.read(downloadsProvider).value ?? const <DownloadRow>[])
         if (pack.any((r) => r.videoId == d.videoId)) d,
     ];
+    // Two at once (Settings › Downloads at once): the third waits its turn.
+    await container
+        .read(settingsProvider.notifier)
+        .update((s) => s.copyWith(downloadsAtOnce: 2));
+    var mostAtOnce = 0;
     // The first finds the pack's details; the other two, tapped together
     // right after, start from a torrent Kinora already has.
     await actions.download(pack.first);
@@ -522,10 +528,13 @@ void main() {
     await Future.wait([for (final r in pack.skip(1)) actions.download(r)]);
     await pumpUntil(
       tester,
-      () =>
-          packRows().length == pack.length &&
-          packRows().every((d) => d.state == 'completed'),
-      reason: 'season pack: three downloads at once',
+      () {
+        final now = packRows().where((d) => d.state == 'downloading').length;
+        if (now > mostAtOnce) mostAtOnce = now;
+        return packRows().length == pack.length &&
+            packRows().every((d) => d.state == 'completed');
+      },
+      reason: 'season pack: three downloads, two at once',
       state: () => [
         for (final d in packRows())
           '${d.videoId}: ${d.state} ${d.error} ${d.doneBytes}/${d.totalBytes} '
@@ -536,7 +545,8 @@ void main() {
       expect(d.filePath, startsWith(paths.downloads.path), reason: d.videoId);
       expect(File(d.filePath!).readAsBytesSync(), world.videoBytes);
     }
+    expect(mostAtOnce, lessThanOrEqualTo(2), reason: 'Downloads at once: 2');
     // ignore: avoid_print
-    print('E2E ok: season pack episodes saved in Downloads');
+    print('E2E ok: season pack episodes saved in Downloads, two at once');
   }, timeout: const Timeout(Duration(minutes: 6)));
 }

@@ -99,6 +99,7 @@ final class AppSettings {
     this.skipIntros = true,
     this.wifiOnlyDownloads = true,
     this.autoDownloadNext = false,
+    this.downloadsAtOnce = 0,
     this.keepCompletedStreams = true,
     this.deleteWatchedDownloads = false,
     this.seedWhileWatching = true,
@@ -128,6 +129,7 @@ final class AppSettings {
     skipIntros: j['skipIntros'] as bool? ?? true,
     wifiOnlyDownloads: j['wifiOnlyDownloads'] as bool? ?? true,
     autoDownloadNext: j['autoDownloadNext'] as bool? ?? false,
+    downloadsAtOnce: (j['downloadsAtOnce'] as num? ?? 0).toInt(),
     keepCompletedStreams: j['keepCompletedStreams'] as bool? ?? true,
     deleteWatchedDownloads: j['deleteWatchedDownloads'] as bool? ?? false,
     seedWhileWatching: j['seedWhileWatching'] as bool? ?? true,
@@ -168,6 +170,10 @@ final class AppSettings {
   final bool skipIntros;
   final bool wifiOnlyDownloads;
   final bool autoDownloadNext;
+
+  /// How many downloads run at the same time; the others wait for their
+  /// turn. 0: all at once.
+  final int downloadsAtOnce;
 
   /// Streams that reach 100% move into Downloads instead of being deleted.
   final bool keepCompletedStreams;
@@ -211,6 +217,7 @@ final class AppSettings {
     'skipIntros': skipIntros,
     'wifiOnlyDownloads': wifiOnlyDownloads,
     'autoDownloadNext': autoDownloadNext,
+    'downloadsAtOnce': downloadsAtOnce,
     'keepCompletedStreams': keepCompletedStreams,
     'deleteWatchedDownloads': deleteWatchedDownloads,
     'seedWhileWatching': seedWhileWatching,
@@ -238,6 +245,7 @@ final class AppSettings {
     bool? skipIntros,
     bool? wifiOnlyDownloads,
     bool? autoDownloadNext,
+    int? downloadsAtOnce,
     bool? keepCompletedStreams,
     bool? deleteWatchedDownloads,
     bool? seedWhileWatching,
@@ -262,6 +270,7 @@ final class AppSettings {
     skipIntros: skipIntros ?? this.skipIntros,
     wifiOnlyDownloads: wifiOnlyDownloads ?? this.wifiOnlyDownloads,
     autoDownloadNext: autoDownloadNext ?? this.autoDownloadNext,
+    downloadsAtOnce: downloadsAtOnce ?? this.downloadsAtOnce,
     keepCompletedStreams: keepCompletedStreams ?? this.keepCompletedStreams,
     deleteWatchedDownloads:
         deleteWatchedDownloads ?? this.deleteWatchedDownloads,
