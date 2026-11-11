@@ -45,6 +45,10 @@ final class DownloadsService implements DownloadActions {
 
   /// Pauses Wi-Fi-only downloads once Wi-Fi has been gone for a while.
   Timer? _offWifi;
+
+  /// Torrents moving into a download's folder: the rows of the same torrent
+  /// that start meanwhile take that folder, not the one being left.
+  final _movingTo = <String, String>{};
   bool _onWifi = true;
   bool _started = false;
   bool _disposed = false;
@@ -67,6 +71,7 @@ final class DownloadsService implements DownloadActions {
   Future<void> start() async {
     if (_started) return;
     _started = true;
+    await _repairRelativePaths();
     await _rebaseMovedPaths();
     _http = FileDownloader().updates.listen(
       (u) => _whileAlive(() => _onHttpUpdate(u)),
@@ -324,10 +329,16 @@ final class DownloadsService implements DownloadActions {
           )..where((t) => t.infoHash.equals(added))).get()).where(
             (r) => r.id != id,
           );
-      final st = engine.status(added);
-      var base = st?.savePath ?? row.directory;
-      if (others.isEmpty && !p.equals(base, row.directory)) {
-        engine.moveStorage(added, row.directory);
+      var base = _movingTo[added] ?? engine.status(added)?.savePath ?? '';
+      // Downloads live in Downloads: not in the stream buffer (a pack that
+      // was streamed first), and never at a relative path.
+      final misplaced =
+          !p.isAbsolute(base) || EngineService.isStreamData(_paths, base);
+      if (misplaced || (others.isEmpty && !p.equals(base, row.directory))) {
+        if (!p.equals(base, row.directory)) {
+          engine.moveStorage(added, row.directory);
+          _movingTo[added] = row.directory;
+        }
         base = row.directory;
       }
       final path = p.join(base, file.path);
@@ -516,6 +527,20 @@ final class DownloadsService implements DownloadActions {
         .insertOnConflictUpdate(
           KeyValue(key: _deferredKey, value: jsonEncode(all)),
         );
+  }
+
+  /// 0.1.13 and before could save a pack's later episodes with a path
+  /// missing its folder: their files are in the download's folder.
+  Future<void> _repairRelativePaths() async {
+    for (final r in await _db.select(_db.downloads).get()) {
+      final path = r.filePath;
+      if (path == null || p.isAbsolute(path)) continue;
+      Log.i('downloads', 'path repaired: ${_label(r)}');
+      await _update(
+        r.id,
+        DownloadsCompanion(filePath: Value(p.join(r.directory, path))),
+      );
+    }
   }
 
   /// After an iOS update the files are where they were, under a new
@@ -784,7 +809,20 @@ final class DownloadsService implements DownloadActions {
 
   Future<void> _onEngineEvent(EngineEvent e) async {
     if (!_alive) return;
-    if (e is TorrentFinished) {
+    if (e is StorageMoved) {
+      _movingTo.remove(e.infoHash);
+    } else if (e is StorageMoveFailed && _movingTo.remove(e.infoHash) != null) {
+      Log.w('downloads', 'moving ${e.infoHash} failed: ${e.message}');
+      final rows = await (_db.select(
+        _db.downloads,
+      )..where((t) => t.infoHash.equals(e.infoHash))).get();
+      for (final r in rows.where((r) => r.state != 'completed')) {
+        await _fail(
+          r.id,
+          'Couldn’t move this into Downloads. Check free space, then tap to try again.',
+        );
+      }
+    } else if (e is TorrentFinished) {
       // Finished means every *claimed* file is done; check each row's own.
       await _tick();
     } else if (e is TorrentFileError) {

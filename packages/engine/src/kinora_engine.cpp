@@ -496,6 +496,9 @@ void handle_alert(kn_session* s, lt::alert* a) {
     if (d->op == lt::operation_t::connect) s->connect_failures = n + 1;
     return;
   }
+  if (auto* te = lt::alert_cast<lt::tracker_error_alert>(a)) {
+    if (te->error == lt::errors::announce_skipped) return;
+  }
   if (a->category() & lt::alert_category::error) {
     push_log(s, a->message());
   }
@@ -1352,7 +1355,10 @@ char* kn_add(kn_session* s, const uint8_t* params, int32_t params_len) {
       }
     }
     if (ti) {
-      lt::torrent_status st = h.status(lt::torrent_handle::query_pieces);
+      // Every field (save path included): this cached status is what the
+      // app reads until the next update, right after adding a torrent it
+      // already had.
+      lt::torrent_status st = h.status();
       std::lock_guard<std::mutex> lk(s->mu);
       Torrent& t = s->torrents[ih];
       init_pieces(t, &st.pieces);

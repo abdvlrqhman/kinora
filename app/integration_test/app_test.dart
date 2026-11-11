@@ -506,12 +506,20 @@ void main() {
         ),
     ];
     final actions = container.read(downloadActionsProvider);
-    await Future.wait([for (final r in pack) actions.download(r)]);
     List<DownloadRow> packRows() => [
       for (final d
           in container.read(downloadsProvider).value ?? const <DownloadRow>[])
         if (pack.any((r) => r.videoId == d.videoId)) d,
     ];
+    // The first finds the pack's details; the other two, tapped together
+    // right after, start from a torrent Kinora already has.
+    await actions.download(pack.first);
+    await pumpUntil(
+      tester,
+      () => packRows().any((d) => d.totalBytes > 0),
+      reason: 'season pack: the first episode found its file',
+    );
+    await Future.wait([for (final r in pack.skip(1)) actions.download(r)]);
     await pumpUntil(
       tester,
       () =>
@@ -525,8 +533,10 @@ void main() {
       ].join('\n'),
     );
     for (final d in packRows()) {
-      expect(d.filePath, startsWith(paths.downloads.path));
+      expect(d.filePath, startsWith(paths.downloads.path), reason: d.videoId);
       expect(File(d.filePath!).readAsBytesSync(), world.videoBytes);
     }
+    // ignore: avoid_print
+    print('E2E ok: season pack episodes saved in Downloads');
   }, timeout: const Timeout(Duration(minutes: 6)));
 }

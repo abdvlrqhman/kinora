@@ -83,6 +83,30 @@ void main() {
     expect(KinoraEngine.version(), contains('libtorrent 2.'));
   }, skip: _lib == null ? 'KINORA_ENGINE_LIB not set' : false);
 
+  // The app adds a pack's torrent once per episode it downloads, and reads
+  // where the files live right after: an empty answer made relative paths.
+  test(
+    'adding a torrent it already has: its save path is known at once',
+    () async {
+      final engine = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory('${root.path}/again').create()).path,
+          statePath: '${root.path}/again.state',
+        ),
+      );
+      addTearDown(engine.dispose);
+      final dir = '${root.path}/seed';
+      AddTorrent add() =>
+          AddTorrent.torrentFile(torrent.bytes, savePath: dir, seedMode: true);
+      final ih = engine.add(add());
+      expect(engine.status(ih)?.savePath, dir);
+      expect(engine.add(add()), ih);
+      expect(engine.status(ih)?.savePath, dir);
+    },
+    skip: _lib == null ? 'KINORA_ENGINE_LIB not set' : false,
+  );
+
   test(
     'magnet → metadata → ranged HTTP streaming → resume',
     () async {
