@@ -182,6 +182,16 @@ void main() {
     expect(kit.paths.downloads.listSync(), isEmpty);
   });
 
+  test('redact keeps Kinora’s own setting names', () {
+    final out = redact(
+      '{"enabledSubtitleProviders":["subdl"],"token":"sk_9f8e7d6c5b4a39281706f5e4"}',
+      const [],
+      {'enabledSubtitleProviders'},
+    );
+    expect(out, contains('enabledSubtitleProviders'));
+    expect(out, isNot(contains('sk_9f8e')));
+  });
+
   test('redact hides keys, addon configs and long tokens', () {
     const key = 'abcd1234secret';
     final out = redact(

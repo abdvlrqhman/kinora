@@ -172,10 +172,11 @@ final class EngineService {
 
   /// [owner] no longer needs [infoHash]. Returns whether anyone still does.
   bool release(String infoHash, String owner) {
-    Log.d('engine', 'release ${_short(infoHash)} $owner');
     final m = _claims[infoHash];
-    m?.remove(owner);
-    if (m != null && m.isEmpty) _claims.remove(infoHash);
+    // (Pausing or deleting a download that isn't running holds nothing.)
+    if (m?.remove(owner) == null) return isClaimed(infoHash);
+    Log.d('engine', 'release ${_short(infoHash)} $owner');
+    if (m!.isEmpty) _claims.remove(infoHash);
     _applyPriorities(infoHash);
     return isClaimed(infoHash);
   }

@@ -42,6 +42,9 @@ final class DownloadsService implements DownloadActions {
   StreamSubscription<TaskUpdate>? _http;
   StreamSubscription<List<ConnectivityResult>>? _net;
   Timer? _poll;
+
+  /// Pauses Wi-Fi-only downloads once Wi-Fi has been gone for a while.
+  Timer? _offWifi;
   bool _onWifi = true;
   bool _started = false;
   bool _disposed = false;
@@ -70,7 +73,15 @@ final class DownloadsService implements DownloadActions {
     );
     await FileDownloader().start();
     _net = Connectivity().onConnectivityChanged.listen(_onNetwork);
-    _onWifi = _isWifi(await Connectivity().checkConnectivity());
+    final net = await Connectivity().checkConnectivity();
+    // iOS can answer "none" before its network monitor has looked: that's
+    // unknown, not "off Wi-Fi" (the first network event says for sure).
+    _onWifi = net.every((r) => r == ConnectivityResult.none) || _isWifi(net);
+    Log.i(
+      'downloads',
+      'network ${net.map((r) => r.name).join('+')}: '
+          '${_onWifi ? 'Wi-Fi' : 'not Wi-Fi'}',
+    );
     await _flushDeferred();
     // An HTTP row whose task the system no longer knows (killed between
     // saving the row and queuing it) would say "downloading" forever.
@@ -334,6 +345,7 @@ final class DownloadsService implements DownloadActions {
         );
       }
     } on EngineException catch (e) {
+      Log.w('downloads', 'engine: ${e.message}');
       _retire(ih, owner);
       await _fail(
         id,
@@ -910,8 +922,29 @@ final class DownloadsService implements DownloadActions {
 
   Future<void> _onNetwork(List<ConnectivityResult> r) async {
     final wifi = _isWifi(r);
+    Log.i('downloads', 'network ${r.map((x) => x.name).join('+')}');
+    if (wifi) {
+      _offWifi?.cancel();
+      _offWifi = null;
+      await _setWifi(true);
+    } else if (_onWifi && _offWifi == null) {
+      // A Wi-Fi blip (roaming, a VPN reconnecting) doesn't pause anything.
+      _offWifi = Timer(const Duration(seconds: 10), () {
+        _offWifi = null;
+        unawaited(_whileAlive(() => _setWifi(false)));
+      });
+    }
+  }
+
+  Future<void> _setWifi(bool wifi) async {
     if (wifi == _onWifi) return;
     _onWifi = wifi;
+    Log.i(
+      'downloads',
+      wifi
+          ? 'on Wi-Fi: resuming'
+          : 'off Wi-Fi${_settings.wifiOnlyDownloads ? ': pausing (Wi-Fi only)' : ''}',
+    );
     if (!_settings.wifiOnlyDownloads) return;
     final rows = await (_db.select(
       _db.downloads,
@@ -1069,6 +1102,8 @@ final class DownloadsService implements DownloadActions {
       (_db.update(_db.downloads)..where((t) => t.id.equals(id))).write(c);
 
   Future<void> _fail(String id, String message) async {
+    final row = await _row(id);
+    Log.w('downloads', 'failed ${row == null ? id : _label(row)}: $message');
     await _update(
       id,
       DownloadsCompanion(state: const Value('failed'), error: Value(message)),
@@ -1118,6 +1153,7 @@ final class DownloadsService implements DownloadActions {
     unawaited(_events?.cancel());
     unawaited(_http?.cancel());
     unawaited(_net?.cancel());
+    _offWifi?.cancel();
   }
 }
 

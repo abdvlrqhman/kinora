@@ -188,7 +188,9 @@ MetaDetail seriesMeta({
     2: ['North Wind', 'The Long Night', 'Open Water'],
     3: ['Return', 'Beacons'],
   };
-  final past = fixtureNow.subtract(const Duration(days: 400));
+  // Aired dates are fixed, so screen renders don't change from day to day;
+  // only S2 E3's (never shown in a render) follows today, to stay unaired.
+  final past = DateTime(2025, 1, 6);
   return MetaDetail(
     id: 'tt200',
     type: 'series',

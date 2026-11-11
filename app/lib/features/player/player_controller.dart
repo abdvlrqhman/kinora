@@ -1250,8 +1250,42 @@ class PlayerController extends ChangeNotifier {
   /// Buffer numbers for torrent streams (null otherwise). [ready] is the
   /// percentage toward enough data to play on: 8 MB ahead, or the whole
   /// next piece when pieces are bigger (nothing reads before it's whole).
-  ({int bufferedAhead, int have, int size, int peers, int rate, int ready})?
+  /// [finishing]: see [startupReady].
+  ({
+    int bufferedAhead,
+    int have,
+    int size,
+    int peers,
+    int rate,
+    int ready,
+    bool finishing,
+  })?
   engineStats;
+
+  /// The start-up progress shown, which never goes back. Opening a file,
+  /// the player reads its start, then often its end (where MKV and MP4
+  /// keep their index), then the resume point: [raw] restarts at each.
+  /// Once it got near done, a restart reads as "finishing" (Almost ready)
+  /// instead of 0%. Returns the new peak and whether it's finishing.
+  @visibleForTesting
+  static ({int shown, bool finishing}) startupReady(
+    int raw,
+    int peak, {
+    required bool finishing,
+  }) {
+    final restarted = peak >= 90 && raw < peak - 30;
+    return (
+      shown: raw > peak ? raw : peak,
+      finishing: (finishing || restarted) && raw < 90,
+    );
+  }
+
+  int _startPeak = 0;
+  bool _startFinishing = false;
+
+  /// Playback has run since this source opened: buffering after that is a
+  /// seek or a stall, shown as it is.
+  bool _playedOnce = false;
 
   void _startTimers() {
     _saveTimer?.cancel();
@@ -1260,6 +1294,9 @@ class PlayerController extends ChangeNotifier {
       (_) => unawaited(_saveProgress()),
     );
     _statusTimer?.cancel();
+    _startPeak = 0;
+    _startFinishing = false;
+    _playedOnce = false;
     final src = source;
     if (src?.kind != PlaybackKind.torrent) {
       engineStats = null;
@@ -1283,15 +1320,27 @@ class PlayerController extends ChangeNotifier {
         _progressAt = DateTime.now();
       }
       final target = math.max(8 << 20, stats.pieceLength);
+      var ready = ((stats.bufferedAhead + stats.nextPieceBytes) / target * 100)
+          .clamp(0, 99)
+          .round();
+      var finishing = false;
+      if (!_playedOnce && player.state.playing && !player.state.buffering) {
+        _playedOnce = true;
+      }
+      if (!_playedOnce) {
+        final s = startupReady(ready, _startPeak, finishing: _startFinishing);
+        _startPeak = s.shown;
+        _startFinishing = finishing = s.finishing;
+        ready = s.shown;
+      }
       engineStats = (
         bufferedAhead: stats.bufferedAhead,
         have: stats.haveBytes,
         size: stats.size,
         peers: st?.numPeers ?? 0,
         rate: st?.downloadRate ?? 0,
-        ready: ((stats.bufferedAhead + stats.nextPieceBytes) / target * 100)
-            .clamp(0, 99)
-            .round(),
+        ready: ready,
+        finishing: finishing,
       );
       notifyListeners();
     });

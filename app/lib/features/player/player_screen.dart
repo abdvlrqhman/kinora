@@ -977,7 +977,7 @@ class _EngineChip extends StatelessWidget {
       label: done
           ? 'Fully downloaded'
           : waiting
-          ? 'Buffering ${s.ready}%, ${s.peers} peers, ${Fmt.speed(s.rate)}'
+          ? '${_buffering(s)}, ${s.peers} peers, ${Fmt.speed(s.rate)}'
           : '${s.peers} peers, ${Fmt.speed(s.rate)}',
       excludeSemantics: true,
       child: Glass(
@@ -988,7 +988,7 @@ class _EngineChip extends StatelessWidget {
           done
               ? 'Saved on this device'
               : waiting
-              ? 'Buffering ${s.ready}%  ${s.peers} peers  ${Fmt.speed(s.rate)}'
+              ? '${_buffering(s)}  ${s.peers} peers  ${Fmt.speed(s.rate)}'
               : '${s.peers} peers  ${Fmt.speed(s.rate)}',
           style: KType.tabular(
             KType.small.copyWith(color: done ? KColors.go : KColors.lamp),
@@ -1068,13 +1068,13 @@ class _BufferingHint extends StatelessWidget {
     builder: (context, snap) {
       if (snap.data != true) return const SizedBox.shrink();
       final s = controller.engineStats;
-      final detail = s == null
-          ? ''
-          : ' ${s.ready}%  ${s.peers} peers  ${Fmt.speed(s.rate)}';
+      final text = s == null
+          ? 'Buffering'
+          : '${_buffering(s)}  ${s.peers} peers  ${Fmt.speed(s.rate)}';
       return IgnorePointer(
         child: Glass(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Text('Buffering$detail', style: KType.tabular(KType.label)),
+          child: Text(text, style: KType.tabular(KType.label)),
         ),
       );
     },
@@ -1659,3 +1659,18 @@ class _VersionsPanel extends ConsumerWidget {
     );
   }
 }
+
+/// "Buffering 45%", or "Almost ready" once start-up got near done and the
+/// player is reading another part of the file (see startupReady).
+String _buffering(
+  ({
+    int bufferedAhead,
+    int have,
+    int size,
+    int peers,
+    int rate,
+    int ready,
+    bool finishing,
+  })
+  s,
+) => s.finishing ? 'Almost ready' : 'Buffering ${s.ready}%';

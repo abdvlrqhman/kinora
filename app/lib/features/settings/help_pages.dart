@@ -35,7 +35,11 @@ final _infoHash = RegExp(r'^[0-9a-fA-F]{40}$');
 /// Hides anything that could be a key: the user's saved [secrets], URL
 /// paths and queries (addon links carry debrid keys), and long tokens.
 /// Info-hashes stay: they identify torrents, not people.
-String redact(String text, [Iterable<String> secrets = const []]) {
+String redact(
+  String text, [
+  Iterable<String> secrets = const [],
+  Set<String> keep = const {},
+]) {
   var out = text;
   for (final s in secrets) {
     if (s.length >= 4) out = out.replaceAll(s, '[key]');
@@ -46,7 +50,8 @@ String redact(String text, [Iterable<String> secrets = const []]) {
   );
   return out.replaceAllMapped(
     _token,
-    (m) => _infoHash.hasMatch(m[0]!) ? m[0]! : '[hidden]',
+    (m) =>
+        _infoHash.hasMatch(m[0]!) || keep.contains(m[0]) ? m[0]! : '[hidden]',
   );
 }
 
@@ -89,7 +94,10 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
       Log.dump(),
     ].join('\n');
     await Clipboard.setData(
-      ClipboardData(text: redact(text, await _secrets())),
+      // (Setting names are Kinora's own words, not keys.)
+      ClipboardData(
+        text: redact(text, await _secrets(), settings.keys.toSet()),
+      ),
     );
     if (mounted) showNote(context, 'Copied. Keys and links are left out.');
   }
