@@ -76,9 +76,9 @@ Future<void> showWifiWaitSheet(
 // state below keeps it from asking again once both are allowed.
 bool _explained = false;
 
-/// Starts downloading [request]. The first time on Android, says in one
-/// sentence each why a notification and background running are needed,
-/// before Android asks.
+/// Starts downloading [request]. The first time, says in one sentence each
+/// why a notification (and on Android, background running) is needed,
+/// before the system asks.
 Future<void> startDownload(
   BuildContext context,
   WidgetRef ref,
@@ -104,6 +104,14 @@ Future<void> startDownload(
       }
     } on Object catch (e) {
       Log.w('downloads', 'permission prompt: $e');
+    }
+  } else if (Platform.isIOS && !_explained) {
+    _explained = true;
+    // Only before iPhone has asked: after a no, Kinora doesn't nag.
+    final keeper = BackgroundKeeper.instance;
+    if (await keeper.notificationsUndecided() && context.mounted) {
+      final go = await _explain(context, notify: true, battery: false);
+      if (go ?? false) await keeper.askNotifications();
     }
   }
   await actions.download(request);
@@ -133,9 +141,13 @@ Future<bool?> _explain(
           ),
         ),
         if (notify)
-          const Note(
-            'Kinora shows download progress in a notification, so Android '
-            'will ask you to allow notifications.',
+          Note(
+            Platform.isIOS
+                ? 'Kinora shows how downloads are going in a quiet '
+                      'notification and tells you when one is ready, so '
+                      'iPhone will ask you to allow notifications.'
+                : 'Kinora shows download progress in a notification, so '
+                      'Android will ask you to allow notifications.',
           ),
         if (battery)
           const Note(

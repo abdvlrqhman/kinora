@@ -11,6 +11,7 @@ import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/title/title_screen.dart';
 import '../services/play_request.dart';
+import '../services/background.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets/media.dart';
 import 'providers.dart';
@@ -135,6 +136,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     settingsProvider.select((s) => s.onboarded),
     (_, _) => router.refresh(),
   );
+  // A tapped download notice (iPhone) opens Downloads.
+  BackgroundKeeper.instance.onOpen((_) => router.go('/downloads'));
   ref.onDispose(router.dispose);
   return router;
 });

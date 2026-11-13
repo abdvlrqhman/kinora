@@ -11,8 +11,9 @@ import '../core/log.dart';
 /// Android: a foreground service (type `specialUse`: no 6-hour `dataSync`
 /// budget; Kinora is sideloaded) with wake and Wi-Fi locks and a progress
 /// notification. iOS: a silent audio session keeps the process alive (the
-/// approach sideloaded torrent clients use). HTTP/debrid downloads don't need
-/// this: they use the OS background transfer services.
+/// approach sideloaded torrent clients use), with one quiet notification of
+/// the status while Kinora is in the background. HTTP/debrid downloads don't
+/// need the keep-alive: they use the OS background transfer services.
 final class BackgroundKeeper {
   BackgroundKeeper._();
   static final instance = BackgroundKeeper._();
@@ -34,8 +35,17 @@ final class BackgroundKeeper {
     double? progress,
   }) {
     _reasons[reason] = (title: title, text: text, progress: progress);
-    return keepAlive(title: title, text: text, progress: progress);
+    return keepAlive(
+      title: title,
+      text: text,
+      progress: progress,
+      open: _opens(reason),
+    );
   }
+
+  /// What tapping the status opens (iPhone): Downloads for downloads.
+  static String? _opens(String reason) =>
+      reason == 'downloads' ? 'downloads' : null;
 
   /// [reason] no longer needs the app alive; stops when no reason is left.
   Future<void> drop(String reason, {bool success = true}) async {
@@ -43,11 +53,12 @@ final class BackgroundKeeper {
     if (_reasons.isEmpty) {
       await release(success: success);
     } else {
-      final next = _reasons.values.last;
+      final MapEntry(key: why, value: next) = _reasons.entries.last;
       await keepAlive(
         title: next.title,
         text: next.text,
         progress: next.progress,
+        open: _opens(why),
       );
     }
   }
@@ -57,6 +68,7 @@ final class BackgroundKeeper {
     required String title,
     required String text,
     double? progress,
+    String? open,
   }) async {
     try {
       if (Platform.isAndroid) {
@@ -85,6 +97,7 @@ final class BackgroundKeeper {
           'title': title,
           'text': text,
           'progress': progress,
+          'open': open,
         });
       }
       _running = true;
@@ -105,6 +118,43 @@ final class BackgroundKeeper {
       }
     } on Object catch (e) {
       Log.w('background', 'release failed: $e');
+    }
+  }
+
+  /// A download finished (iPhone): a silent banner that opens Downloads.
+  Future<void> ready(String what) => _iosCall<void>('ready', {
+    'title': what,
+    'text': 'Downloaded. Ready to watch, even offline.',
+  });
+
+  /// Whether iPhone hasn't asked about notifications yet (so Kinora can
+  /// say why first, and never nags after a no).
+  Future<bool> notificationsUndecided() async =>
+      await _iosCall<bool>('notificationsUndecided') ?? false;
+
+  Future<void> askNotifications() => _iosCall<bool>('askNotifications');
+
+  /// Runs [open] when a download notice is tapped (iPhone), including the
+  /// tap that launched Kinora.
+  void onOpen(void Function(String what) open) {
+    if (!Platform.isIOS) return;
+    _ios.setMethodCallHandler((call) async {
+      if (call.method == 'open') open(call.arguments as String);
+    });
+    unawaited(
+      _iosCall<String>('takeOpen').then((what) {
+        if (what != null) open(what);
+      }),
+    );
+  }
+
+  Future<T?> _iosCall<T>(String method, [Object? args]) async {
+    if (!Platform.isIOS) return null;
+    try {
+      return await _ios.invokeMethod<T>(method, args);
+    } on Object catch (e) {
+      Log.w('background', '$method failed: $e');
+      return null;
     }
   }
 

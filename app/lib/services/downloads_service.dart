@@ -921,6 +921,7 @@ final class DownloadsService implements DownloadActions {
       ),
     );
     Log.i('downloads', 'completed ${_label(r)}');
+    unawaited(BackgroundKeeper.instance.ready(_label(r)));
     unawaited(_startNext());
     if (r.infoHash != null) _finishClaim(r.infoHash!, _owner(r.id));
   }
