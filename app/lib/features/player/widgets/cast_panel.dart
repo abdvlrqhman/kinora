@@ -4,6 +4,7 @@ import 'package:dlna/dlna.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/desktop.dart';
 import '../../cast/cast_picker.dart';
 import '../../../services/cast_service.dart';
 import '../../../ui/glass.dart';
@@ -121,7 +122,7 @@ class CastingView extends ConsumerWidget {
         final status = switch (cast.phase) {
           CastPhase.connecting => 'Starting on $name…',
           CastPhase.lost =>
-            '$name isn’t answering. Check that it’s on, or watch on this phone.',
+            '$name isn’t answering. Check that it’s on, or watch on $thisDevice.',
           _ when cast.reconnecting => 'Reconnecting to $name…',
           CastPhase.playing =>
             'Playing on $name'
@@ -249,7 +250,7 @@ class CastingView extends ConsumerWidget {
                         ),
                         const SizedBox(width: KSpace.x4),
                         GlassButton(
-                          label: 'Watch on this phone',
+                          label: 'Watch on $thisDevice',
                           icon: Icons.phone_iphone_rounded,
                           prominent: true,
                           onPressed: () async {

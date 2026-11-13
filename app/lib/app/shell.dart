@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../features/updates/update_prompt.dart';
 
 import '../ui/glass.dart';
+import '../ui/layout.dart';
 import '../ui/tint.dart';
 import '../ui/tokens.dart';
 
@@ -20,7 +21,8 @@ enum AppTab {
   final IconData icon;
 }
 
-/// Tab pages under a floating liquid-glass tab bar.
+/// Tab pages under a floating liquid-glass tab bar, or beside a glass side
+/// rail in a wide window.
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.shell});
 
@@ -39,12 +41,19 @@ class AppShell extends StatelessWidget {
   /// Height the tab bar occupies, so pages can pad their last item.
   static double bottomInset(BuildContext context) =>
       MediaQuery.paddingOf(context).bottom +
-      12 +
-      _barHeight(context) +
+      (context.getInheritedWidgetOfExactType<_OnRail>() != null
+          ? 0
+          : 12 + _barHeight(context)) +
       KSpace.x4;
+
+  static const double _railWidth = 76 + KSpace.x3 * 2;
+
+  void _go(AppTab t) =>
+      shell.goBranch(t.index, initialLocation: t.index == shell.currentIndex);
 
   @override
   Widget build(BuildContext context) {
+    if (KLayout.isWide(context)) return _wide(context);
     final bottom = MediaQuery.paddingOf(context).bottom;
     // Typing (Search): the keyboard gets the space, not the bar and its scrim.
     final typing = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -85,11 +94,7 @@ class AppShell extends StatelessWidget {
                                 key: ValueKey('tab-${t.name}'),
                                 tab: t,
                                 selected: t.index == shell.currentIndex,
-                                onTap: () => shell.goBranch(
-                                  t.index,
-                                  initialLocation:
-                                      t.index == shell.currentIndex,
-                                ),
+                                onTap: () => _go(t),
                               ),
                             ),
                         ],
@@ -103,6 +108,78 @@ class AppShell extends StatelessWidget {
       ),
     );
   }
+
+  /// Wide windows: the tabs in a glass rail on the left, the page beside it
+  /// (pages see their own width, not the window's).
+  Widget _wide(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return Scaffold(
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              KSpace.x3,
+              mq.padding.top + KSpace.x3,
+              KSpace.x3,
+              0,
+            ),
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: _maxBarTextScale,
+              child: GlassGroup(
+                child: Glass(
+                  tintStrength: 0.10,
+                  child: SizedBox(
+                    width: 76,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: KSpace.x2),
+                        for (final t in AppTab.values)
+                          SizedBox(
+                            height: 72,
+                            child: _TabButton(
+                              key: ValueKey('tab-${t.name}'),
+                              tab: t,
+                              selected: t.index == shell.currentIndex,
+                              onTap: () => _go(t),
+                            ),
+                          ),
+                        const SizedBox(height: KSpace.x2),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: MediaQuery(
+              data: mq.copyWith(
+                size: Size(mq.size.width - _railWidth, mq.size.height),
+              ),
+              child: _OnRail(
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: shell),
+                    const Positioned(left: 0, top: 0, child: UpdateCheck()),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Marks pages beside the side rail (no tab bar to clear at the bottom).
+class _OnRail extends InheritedWidget {
+  const _OnRail({required super.child});
+
+  @override
+  bool updateShouldNotify(_OnRail old) => false;
 }
 
 class _TabButton extends StatelessWidget {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/shell.dart';
 import '../../../ui/glass.dart';
+import '../../../ui/layout.dart';
 import '../../../ui/tint.dart';
 import '../../../ui/tokens.dart';
 import '../../../ui/widgets/media.dart';
@@ -35,6 +36,8 @@ class SettingsPage extends StatelessWidget {
       padding: EdgeInsets.only(
         top: MediaQuery.paddingOf(context).top + KSpace.x2,
         bottom: AppShell.bottomInset(context),
+        left: KLayout.side(context),
+        right: KLayout.side(context),
       ),
       children: [
         if (back)

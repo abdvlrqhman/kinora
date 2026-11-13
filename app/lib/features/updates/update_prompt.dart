@@ -84,8 +84,8 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
 
   Future<void> _update() async {
     final r = widget.release;
-    if (Platform.isIOS) {
-      await installIos(r);
+    if (Platform.isIOS || Platform.isWindows) {
+      await (Platform.isIOS ? installIos(r) : installWindows(r));
       if (mounted) Navigator.pop(context);
       return;
     }
@@ -145,6 +145,9 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
           Text(
             Platform.isIOS
                 ? 'You have $kinoraVersion. SideStore opens to install it.'
+                : Platform.isWindows
+                ? 'You have $kinoraVersion. Your browser downloads it: close '
+                      'Kinora, then unzip it over this one.'
                 : 'You have $kinoraVersion.',
             style: KType.body.copyWith(color: KColors.haze),
           ),
@@ -194,6 +197,8 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
                       ? 'Try again'
                       : Platform.isIOS
                       ? 'Update with SideStore'
+                      : Platform.isWindows
+                      ? 'Download update'
                       : 'Update now',
                   icon: Icons.system_update_rounded,
                   prominent: true,

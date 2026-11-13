@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/desktop.dart';
 import '../../app/providers.dart';
 import '../../core/secure_keys.dart';
 import '../../services/tmdb.dart';
@@ -56,7 +57,7 @@ class _TmdbKeySectionState extends ConsumerState<TmdbKeySection> {
         ref.invalidate(tmdbKeyProvider);
         _key.clear();
       } on Object {
-        error = 'Kinora couldn’t save the key on this phone. Try again.';
+        error = 'Kinora couldn’t save the key on $thisDevice. Try again.';
       }
     }
     if (!mounted) return;

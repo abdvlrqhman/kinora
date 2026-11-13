@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/desktop.dart';
 import '../../app/providers.dart';
 import '../../services/cast_service.dart';
 import '../../services/sources.dart';
@@ -108,10 +109,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 'link it gives you here.',
                             children: [AddAddonField()],
                           ),
-                          4 => const _Step(
+                          4 => _Step(
                             title: 'Subtitle sites',
                             intro: 'Optional. $subtitleSitesIntro',
-                            children: [SubtitleSiteList()],
+                            children: const [SubtitleSiteList()],
                           ),
                           5 when _trakt => const _Step(
                             title: 'Already use Trakt?',
@@ -387,8 +388,8 @@ class _TvPicker extends ConsumerWidget {
         onPick: cast.selectTarget,
         leading: [
           CastDeviceRow(
-            name: 'This phone',
-            label: 'Play on this phone',
+            name: '$thisDeviceTitle',
+            label: 'Play on $thisDevice',
             selected: tv == null,
             onTap: () => cast.selectTarget(null),
           ),

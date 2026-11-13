@@ -39,6 +39,8 @@ final class KinoraRelease {
 
   Uri? get ipa => assets['Kinora.ipa'];
 
+  Uri? get windowsZip => assets['Kinora-windows-x64.zip'];
+
   /// Parses GitHub's latest-release response.
   static KinoraRelease? fromJson(Map<String, Object?> j) {
     final tag = j['tag_name'];
@@ -168,6 +170,13 @@ Future<bool> installAndroid(
     return false;
   }
 }
+
+/// Windows: the browser downloads the new version's zip (or opens the
+/// release page when this release has none).
+Future<void> installWindows(KinoraRelease release) => launchUrl(
+  release.windowsZip ?? release.page,
+  mode: LaunchMode.externalApplication,
+);
 
 /// iPhone: hands the IPA to SideStore (it re-signs and installs), or opens
 /// the release page when SideStore isn't there.

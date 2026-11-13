@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/desktop.dart';
 import '../../services/cast_service.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
@@ -185,8 +186,8 @@ class CastPickerSheet extends ConsumerWidget {
               onPick: choose,
               leading: [
                 CastDeviceRow(
-                  name: 'This phone',
-                  label: 'Play on this phone',
+                  name: '$thisDeviceTitle',
+                  label: 'Play on $thisDevice',
                   selected: cast.target == null,
                   onTap: () => choose(null),
                 ),

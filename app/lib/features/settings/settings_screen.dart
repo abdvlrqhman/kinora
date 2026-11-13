@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/desktop.dart';
 import '../../app/providers.dart';
 import '../../services/trakt.dart';
 import '../../services/sources.dart';
@@ -119,7 +120,7 @@ class SettingsScreen extends ConsumerWidget {
           ].join(', '),
           onTap: () => go('playback'),
         ),
-        const SectionTitle('This phone'),
+        SectionTitle(thisDeviceTitle),
         NavRow(
           label: 'Downloads',
           value: s.wifiOnlyDownloads ? 'On Wi-Fi only' : 'On any network',

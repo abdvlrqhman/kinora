@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:subtitles/subtitles.dart';
 
+import '../../app/desktop.dart';
 import '../../app/providers.dart';
 import '../../core/secure_keys.dart';
 import '../../services/subtitles_service.dart';
@@ -16,16 +17,16 @@ class SubtitleSitesPage extends StatelessWidget {
   const SubtitleSitesPage({super.key});
 
   @override
-  Widget build(BuildContext context) => const SettingsPage(
+  Widget build(BuildContext context) => SettingsPage(
     title: 'Subtitle sites',
     intro: subtitleSitesIntro,
-    children: [SubtitleSiteList(showTest: true)],
+    children: const [SubtitleSiteList(showTest: true)],
   );
 }
 
-const subtitleSitesIntro =
+String get subtitleSitesIntro =>
     'Turn on the sites you use and add your own key. Kinora ships no keys, '
-    'and yours stay on this phone.';
+    'and yours stay on $thisDevice.';
 
 /// Every site in [subtitleProviderCatalog], each with its switch.
 class SubtitleSiteList extends StatelessWidget {
@@ -235,7 +236,7 @@ class _SubtitleSiteTileState extends ConsumerState<SubtitleSiteTile> {
       ),
     );
     final detail = enabled && info.needsKey
-        ? '${info.description} Your key is saved on this phone.'
+        ? '${info.description} Your key is saved on $thisDevice.'
         : info.description;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kinora_engine/kinora_engine.dart';
 
+import '../../app/desktop.dart';
 import '../../app/providers.dart';
 import '../../core/log.dart';
 import '../../services/sources.dart';
@@ -112,7 +113,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     return SettingsPage(
       title: 'Diagnostics',
       intro:
-          'Logs stay on this phone. Copy them to share with someone who '
+          'Logs stay on $thisDevice. Copy them to share with someone who '
           'helps you; keys and addon links are left out.',
       children: [
         const _Fact('App version', kinoraVersion),
@@ -264,7 +265,7 @@ class AboutPage extends ConsumerWidget {
     intro:
         'Kinora streams or downloads movies and shows from the sources you '
         'add, with one player for both, casting to your TV, and subtitles '
-        'from the sites you choose. Everything stays on this phone: no '
+        'from the sites you choose. Everything stays on $thisDevice: no '
         'account, no tracking.',
     children: [
       const _Fact('Version', kinoraVersion),

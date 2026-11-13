@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../app/desktop.dart';
 import '../../app/providers.dart';
 import '../../core/format.dart';
 import '../../core/paths.dart';
@@ -98,7 +99,7 @@ Future<void> clearLogs(Directory dir) async {
 class StoragePage extends ConsumerWidget {
   const StoragePage({super.key});
 
-  static const _text = {
+  static final _text = {
     StorageKind.downloads: (
       'Downloads',
       'Movies and episodes saved to watch offline.',
@@ -112,7 +113,7 @@ class StoragePage extends ConsumerWidget {
       'Artwork',
       'Posters and backdrops. They load again from your sources.',
     ),
-    StorageKind.logs: ('Logs', 'Diagnostics kept on this phone only.'),
+    StorageKind.logs: ('Logs', 'Diagnostics kept on $thisDevice only.'),
   };
 
   Future<void> _clear(
@@ -127,7 +128,7 @@ class StoragePage extends ConsumerWidget {
       context,
       title: downloads ? 'Delete all downloads?' : 'Clear $name?',
       message: downloads
-          ? 'Removes every download (${Fmt.bytes(size)}) from this phone. '
+          ? 'Removes every download (${Fmt.bytes(size)}) from $thisDevice. '
                 'You can download them again later.'
           : kind == StorageKind.streams
           ? 'Frees ${Fmt.bytes(size)}. What’s playing right now keeps '
@@ -179,7 +180,7 @@ class StoragePage extends ConsumerWidget {
           child: Semantics(
             label: [
               if (total != null) 'Kinora uses ${Fmt.bytes(total)}',
-              if (free != null) '${Fmt.bytes(free)} free on this phone',
+              if (free != null) '${Fmt.bytes(free)} free on $thisDevice',
             ].join('. '),
             excludeSemantics: true,
             child: Column(
@@ -192,7 +193,7 @@ class StoragePage extends ConsumerWidget {
                 Text(
                   [
                     'used by Kinora',
-                    if (free != null) '${Fmt.bytes(free)} free on this phone',
+                    if (free != null) '${Fmt.bytes(free)} free on $thisDevice',
                   ].join('    '),
                   style: KType.tabular(
                     KType.body.copyWith(color: KColors.haze),

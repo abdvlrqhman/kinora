@@ -10,13 +10,16 @@ import 'dart:ui' as ui;
 
 import 'package:dlna/testing.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:kinora/app/app.dart';
+import 'package:kinora/app/desktop.dart';
 import 'package:kinora/app/providers.dart';
 import 'package:kinora/app/router.dart';
 import 'package:kinora/core/db/database.dart';
@@ -266,7 +269,37 @@ void main() {
       Offset(0, -screen.height * 0.35),
       const Duration(milliseconds: 700),
     );
-    for (final round in ['first', 'after toggling the controls']) {
+    if (isDesktop) {
+      // A computer: the keys and the mouse instead of touch.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: screen.center);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await pumpUntil(
+        tester,
+        () => find
+            .bySemanticsLabel(RegExp(r'^Volume \d+%$'))
+            .evaluate()
+            .isNotEmpty,
+        timeout: const Duration(seconds: 5),
+        reason: 'the Down key lowers the volume',
+      );
+      for (final playing in [false, true]) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await pumpUntil(
+          tester,
+          () => c.player.state.playing == playing,
+          timeout: const Duration(seconds: 5),
+          reason: 'Space ${playing ? 'plays' : 'pauses'}',
+        );
+      }
+      // The pointer brings the controls back.
+      await mouse.moveTo(screen.center + const Offset(12, 12));
+      await tester.pump(const Duration(milliseconds: 600));
+      await mouse.removePointer();
+    }
+    for (final round in [
+      if (!isDesktop) ...['first', 'after toggling the controls'],
+    ]) {
       await swipe(0.8);
       await pumpUntil(
         tester,
@@ -317,18 +350,21 @@ void main() {
     expect(zoom(), 1);
     // Above the play row, clear of every control.
     final pinch = Offset(screen.center.dx, screen.top + screen.height * 0.3);
-    final f1 = await tester.startGesture(pinch - const Offset(40, 0));
-    // (Pointer ids are assigned by the tester: one picked by hand can clash.)
-    final f2 = await tester.startGesture(pinch + const Offset(40, 0));
-    for (var i = 0; i < 12; i++) {
-      await f1.moveBy(const Offset(-8, 0));
-      await f2.moveBy(const Offset(8, 0));
-      await tester.pump(const Duration(milliseconds: 16));
+    if (!isDesktop) {
+      final f1 = await tester.startGesture(pinch - const Offset(40, 0));
+      // (Pointer ids are assigned by the tester: one picked by hand can
+      // clash.)
+      final f2 = await tester.startGesture(pinch + const Offset(40, 0));
+      for (var i = 0; i < 12; i++) {
+        await f1.moveBy(const Offset(-8, 0));
+        await f2.moveBy(const Offset(8, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await f1.up();
+      await f2.up();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(zoom(), greaterThan(1.5), reason: 'pinch zooms the picture');
     }
-    await f1.up();
-    await f2.up();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(zoom(), greaterThan(1.5), reason: 'pinch zooms the picture');
     // The player as it looks, for review: controls up, the Audio and
     // subtitles panel, and Subtitle style inside it.
     try {
@@ -337,14 +373,17 @@ void main() {
               .widget<AnimatedOpacity>(
                 find
                     .ancestor(
-                      of: find.bySemanticsLabel('Lock controls'),
+                      // (A computer has Full screen in Lock's place.)
+                      of: find.bySemanticsLabel(
+                        isDesktop ? RegExp('Full screen') : 'Lock controls',
+                      ),
                       matching: find.byType(AnimatedOpacity),
                     )
                     .first,
               )
               .opacity ==
           1;
-      if (!controlsUp()) {
+      if (!controlsUp() && !isDesktop) {
         await tester.tapAt(pinch);
         await tester.pump(const Duration(milliseconds: 600));
       }
@@ -371,7 +410,11 @@ void main() {
     }
     semantics.dispose();
     // ignore: avoid_print
-    print('E2E ok: volume, brightness and pinch zoom by touch');
+    print(
+      isDesktop
+          ? 'E2E ok: volume and pause by keys, controls by the mouse'
+          : 'E2E ok: volume, brightness and pinch zoom by touch',
+    );
 
     // Next episode inside the player.
     await pumpUntil(

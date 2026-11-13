@@ -7,12 +7,14 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/desktop.dart';
 import '../../app/router.dart';
 import '../../app/shell.dart';
 import '../../core/db/database.dart';
 import '../../core/format.dart';
 import '../../services/downloads.dart';
 import '../../services/play_request.dart';
+import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
@@ -229,7 +231,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     if (path == null || !File(path).existsSync()) {
       showNote(
         context,
-        'This file is no longer on your phone. Delete it, then download it '
+        'This file is no longer on $yourDevice. Delete it, then download it '
         'again.',
       );
       return;
@@ -433,6 +435,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + KSpace.x4,
           bottom: AppShell.bottomInset(context),
+          left: KLayout.side(context),
+          right: KLayout.side(context),
         ),
         itemCount: items.length,
         itemBuilder: (_, i) => items[i](),
@@ -456,7 +460,7 @@ class _Summary extends StatelessWidget {
     return Semantics(
       label: [
         'Downloads use ${Fmt.bytes(used)}',
-        if (free != null) '${Fmt.bytes(free!)} free on this phone',
+        if (free != null) '${Fmt.bytes(free!)} free on $thisDevice',
       ].join('. '),
       excludeSemantics: true,
       child: Padding(

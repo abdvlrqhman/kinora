@@ -3,14 +3,20 @@
 @Tags(['golden'])
 library;
 
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:dlna/dlna.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/app/app.dart';
+import 'package:kinora/app/desktop.dart';
 import 'package:kinora/app/intro.dart';
 import 'package:kinora/app/providers.dart';
+import 'package:kinora/app/router.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/settings.dart';
 import 'package:kinora/features/cast/cast_picker.dart';
@@ -104,11 +110,16 @@ void main() {
     return nav;
   }
 
-  Future<void> pumpHome(WidgetTester tester) async {
+  Future<void> pumpHome(
+    WidgetTester tester, {
+    bool desktop = false,
+    Size window = const Size(1280, 800),
+    List<Override> extra = const [],
+  }) async {
     tester.view
-      ..physicalSize = const Size(390, 844) * 3
-      ..devicePixelRatio = 3;
-    phoneInsets(tester);
+      ..physicalSize = desktop ? window : const Size(390, 844) * 3
+      ..devicePixelRatio = desktop ? 1 : 3;
+    if (!desktop) phoneInsets(tester);
     addTearDown(tester.view.reset);
 
     final db = testDb();
@@ -202,6 +213,7 @@ void main() {
           ),
           databaseProvider.overrideWithValue(db),
           ...withSource(),
+          ...extra,
           homeRowsProvider.overrideWith(
             (ref) => Stream.value(HomeRows([movies, shows])),
           ),
@@ -223,6 +235,7 @@ void main() {
                 name: 'Glass Harbor',
                 background: art('harbor_backdrop'),
               ),
+              'tt200' when desktop => series(),
               _ => throw StateError('No details'),
             },
           ),
@@ -287,6 +300,35 @@ void main() {
       find.byType(KinoraApp),
       matchesGoldenFile('screens/home_trakt.png'),
     );
+  });
+
+  // Windows: Kinora's own title bar, the tabs in a side rail, and pages
+  // that keep a reading width.
+  group('desktop', () {
+    setUp(() => desktopOverride = true);
+    tearDown(() => desktopOverride = null);
+
+    testScreen('desktop home', (tester) async {
+      await pumpHome(tester, desktop: true);
+      await expectLater(
+        find.byType(KinoraApp),
+        matchesGoldenFile('screens/desktop_home.png'),
+      );
+      await tester.tap(find.byKey(const ValueKey('tab-settings')));
+      await tester.pumpAndSettle();
+      await expectLater(
+        find.byType(KinoraApp),
+        matchesGoldenFile('screens/desktop_settings.png'),
+      );
+      await tester.tap(find.byKey(const ValueKey('tab-home')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('Details').first);
+      await settleImages(tester);
+      await expectLater(
+        find.byType(KinoraApp),
+        matchesGoldenFile('screens/desktop_title.png'),
+      );
+    });
   });
 
   // Scrolled: rows passing under the tab bar dim behind its scrim.
@@ -479,5 +521,146 @@ void main() {
       find.byType(SearchScreen),
       matchesGoldenFile('screens/search_results.png'),
     );
+  });
+
+  // A walk through every screen in a window at several sizes, for review.
+  // The pictures go to /tmp/kn-desktop (not compared, not committed).
+  group('desktop tour', () {
+    setUp(() => desktopOverride = true);
+    tearDown(() => desktopOverride = null);
+    final results = [
+      for (final (id, name, poster, type) in [
+        ('tt101', 'Glass Harbor', 'harbor_poster', 'movie'),
+        ('tt105', 'Harbor at Dusk', 'dune_poster', 'movie'),
+        ('tt200', 'Harbor Lights', 'tide_poster', 'series'),
+        ('tt203', 'Harbor Patrol', 'glacier_poster', 'series'),
+        ('tt204', 'The Harbormaster', 'ember_poster', 'series'),
+        ('tt206', 'Harbor Spirits', 'bloom_poster', 'series'),
+        ('tt207', 'North Harbor', 'forest_poster', 'movie'),
+        ('tt208', 'Neon Harbor', 'neon_poster', 'series'),
+      ])
+        preview(id, name, type: type, poster: art(poster), year: '2021'),
+    ];
+    for (final window in const [
+      Size(1280, 800),
+      Size(1920, 1080),
+      Size(1000, 680),
+      Size(700, 820),
+    ]) {
+      final tag = '${window.width.round()}x${window.height.round()}';
+      testScreen('tour $tag', (tester) async {
+        Future<void> snap(String name) async {
+          await tester.pump(const Duration(milliseconds: 500));
+          final bytes = await tester.runAsync(() async {
+            final image = await captureImage(
+              find.byType(KinoraApp).evaluate().single,
+            );
+            final png = await image.toByteData(format: ui.ImageByteFormat.png);
+            return png!.buffer.asUint8List();
+          });
+          File('/tmp/kn-desktop/$tag/$name.png')
+            ..createSync(recursive: true)
+            ..writeAsBytesSync(bytes!);
+        }
+
+        ProviderContainer container() =>
+            ProviderScope.containerOf(tester.element(find.byType(KinoraApp)));
+        Future<void> go(String path) async {
+          container().read(routerProvider).go(path);
+          await settleImages(tester);
+        }
+
+        Future<void> tapLabel(Pattern label) async {
+          final bySemantics = find.bySemanticsLabel(label);
+          await tester.tap(
+            bySemantics.evaluate().isNotEmpty
+                ? bySemantics.first
+                : find.textContaining(label).first,
+          );
+          await settleImages(tester);
+        }
+
+        Future<void> close() async {
+          await tester.tapAt(const Offset(4, 300));
+          await tester.pumpAndSettle();
+        }
+
+        await pumpHome(
+          tester,
+          desktop: true,
+          window: window,
+          extra: [
+            searchProvider.overrideWith((ref, q) async => results),
+          ],
+        );
+        await seedSeries(container().read(databaseProvider));
+        await settleImages(tester);
+        await snap('01_home');
+        await tester.drag(
+          find.byType(CustomScrollView).first,
+          Offset(0, -window.height * 0.6),
+        );
+        await settleImages(tester);
+        await snap('02_home_scrolled');
+        await go('/');
+        await tapLabel('Sign in with Trakt');
+        await snap('03_trakt_sheet');
+        await close();
+        await tapLabel('Cast to a TV');
+        await snap('04_cast_picker');
+        await close();
+        await go('/search');
+        await snap('05_search');
+        await tester.enterText(find.byType(TextField), 'harbor');
+        await tester.pump(SearchScreen.debounce);
+        FocusManager.instance.primaryFocus?.unfocus();
+        await settleImages(tester);
+        await snap('06_search_results');
+        await go('/downloads');
+        await snap('07_downloads');
+        await go('/title/movie/tt100');
+        await snap('08_title_movie');
+        await tapLabel(RegExp('Other versions'));
+        await snap('09_versions_sheet');
+        await close();
+        await go('/title/series/tt200');
+        await snap('10_title_series');
+        await tester.drag(
+          find.byType(CustomScrollView).first,
+          Offset(0, -window.height * 0.7),
+        );
+        await settleImages(tester);
+        await snap('11_title_series_scrolled');
+        var i = 12;
+        for (final page in [
+          '',
+          '/sources',
+          '/languages',
+          '/subtitle-sites',
+          '/playback',
+          '/downloads',
+          '/storage',
+          '/backup',
+          '/trakt',
+          '/about',
+        ]) {
+          await go('/settings$page');
+          await snap(
+            '${i++}_settings${page.replaceAll('/', '_').replaceAll('-', '_')}',
+          );
+        }
+        await container()
+            .read(settingsProvider.notifier)
+            .update((s) => s.copyWith(onboarded: false));
+        await go('/onboarding');
+        for (var step = 0; step < 8; step++) {
+          await snap('${i++}_onboarding_$step');
+          final next = find.byKey(const ValueKey('onboarding-next'));
+          if (next.evaluate().isEmpty) break;
+          await tester.tap(next);
+          await settleImages(tester);
+        }
+      });
+    }
   });
 }

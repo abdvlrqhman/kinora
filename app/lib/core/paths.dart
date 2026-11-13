@@ -72,6 +72,12 @@ final class AppPaths {
     Directory downloads;
     if (Platform.isAndroid) {
       downloads = await getExternalStorageDirectory() ?? support;
+    } else if (Platform.isWindows) {
+      // The user's Downloads folder (…\Downloads\Kinora), where Windows
+      // people look for downloads.
+      downloads =
+          await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
     } else {
       downloads = await getApplicationDocumentsDirectory();
     }

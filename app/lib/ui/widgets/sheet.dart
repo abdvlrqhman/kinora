@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../glass.dart';
 import '../tint.dart';
+import '../layout.dart';
 import '../tokens.dart';
 
 /// Shows a floating glass sheet that keeps the caller's accent.
@@ -15,6 +16,8 @@ Future<T?> showGlassSheet<T>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
+    // (Wide windows: a sheet, not a banner across the screen.)
+    constraints: const BoxConstraints(maxWidth: KLayout.sheet),
     backgroundColor: Colors.transparent,
     barrierColor: const Color(0xA6000000),
     sheetAnimationStyle: reduce ? AnimationStyle.noAnimation : null,

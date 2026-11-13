@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/desktop.dart';
 import '../../services/trakt.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
@@ -328,14 +329,14 @@ class _SignedIn extends StatelessWidget {
         ActionRow(
           icon: Icons.logout_rounded,
           label: 'Sign out',
-          detail: 'What you watched stays on this phone and on Trakt.',
+          detail: 'What you watched stays on $thisDevice and on Trakt.',
           color: KColors.cut,
           onTap: () async {
             final ok = await confirmAction(
               context,
               title: 'Sign out of Trakt?',
               message:
-                  'Kinora stops syncing. What you watched stays on this phone '
+                  'Kinora stops syncing. What you watched stays on $thisDevice '
                   'and on Trakt.',
               action: 'Sign out',
             );

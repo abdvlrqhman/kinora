@@ -10,6 +10,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../app/desktop.dart';
 import '../../core/log.dart';
 import '../../core/format.dart';
 import '../../services/pip.dart';
@@ -81,17 +82,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _castWasActive = _cast.isCasting;
     unawaited(c.start());
     unawaited(WakelockPlus.enable());
-    unawaited(
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
-    );
-    unawaited(
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]),
-    );
+    if (!isDesktop) {
+      unawaited(
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
+      );
+      unawaited(
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]),
+      );
+      // (A computer's screen and speakers aren't the player's to change.)
+      unawaited(_readLevels());
+    }
     _scheduleHide();
-    unawaited(_readLevels());
     _pipSub = Pip.instance.changes.listen((v) {
       if (mounted) setState(() => _inPip = v);
     });
@@ -169,9 +173,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ..removeListener(_onChange)
       ..dispose();
     unawaited(WakelockPlus.disable());
-    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-    unawaited(SystemChrome.setPreferredOrientations(const []));
-    unawaited(ScreenBrightness.instance.resetApplicationScreenBrightness());
+    if (isDesktop) {
+      unawaited(setFullScreen(false));
+    } else {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+      unawaited(SystemChrome.setPreferredOrientations(const []));
+      unawaited(ScreenBrightness.instance.resetApplicationScreenBrightness());
+    }
     super.dispose();
   }
 
@@ -349,6 +357,57 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _showFlash(_seekSum > 0 ? '+$_seekSum s' : '−${-_seekSum} s');
   }
 
+  // --------------------------------------------------------------- desktop --
+
+  /// Volume before M muted it.
+  double? _unmuted;
+
+  void _desktopShow() {
+    if (!_controls) setState(() => _controls = true);
+    _scheduleHide();
+  }
+
+  void _togglePlay() {
+    unawaited(c.player.playOrPause());
+    _desktopShow();
+  }
+
+  void _volumeBy(double step) {
+    final v = (c.player.state.volume + step).clamp(0.0, 100.0);
+    _unmuted = null;
+    unawaited(c.player.setVolume(v));
+    _showFlash('Volume ${v.round()}%');
+  }
+
+  void _toggleMute() {
+    final before = _unmuted;
+    if (before == null) {
+      _unmuted = c.player.state.volume;
+      unawaited(c.player.setVolume(0));
+      _showFlash('Muted');
+    } else {
+      _unmuted = null;
+      unawaited(c.player.setVolume(before));
+      _showFlash('Volume ${before.round()}%');
+    }
+  }
+
+  void _toggleFullScreen() => unawaited(setFullScreen(!windowFullScreen.value));
+
+  /// The keys every computer video player answers to.
+  Map<ShortcutActivator, VoidCallback> get _keys => {
+    const SingleActivator(LogicalKeyboardKey.space): _togglePlay,
+    const SingleActivator(LogicalKeyboardKey.keyK): _togglePlay,
+    const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _seekBy(-10),
+    const SingleActivator(LogicalKeyboardKey.keyJ): () => _seekBy(-10),
+    const SingleActivator(LogicalKeyboardKey.arrowRight): () => _seekBy(10),
+    const SingleActivator(LogicalKeyboardKey.keyL): () => _seekBy(10),
+    const SingleActivator(LogicalKeyboardKey.arrowUp): () => _volumeBy(5),
+    const SingleActivator(LogicalKeyboardKey.arrowDown): () => _volumeBy(-5),
+    const SingleActivator(LogicalKeyboardKey.keyM): _toggleMute,
+    const SingleActivator(LogicalKeyboardKey.keyF): _toggleFullScreen,
+  };
+
   /// Height of the scrubber and bottom row, so subtitles sit above them.
   double _controlsHeight(BuildContext context) {
     final scaler = MediaQuery.textScalerOf(context);
@@ -366,7 +425,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget build(BuildContext context) {
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final motion = reduce ? Duration.zero : KMotion.base;
-    return Scaffold(
+    final page = Scaffold(
       backgroundColor: KColors.blackout,
       body: LayoutBuilder(
         builder: (context, box) {
@@ -408,21 +467,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   },
                   child: GestureDetector(
                     behavior: HitTestBehavior.translucent,
-                    onTap: _locked
+                    // A computer: click to pause, double-click for full
+                    // screen, no swipes (a mouse drag isn't a level).
+                    onTap: isDesktop
+                        ? _togglePlay
+                        : _locked
                         ? () => setState(() => _controls = !_controls)
                         : _toggleControls,
                     onDoubleTapDown: (d) => _lastDown = d,
-                    onDoubleTap: _locked
+                    onDoubleTap: isDesktop
+                        ? _toggleFullScreen
+                        : _locked
                         ? null
                         : () {
                             if (_lastDown case final d?) {
                               _doubleTap(d, box.maxWidth);
                             }
                           },
-                    onScaleStart: _locked
+                    onScaleStart: _locked || isDesktop
                         ? null
                         : (d) => _gestureStart(d, box.maxWidth),
-                    onScaleUpdate: _locked
+                    onScaleUpdate: _locked || isDesktop
                         ? null
                         : (d) => unawaited(_gestureUpdate(d, box.maxHeight)),
                   ),
@@ -468,6 +533,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                 _locked = true;
                                 _controls = false;
                               }),
+                              onFullScreen: isDesktop
+                                  ? _toggleFullScreen
+                                  : null,
                               onFill: () => setState(() {
                                 _fill = !_fill;
                                 _zoom = 1;
@@ -561,6 +629,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         },
       ),
     );
+    if (!isDesktop) return page;
+    // The pointer shows the controls (and hides with them); keys work
+    // without a click first.
+    return CallbackShortcuts(
+      bindings: _keys,
+      child: Focus(
+        autofocus: true,
+        child: MouseRegion(
+          cursor: _controls || c.phase != PlayerPhase.playing
+              ? MouseCursor.defer
+              : SystemMouseCursors.none,
+          onHover: (_) => _desktopShow(),
+          child: page,
+        ),
+      ),
+    );
   }
 }
 
@@ -575,6 +659,7 @@ class _Controls extends StatelessWidget {
     required this.onBack,
     required this.onPanel,
     required this.onLock,
+    this.onFullScreen,
     required this.onFill,
     required this.onScrubbing,
     required this.onInteract,
@@ -589,6 +674,9 @@ class _Controls extends StatelessWidget {
   final VoidCallback onBack;
   final void Function(_Panel) onPanel;
   final VoidCallback onLock;
+
+  /// A computer: full screen in Lock's place (a mouse can't tap by mistake).
+  final VoidCallback? onFullScreen;
   final VoidCallback onFill;
   final ValueChanged<bool> onScrubbing;
   final VoidCallback onInteract;
@@ -691,12 +779,27 @@ class _Controls extends StatelessWidget {
                       size: 44,
                     ),
                     const SizedBox(width: KSpace.x2),
-                    GlassIconButton(
-                      icon: Icons.lock_outline_rounded,
-                      label: 'Lock controls',
-                      onPressed: onLock,
-                      size: 44,
-                    ),
+                    if (onFullScreen case final full?)
+                      ValueListenableBuilder(
+                        valueListenable: windowFullScreen,
+                        builder: (_, on, _) => GlassIconButton(
+                          icon: on
+                              ? Icons.fullscreen_exit_rounded
+                              : Icons.fullscreen_rounded,
+                          label: on
+                              ? 'Exit full screen (F)'
+                              : 'Full screen (F)',
+                          onPressed: full,
+                          size: 44,
+                        ),
+                      )
+                    else
+                      GlassIconButton(
+                        icon: Icons.lock_outline_rounded,
+                        label: 'Lock controls',
+                        onPressed: onLock,
+                        size: 44,
+                      ),
                   ],
                 ),
                 // Between the bars (not the screen's exact middle): on a

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:media_kit/media_kit.dart';
 
 import 'app/app.dart';
+import 'app/desktop.dart';
 import 'app/providers.dart';
 import 'core/db/database.dart';
 import 'core/log.dart';
@@ -24,6 +25,7 @@ import 'ui/glass_mode.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  if (isDesktop) await initDesktopWindow();
   final paths = await AppPaths.resolve();
   Log.attach(paths.logs);
   FlutterError.onError = (d) =>

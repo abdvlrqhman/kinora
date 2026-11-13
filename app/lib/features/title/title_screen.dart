@@ -10,6 +10,7 @@ import '../../app/router.dart';
 import '../../services/sources.dart';
 import '../../services/tmdb.dart';
 import '../../ui/glass.dart';
+import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
@@ -148,135 +149,140 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
               ),
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
-                sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: KSpace.margin),
-                      CastTargetBuilder(
-                        builder: (context, tv) {
-                          final label = playOn(next?.label ?? 'Play', tv);
-                          return GlassGroup(
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: GlassButton(
-                                key: const ValueKey('play'),
-                                label: label,
-                                icon: Icons.play_arrow_rounded,
-                                prominent: true,
-                                semanticLabel: '$label ${meta.name}',
-                                onPressed: next == null
-                                    ? null
-                                    : () => openPlayer(context, primary),
+                // (Wide windows: the text keeps a reading width.)
+                sliver: SliverConstrainedCrossAxis(
+                  maxExtent: KLayout.readable,
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: KSpace.margin),
+                        CastTargetBuilder(
+                          builder: (context, tv) {
+                            final label = playOn(next?.label ?? 'Play', tv);
+                            return GlassGroup(
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: GlassButton(
+                                  key: const ValueKey('play'),
+                                  label: label,
+                                  icon: Icons.play_arrow_rounded,
+                                  prominent: true,
+                                  semanticLabel: '$label ${meta.name}',
+                                  onPressed: next == null
+                                      ? null
+                                      : () => openPlayer(context, primary),
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      if (next != null)
-                        ReleaseLine(video: t.video(next.episode), extra: left)
-                      else
-                        const SizedBox(height: 18),
-                      const SizedBox(height: KSpace.margin),
-                      GlassGroup(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: next == null
-                                  ? const ActionTile(
-                                      icon: Icons.download_rounded,
-                                      label: 'Download',
-                                      semanticLabel: 'Download',
-                                      onPressed: null,
-                                    )
-                                  : DownloadAction(request: primary),
-                            ),
-                            Expanded(child: MyListAction(meta: meta)),
-                            if (meta.trailerYouTubeIds.isNotEmpty)
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        if (next != null)
+                          ReleaseLine(video: t.video(next.episode), extra: left)
+                        else
+                          const SizedBox(height: 18),
+                        const SizedBox(height: KSpace.margin),
+                        GlassGroup(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Expanded(
-                                child: ActionTile(
-                                  icon: Icons.movie_creation_outlined,
-                                  label: 'Trailer',
-                                  semanticLabel: 'Watch the trailer on YouTube',
-                                  onPressed: () => unawaited(
-                                    launchUrl(
-                                      Uri.https('www.youtube.com', '/watch', {
-                                        'v': meta.trailerYouTubeIds.first,
-                                      }),
-                                      mode: LaunchMode.externalApplication,
+                                child: next == null
+                                    ? const ActionTile(
+                                        icon: Icons.download_rounded,
+                                        label: 'Download',
+                                        semanticLabel: 'Download',
+                                        onPressed: null,
+                                      )
+                                    : DownloadAction(request: primary),
+                              ),
+                              Expanded(child: MyListAction(meta: meta)),
+                              if (meta.trailerYouTubeIds.isNotEmpty)
+                                Expanded(
+                                  child: ActionTile(
+                                    icon: Icons.movie_creation_outlined,
+                                    label: 'Trailer',
+                                    semanticLabel:
+                                        'Watch the trailer on YouTube',
+                                    onPressed: () => unawaited(
+                                      launchUrl(
+                                        Uri.https('www.youtube.com', '/watch', {
+                                          'v': meta.trailerYouTubeIds.first,
+                                        }),
+                                        mode: LaunchMode.externalApplication,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            Expanded(
-                              child: ActionTile(
-                                icon: Icons.layers_rounded,
-                                label: 'Other versions',
-                                semanticLabel: 'Choose another version',
-                                onPressed: next == null
-                                    ? null
-                                    : () => showVersionsSheet(
-                                        context,
-                                        video: t.video(next.episode),
-                                        subtitle: subtitle,
-                                        onPick: (r) => openPlayer(
+                              Expanded(
+                                child: ActionTile(
+                                  icon: Icons.layers_rounded,
+                                  label: 'Other versions',
+                                  semanticLabel: 'Choose another version',
+                                  onPressed: next == null
+                                      ? null
+                                      : () => showVersionsSheet(
                                           context,
-                                          primary.copyWith(
-                                            candidateId: r.candidateId,
-                                          ),
-                                        ),
-                                        onDownload: (r) async {
-                                          await startDownload(
+                                          video: t.video(next.episode),
+                                          subtitle: subtitle,
+                                          onPick: (r) => openPlayer(
                                             context,
-                                            ref,
                                             primary.copyWith(
                                               candidateId: r.candidateId,
                                             ),
-                                          );
-                                          if (context.mounted) {
-                                            showNote(
+                                          ),
+                                          onDownload: (r) async {
+                                            await startDownload(
                                               context,
-                                              'Added to Downloads.',
+                                              ref,
+                                              primary.copyWith(
+                                                candidateId: r.candidateId,
+                                              ),
                                             );
-                                          }
-                                        },
-                                      ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: KSpace.section),
-                      // TMDB's extras arrive after the page: they grow in
-                      // instead of pushing the text down in one jump.
-                      _Grow(
-                        child: extra?.tagline == null
-                            ? null
-                            : Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: KSpace.x2,
+                                            if (context.mounted) {
+                                              showNote(
+                                                context,
+                                                'Added to Downloads.',
+                                              );
+                                            }
+                                          },
+                                        ),
                                 ),
-                                child: Text(
-                                  extra!.tagline!,
-                                  style: KType.title.copyWith(
-                                    color: KColors.haze,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: KSpace.section),
+                        // TMDB's extras arrive after the page: they grow in
+                        // instead of pushing the text down in one jump.
+                        _Grow(
+                          child: extra?.tagline == null
+                              ? null
+                              : Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: KSpace.x2,
+                                  ),
+                                  child: Text(
+                                    extra!.tagline!,
+                                    style: KType.title.copyWith(
+                                      color: KColors.haze,
+                                    ),
                                   ),
                                 ),
-                              ),
-                      ),
-                      if (meta.description?.trim().isNotEmpty ?? false)
-                        ExpandableText(
-                          meta.description!.trim(),
-                          style: KType.body,
                         ),
-                      _Credits(
-                        meta: meta,
-                        // The photo row below names them.
-                        showCast: extra?.cast.isEmpty ?? true,
-                      ),
-                    ],
+                        if (meta.description?.trim().isNotEmpty ?? false)
+                          ExpandableText(
+                            meta.description!.trim(),
+                            style: KType.body,
+                          ),
+                        _Credits(
+                          meta: meta,
+                          // The photo row below names them.
+                          showCast: extra?.cast.isEmpty ?? true,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

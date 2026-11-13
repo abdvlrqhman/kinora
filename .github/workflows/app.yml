@@ -1,7 +1,7 @@
 name: app
 
-# Analyze + test, then build the Android APKs and the iPhone IPA.
-# Tag vX.Y.Z to publish both as a GitHub Release.
+# Analyze + test, then build the Android APKs, the iPhone IPA and the
+# Windows zip. Tag vX.Y.Z to publish them as a GitHub Release.
 on:
   push:
     branches: [main]
@@ -248,9 +248,86 @@ jobs:
           path: app/dist/Kinora.ipa
           if-no-files-found: error
 
+  windows:
+    needs: [check, engine]
+    runs-on: windows-2025
+    # (New: a Windows problem doesn't hold up the phones' release.)
+    continue-on-error: true
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: libtorrent-x64-windows-static-md
+          path: packages/engine/prebuilt/x64-windows-static-md
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Build Kinora for Windows
+        run: |
+          flutter build windows --release --build-number ${{ github.run_number }} \
+            --dart-define=TRAKT_CLIENT_ID=${{ vars.TRAKT_CLIENT_ID }}
+          mkdir -p dist
+          cp -R build/windows/x64/runner/Release dist/Kinora
+          cd dist && 7z a -tzip -bd Kinora-windows-x64.zip Kinora >/dev/null && ls -la
+      # Starts the real build and checks it stays up (a missing DLL or a
+      # crash at launch fails here, not on someone's PC).
+      - name: Launch smoke test
+        run: |
+          ./dist/Kinora/Kinora.exe &
+          pid=$!
+          sleep 20
+          kill -0 "$pid" || { echo "::error::Kinora.exe exited at launch"; exit 1; }
+          taskkill //F //IM Kinora.exe || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kinora-windows
+          path: app/dist/Kinora-windows-x64.zip
+          if-no-files-found: error
+
+  e2e-windows:
+    name: end-to-end (Windows)
+    needs: [check, engine]
+    runs-on: windows-2025
+    timeout-minutes: 50
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: libtorrent-x64-windows-static-md
+          path: packages/engine/prebuilt/x64-windows-static-md
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run the end-to-end test on Windows
+        run: |
+          set -o pipefail
+          cd app && flutter test integration_test/app_test.dart -d windows --reporter expanded 2>&1 | tee ../e2e.log
+      - name: Player screenshots from the run
+        if: always()
+        run: python .github/scripts/e2e_shots.py e2e.log e2e-shots
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-windows-screenshots
+          path: e2e-shots
+          if-no-files-found: ignore
+          retention-days: 14
+
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, ios]
+    # Waits for Windows too, but publishes the phones' builds without it.
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.android.result == 'success' && needs.ios.result == 'success'
+    needs: [android, ios, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

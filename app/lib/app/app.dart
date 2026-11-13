@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ui/theme.dart';
 import '../ui/tint.dart';
 import '../ui/tokens.dart';
+import 'desktop.dart';
 import 'intro.dart';
 import 'router.dart';
 
@@ -25,7 +26,8 @@ class KinoraApp extends ConsumerWidget {
       routerConfig: ref.watch(routerProvider),
       builder: (context, child) {
         final app = KinoraTint(accent: KColors.marquee, child: child!);
-        return showIntro ? IntroOverlay(child: app) : app;
+        final shown = showIntro ? IntroOverlay(child: app) : app;
+        return isDesktop ? DesktopFrame(child: shown) : shown;
       },
     );
   }
