@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:media_kit/media_kit.dart' show Player;
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
@@ -391,6 +393,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _desktopShow();
   }
 
+  void _setVolume(double v) {
+    _unmuted = null;
+    unawaited(c.player.setVolume(v));
+  }
+
   void _volumeBy(double step) {
     final v = (c.player.state.volume + step).clamp(0.0, 100.0);
     _unmuted = null;
@@ -555,6 +562,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                               onFullScreen: isDesktop
                                   ? _toggleFullScreen
                                   : null,
+                              // (A phone has its own volume buttons.)
+                              onVolume: isDesktop ? _setVolume : null,
+                              onMute: _toggleMute,
                               onFill: () => setState(() {
                                 _fill = !_fill;
                                 _zoom = 1;
@@ -661,7 +671,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ? MouseCursor.defer
               : SystemMouseCursors.none,
           onHover: (_) => _desktopShow(),
-          child: page,
+          // The wheel turns the volume, as in desktop players.
+          child: Listener(
+            onPointerSignal: (e) {
+              if (e is PointerScrollEvent && e.scrollDelta.dy != 0) {
+                _volumeBy(e.scrollDelta.dy < 0 ? 5 : -5);
+              }
+            },
+            child: page,
+          ),
         ),
       ),
     );
@@ -669,6 +687,59 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 }
 
 // ------------------------------------------------------------------ parts --
+
+/// A computer's volume: the speaker mutes and unmutes (M), the slider sets
+/// it (Up and Down and the wheel step it too).
+class _Volume extends StatelessWidget {
+  const _Volume({
+    required this.player,
+    required this.onChanged,
+    required this.onMute,
+    required this.onInteract,
+  });
+
+  final Player player;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onMute;
+  final VoidCallback onInteract;
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<double>(
+    stream: player.stream.volume,
+    initialData: player.state.volume,
+    builder: (context, snap) {
+      final v = (snap.data ?? 100).clamp(0.0, 100.0);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassIconButton(
+            icon: v == 0
+                ? Icons.volume_off_rounded
+                : v < 50
+                ? Icons.volume_down_rounded
+                : Icons.volume_up_rounded,
+            label: v == 0 ? 'Unmute (M)' : 'Mute (M)',
+            onPressed: onMute,
+            size: 44,
+          ),
+          SizedBox(
+            width: 120,
+            child: Slider(
+              value: v,
+              max: 100,
+              label: '${v.round()}%',
+              semanticFormatterCallback: (v) => 'Volume ${v.round()}%',
+              onChanged: (next) {
+                onInteract();
+                onChanged(next);
+              },
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
 
 class _Controls extends StatelessWidget {
   const _Controls({
@@ -680,6 +751,8 @@ class _Controls extends StatelessWidget {
     required this.onPanel,
     required this.onLock,
     this.onFullScreen,
+    this.onVolume,
+    required this.onMute,
     required this.onFill,
     required this.onScrubbing,
     required this.onInteract,
@@ -697,6 +770,10 @@ class _Controls extends StatelessWidget {
 
   /// A computer: full screen in Lock's place (a mouse can't tap by mistake).
   final VoidCallback? onFullScreen;
+
+  /// A computer: the volume slider and its mute button (null: none).
+  final ValueChanged<double>? onVolume;
+  final VoidCallback onMute;
   final VoidCallback onFill;
   final ValueChanged<bool> onScrubbing;
   final VoidCallback onInteract;
@@ -928,6 +1005,15 @@ class _Controls extends StatelessWidget {
                       onPressed: onFill,
                       size: 44,
                     ),
+                    if (onVolume case final setVolume?) ...[
+                      const SizedBox(width: KSpace.x2),
+                      _Volume(
+                        player: c.player,
+                        onChanged: setVolume,
+                        onMute: onMute,
+                        onInteract: onInteract,
+                      ),
+                    ],
                     // All the room that's left, button at its right edge
                     // (a Spacer beside a Flexible split it in half).
                     Expanded(

@@ -11,6 +11,7 @@ import 'dart:ui' as ui;
 import 'package:dlna/testing.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart' show Slider;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -350,6 +351,37 @@ void main() {
       // The pointer brings the controls back.
       await mouse.moveTo(screen.center + const Offset(12, 12));
       await tester.pump(const Duration(milliseconds: 600));
+      // A computer has no volume buttons: the player's own mute button and
+      // slider, and the wheel over the picture.
+      await tester.tap(find.bySemanticsLabel('Mute (M)'));
+      await pumpUntil(
+        tester,
+        () => c.player.state.volume == 0,
+        timeout: const Duration(seconds: 5),
+        reason: 'the speaker button mutes',
+      );
+      await tester.tap(find.bySemanticsLabel('Unmute (M)'));
+      await pumpUntil(
+        tester,
+        () => c.player.state.volume > 0,
+        timeout: const Duration(seconds: 5),
+        reason: 'and unmutes',
+      );
+      final loud = c.player.state.volume;
+      final wheel = TestPointer(9, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(wheel.hover(screen.center));
+      await tester.sendEventToBinding(wheel.scroll(const Offset(0, 120)));
+      await pumpUntil(
+        tester,
+        () => c.player.state.volume < loud,
+        timeout: const Duration(seconds: 5),
+        reason: 'the wheel turns it down',
+      );
+      expect(
+        find.byWidgetPredicate((w) => w is Slider && w.max == 100),
+        findsOneWidget,
+        reason: 'the volume slider is there',
+      );
       // Full screen from its button fills the display with the picture, as
       // seen on the real screen; Esc brings the window back. (The test
       // starts the app without main(), which sets up and shows the window:
