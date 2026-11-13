@@ -97,11 +97,30 @@ final class TraktSync extends ChangeNotifier {
   /// Why the last sync or sign-in didn't go through, for Settings.
   String? note;
 
+  /// What the last sync brought in: watched, resume points, My List.
+  ({int watched, int resume, int listed})? brought;
+  int _watched = 0, _resume = 0, _listed = 0;
+
   _Tokens? _tokens;
   bool _loaded = false;
   Timer? _flushSoon;
   Future<void> _work = Future.value();
   final _episodeIds = <String, int>{};
+
+  /// Tests and screen renders: signed in as [name], last synced [at].
+  @visibleForTesting
+  void debugSignedIn(
+    String name, {
+    DateTime? at,
+    ({int watched, int resume, int listed})? brought,
+  }) {
+    _loaded = true;
+    _tokens = _Tokens('test', 'test', DateTime(2100));
+    user = name;
+    lastSync = at;
+    this.brought = brought;
+    notifyListeners();
+  }
 
   TraktConfig? get _config => _ref.read(traktConfigProvider);
   AppDatabase get _db => _ref.read(databaseProvider);
@@ -157,7 +176,8 @@ final class TraktSync extends ChangeNotifier {
   }
 
   /// Waits (polling at Trakt's pace) until the code is approved, denied or
-  /// expired, or [cancelled] returns true. Approved: signed in and synced.
+  /// expired, or [cancelled] returns true. Approved: signed in; the first
+  /// [syncNow] then merges both ways.
   Future<TraktSignIn> finishSignIn(
     TraktCode code, {
     bool Function()? cancelled,
@@ -214,7 +234,6 @@ final class TraktSync extends ChangeNotifier {
     note = null;
     notifyListeners();
     Log.i('trakt', 'signed in');
-    await syncNow();
   }
 
   Future<void> signOut() async {
@@ -436,6 +455,7 @@ final class TraktSync extends ChangeNotifier {
     await _load();
     if (!signedIn || syncing) return;
     syncing = true;
+    _watched = _resume = _listed = 0;
     notifyListeners();
     try {
       final before = await _kv(_activitiesKey);
@@ -465,6 +485,7 @@ final class TraktSync extends ChangeNotifier {
         await _pullWatchlist(merge: first);
       }
       await _setKv(_activitiesKey, jsonEncode(now));
+      brought = (watched: _watched, resume: _resume, listed: _listed);
       lastSync = DateTime.now();
       await _setKv(_syncedKey, lastSync!.toIso8601String());
       note = null;
@@ -584,6 +605,7 @@ final class TraktSync extends ChangeNotifier {
         if (mine != null && (mine.completed || mine.updatedAt.isAfter(at))) {
           continue;
         }
+        _watched++;
         await _db
             .into(_db.watchProgress)
             .insertOnConflictUpdate(
@@ -639,6 +661,7 @@ final class TraktSync extends ChangeNotifier {
             ? mine!.durationMs
             : (runtime ?? 0) * 60000;
         if (duration <= 0) continue; // no length: nowhere to resume
+        _resume++;
         await _db
             .into(_db.watchProgress)
             .insertOnConflictUpdate(
@@ -710,6 +733,7 @@ final class TraktSync extends ChangeNotifier {
               ),
             );
         added.add(imdb);
+        _listed++;
       }
     });
     unawaited(_fillArtwork(added.take(40).toList()));

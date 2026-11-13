@@ -14,6 +14,7 @@ import '../../ui/tokens.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/states.dart';
 import '../cast/cast_picker.dart';
+import '../trakt/trakt_ui.dart';
 import 'billboard.dart';
 import 'home_feed.dart';
 import 'rows.dart';
@@ -142,7 +143,16 @@ class _FeedState extends ConsumerState<_Feed> {
         Positioned(
           top: pad.top + KSpace.x1,
           right: KSpace.margin,
-          child: const GlassGroup(child: CastButton()),
+          child: const GlassGroup(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TraktButton(),
+                SizedBox(width: KSpace.x2),
+                CastButton(),
+              ],
+            ),
+          ),
         ),
       ],
     );

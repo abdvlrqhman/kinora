@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../services/trakt.dart';
+import '../trakt/trakt_ui.dart';
 import '../../app/providers.dart';
 import '../../services/cast_service.dart';
 import '../../services/sources.dart';
@@ -27,8 +29,11 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  static const _last = 6;
   int _step = 0;
+
+  /// Trakt's step shows when this build has Trakt (then 7 steps, else 6).
+  bool get _trakt => ref.read(traktSyncProvider).available;
+  int get _last => _trakt ? 7 : 6;
 
   void _go(int step) => setState(() => _step = step.clamp(0, _last));
 
@@ -106,7 +111,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             intro: 'Optional. $subtitleSitesIntro',
                             children: [SubtitleSiteList()],
                           ),
-                          5 => const _Step(
+                          5 when _trakt => const _Step(
+                            title: 'Already use Trakt?',
+                            intro:
+                                'Optional. Sign in to bring in what you’ve '
+                                'watched, where you stopped and your watchlist, '
+                                'and keep them the same on your other devices '
+                                'and in apps like Stremio and Kodi.',
+                            children: [TraktAccountPanel(intro: false)],
+                          ),
+                          5 || 6 when _step == _last - 1 => const _Step(
                             title: 'Your TV',
                             intro:
                                 'Optional. Choose a TV on this Wi-Fi: Kinora picks '
@@ -131,7 +145,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         key: const ValueKey('onboarding-next'),
                         label: switch (_step) {
                           0 => 'Set up Kinora',
-                          _last => 'Start watching',
+                          final s when s == _last => 'Start watching',
                           _ => 'Continue',
                         },
                         prominent: true,

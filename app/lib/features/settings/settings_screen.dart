@@ -64,6 +64,19 @@ class SettingsScreen extends ConsumerWidget {
       title: 'Settings',
       back: false,
       children: [
+        const SectionTitle('Account'),
+        ListenableBuilder(
+          listenable: trakt,
+          builder: (_, _) => NavRow(
+            label: 'Trakt',
+            value: !trakt.available
+                ? 'Not in this version'
+                : trakt.signedIn
+                ? 'Syncing as ${trakt.user}'
+                : 'Sign in to keep what you watch the same everywhere',
+            onTap: () => go('trakt'),
+          ),
+        ),
         const SectionTitle('Watching'),
         NavRow(
           label: 'Sources',
@@ -90,16 +103,6 @@ class SettingsScreen extends ConsumerWidget {
           label: 'Subtitle sites',
           value: sites.isEmpty ? 'None on' : sites.join(', '),
           onTap: () => go('subtitle-sites'),
-        ),
-        ListenableBuilder(
-          listenable: trakt,
-          builder: (_, _) => NavRow(
-            label: 'Trakt',
-            value: trakt.signedIn
-                ? 'Syncing as ${trakt.user}'
-                : 'Keep what you watch the same everywhere',
-            onTap: () => go('trakt'),
-          ),
         ),
         NavRow(
           label: 'Playback',

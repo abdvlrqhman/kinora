@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinora/services/trakt.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/settings.dart';
 
@@ -100,6 +101,12 @@ void main() {
         subtitleLanguages: ['ar', 'en'],
         enabledSubtitleProviders: ['subdl', 'wyzie'],
       ),
+      // A build with Trakt, as the released apps are.
+      overrides: [
+        traktConfigProvider.overrideWithValue(
+          const TraktConfig(clientId: 'kinora'),
+        ),
+      ],
     );
     await tester.pumpAndSettle();
     await expectLater(

@@ -17,9 +17,11 @@ import 'package:kinora/features/cast/cast_picker.dart';
 import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/features/search/search_screen.dart';
 import 'package:kinora/features/title/title_screen.dart';
+import 'package:kinora/features/trakt/trakt_ui.dart';
 import 'package:kinora/services/cast_service.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:kinora/services/tmdb.dart';
+import 'package:kinora/services/trakt.dart';
 import 'package:stremio/stremio.dart';
 
 import '../features/harness.dart';
@@ -205,6 +207,9 @@ void main() {
           ),
           onlineProvider.overrideWith((ref) => Stream.value(true)),
           castSearchProvider.overrideWithValue(() async {}),
+          traktConfigProvider.overrideWithValue(
+            const TraktConfig(clientId: 'kinora'),
+          ),
           resolveWith(fakeReleases),
           metaProvider.overrideWith(
             (ref, key) async => switch (key.id) {
@@ -262,6 +267,25 @@ void main() {
     await expectLater(
       find.byType(KinoraApp),
       matchesGoldenFile('screens/home.png'),
+    );
+  });
+
+  // Trakt from Home: the avatar beside Cast opens the account sheet.
+  testScreen('home, Trakt signed in', (tester) async {
+    await pumpHome(tester);
+    ProviderScope.containerOf(tester.element(find.byType(KinoraApp)))
+        .read(traktSyncProvider)
+        .debugSignedIn(
+          'abdvlrqhman',
+          at: DateTime.now().subtract(const Duration(minutes: 3)),
+          brought: (watched: 120, resume: 3, listed: 12),
+        );
+    await tester.pump();
+    await tester.tap(find.byType(TraktAvatar));
+    await settleImages(tester);
+    await expectLater(
+      find.byType(KinoraApp),
+      matchesGoldenFile('screens/home_trakt.png'),
     );
   });
 

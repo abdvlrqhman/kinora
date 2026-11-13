@@ -120,6 +120,7 @@ void main() {
     final code = await sync.startSignIn();
     expect(code.userCode, 'AB12CD');
     expect(await sync.finishSignIn(code), TraktSignIn.approved);
+    await sync.syncNow();
   }
 
   test('sign in with a code, then the first sync goes both ways', () async {
@@ -215,6 +216,7 @@ void main() {
     final list = await db.select(db.libraryItems).get();
     expect(list.map((i) => i.mediaId), containsAll(['tt300', 'tt201']));
     expect(sync.lastSync, isNotNull);
+    expect(sync.brought, (watched: 1, resume: 1, listed: 1));
     // The sign-in lives in secure storage, not the database.
     expect(store.values.keys, contains('secret.trakt.tokens'));
   });
