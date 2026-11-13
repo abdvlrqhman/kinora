@@ -84,8 +84,8 @@ class _TmdbKeySectionState extends ConsumerState<TmdbKeySection> {
         Note(
           on
               ? 'TMDB adds cast photos, trailers, More like this, age '
-                    'ratings and missing artwork. Your key is saved on this '
-                    'phone.'
+                    'ratings and missing artwork. Your key is saved on '
+                    '$thisDevice.'
               : 'Add your free TMDB key for cast photos, trailers, More like '
                     'this, age ratings and missing artwork. Get one at '
                     'themoviedb.org › Settings › API (the API key or the '

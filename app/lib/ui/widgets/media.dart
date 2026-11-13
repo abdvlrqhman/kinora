@@ -3,10 +3,12 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:stremio/stremio.dart';
 
+import '../../app/desktop.dart';
 import '../../core/format.dart';
 import '../tint.dart';
 import '../tokens.dart';
 import 'artwork.dart';
+import 'pointer.dart';
 
 final _firstLetter = RegExp(r'\p{L}', unicode: true);
 final _rtlLetter = RegExp(r'[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]');
@@ -39,10 +41,15 @@ class Pressable extends StatefulWidget {
     this.onLongPress,
     this.hint,
     this.actions,
+    this.lift = false,
   });
 
   final String label;
   final Widget child;
+
+  /// Artwork (posters, stills): grows a little under the mouse. Rows get a
+  /// faint highlight instead.
+  final bool lift;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -75,24 +82,45 @@ class _PressableState extends State<Pressable> {
       customSemanticsActions: widget.actions,
       onLongPress: widget.onLongPress,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: enabled ? (_) => _set(true) : null,
-        onTapUp: enabled ? (_) => _set(false) : null,
-        onTapCancel: () => _set(false),
-        onTap: widget.onTap,
-        onLongPress: widget.onLongPress == null
-            ? null
-            : () {
-                _set(false);
-                HapticFeedback.mediumImpact();
-                widget.onLongPress!();
-              },
-        child: AnimatedScale(
-          scale: _down && !reduce ? 0.97 : 1,
-          duration: KMotion.fast,
-          curve: KMotion.curve,
-          child: widget.child,
+      child: PointerFocus(
+        onActivate: widget.onTap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(KRadius.poster),
+        ),
+        builder: (context, hovered) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: enabled ? (_) => _set(true) : null,
+          onTapUp: enabled ? (_) => _set(false) : null,
+          onTapCancel: () => _set(false),
+          onTap: widget.onTap,
+          onLongPress: widget.onLongPress == null
+              ? null
+              : () {
+                  _set(false);
+                  HapticFeedback.mediumImpact();
+                  widget.onLongPress!();
+                },
+          child: AnimatedScale(
+            scale: reduce
+                ? 1
+                : _down
+                ? 0.97
+                : hovered && widget.lift
+                ? 1.03
+                : 1,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            child: hovered && !widget.lift
+                ? DecoratedBox(
+                    position: DecorationPosition.foreground,
+                    decoration: BoxDecoration(
+                      color: const Color(0x0AFFFFFF),
+                      borderRadius: BorderRadius.circular(KRadius.poster),
+                    ),
+                    child: widget.child,
+                  )
+                : widget.child,
+          ),
         ),
       ),
     );
@@ -132,10 +160,25 @@ class ArtHero extends StatelessWidget {
   );
 }
 
-/// Poster size used in rows.
+/// Poster size used in rows (and Search's grid). A computer's window
+/// shows them larger as it widens; a phone keeps one size.
 abstract final class PosterSize {
   static const double width = 116;
   static const double height = width * 1.5;
+
+  static double widthOf(BuildContext context) {
+    if (!isDesktop) return width;
+    final w = MediaQuery.sizeOf(context).width;
+    return w < 800
+        ? 140
+        : w < 1180
+        ? 160
+        : w < 1580
+        ? 180
+        : 200;
+  }
+
+  static double heightOf(BuildContext context) => widthOf(context) * 1.5;
 }
 
 /// A 2:3 poster that opens its title. No caption: the art carries the name,
@@ -156,6 +199,7 @@ class PosterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Pressable(
+    lift: true,
     label: name,
     onTap: onTap,
     child: Artwork(

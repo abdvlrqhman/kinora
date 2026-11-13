@@ -140,20 +140,22 @@ class _FeedState extends ConsumerState<_Feed> {
         ),
         // Fixed: scrolled content fades under the status bar and Cast.
         const TopShade(),
-        Positioned(
-          top: pad.top + KSpace.x1,
-          right: KSpace.margin,
-          child: const GlassGroup(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TraktButton(),
-                SizedBox(width: KSpace.x2),
-                CastButton(),
-              ],
+        // (Beside the side rail they're at its foot.)
+        if (!AppShell.onRail(context))
+          Positioned(
+            top: pad.top + KSpace.x1,
+            right: KSpace.margin,
+            child: const GlassGroup(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TraktButton(),
+                  SizedBox(width: KSpace.x2),
+                  CastButton(),
+                ],
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -225,7 +227,7 @@ class _SkeletonRows extends StatelessWidget {
           ),
           const SizedBox(height: KSpace.x3),
           SizedBox(
-            height: PosterSize.height,
+            height: PosterSize.heightOf(context),
             child: ClipRect(
               child: OverflowBox(
                 alignment: Alignment.centerLeft,
@@ -233,9 +235,11 @@ class _SkeletonRows extends StatelessWidget {
                 child: Row(
                   children: [
                     for (var i = 0; i < 4; i++) ...[
-                      const SizedBox(
-                        width: PosterSize.width,
-                        child: LoadingBlock(height: PosterSize.height),
+                      SizedBox(
+                        width: PosterSize.widthOf(context),
+                        child: LoadingBlock(
+                          height: PosterSize.heightOf(context),
+                        ),
                       ),
                       const SizedBox(width: KSpace.x3),
                     ],

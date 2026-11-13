@@ -16,6 +16,7 @@ import '../../services/resolver.dart';
 import '../downloads/download_prompts.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
+import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 
 /// Adds or removes a title from My list (+ / ✓).
@@ -68,7 +69,20 @@ class ActionTile extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    // A wide window: a labelled glass capsule, as in Home's hero row.
+    if (KLayout.isWide(context)) {
+      return GlassButton(
+        label: label,
+        icon: icon,
+        semanticLabel: semanticLabel,
+        onPressed: onPressed,
+      );
+    }
+    return _tile();
+  }
+
+  Widget _tile() => Column(
     children: [
       GlassIconButton(icon: icon, label: semanticLabel, onPressed: onPressed),
       const SizedBox(height: 6),

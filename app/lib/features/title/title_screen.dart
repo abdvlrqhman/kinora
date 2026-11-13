@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stremio/stremio.dart';
 
+import '../../app/shell.dart';
+import '../../app/desktop.dart';
 import '../../app/router.dart';
 import '../../services/sources.dart';
 import '../../services/tmdb.dart';
@@ -120,6 +123,10 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
   Widget build(BuildContext context) {
     final t = widget.model;
     final meta = t.meta;
+    final wide = KLayout.isWide(context);
+    // A very wide window: episodes in two columns, the season row across.
+    final twoColumns = isDesktop && MediaQuery.sizeOf(context).width >= 1400;
+    final listWidth = twoColumns ? double.infinity : 960.0;
     // TMDB's extras (cast photos, More like this...), when a key is set.
     final extra = ref.watch(tmdbTitleProvider(widget.titleKey)).value;
     final next = ref.watch(nextUpProvider(widget.titleKey));
@@ -162,7 +169,8 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                             final label = playOn(next?.label ?? 'Play', tv);
                             return GlassGroup(
                               child: SizedBox(
-                                width: double.infinity,
+                                // (A wide window: Play at its own width.)
+                                width: wide ? null : double.infinity,
                                 child: GlassButton(
                                   key: const ValueKey('play'),
                                   label: label,
@@ -184,71 +192,64 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                           const SizedBox(height: 18),
                         const SizedBox(height: KSpace.margin),
                         GlassGroup(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: _Actions(
+                            wide: wide,
                             children: [
-                              Expanded(
-                                child: next == null
-                                    ? const ActionTile(
-                                        icon: Icons.download_rounded,
-                                        label: 'Download',
-                                        semanticLabel: 'Download',
-                                        onPressed: null,
-                                      )
-                                    : DownloadAction(request: primary),
-                              ),
-                              Expanded(child: MyListAction(meta: meta)),
+                              next == null
+                                  ? const ActionTile(
+                                      icon: Icons.download_rounded,
+                                      label: 'Download',
+                                      semanticLabel: 'Download',
+                                      onPressed: null,
+                                    )
+                                  : DownloadAction(request: primary),
+                              MyListAction(meta: meta),
                               if (meta.trailerYouTubeIds.isNotEmpty)
-                                Expanded(
-                                  child: ActionTile(
-                                    icon: Icons.movie_creation_outlined,
-                                    label: 'Trailer',
-                                    semanticLabel:
-                                        'Watch the trailer on YouTube',
-                                    onPressed: () => unawaited(
-                                      launchUrl(
-                                        Uri.https('www.youtube.com', '/watch', {
-                                          'v': meta.trailerYouTubeIds.first,
-                                        }),
-                                        mode: LaunchMode.externalApplication,
-                                      ),
+                                ActionTile(
+                                  icon: Icons.movie_creation_outlined,
+                                  label: 'Trailer',
+                                  semanticLabel: 'Watch the trailer on YouTube',
+                                  onPressed: () => unawaited(
+                                    launchUrl(
+                                      Uri.https('www.youtube.com', '/watch', {
+                                        'v': meta.trailerYouTubeIds.first,
+                                      }),
+                                      mode: LaunchMode.externalApplication,
                                     ),
                                   ),
                                 ),
-                              Expanded(
-                                child: ActionTile(
-                                  icon: Icons.layers_rounded,
-                                  label: 'Other versions',
-                                  semanticLabel: 'Choose another version',
-                                  onPressed: next == null
-                                      ? null
-                                      : () => showVersionsSheet(
+                              ActionTile(
+                                icon: Icons.layers_rounded,
+                                label: 'Other versions',
+                                semanticLabel: 'Choose another version',
+                                onPressed: next == null
+                                    ? null
+                                    : () => showVersionsSheet(
+                                        context,
+                                        video: t.video(next.episode),
+                                        subtitle: subtitle,
+                                        onPick: (r) => openPlayer(
                                           context,
-                                          video: t.video(next.episode),
-                                          subtitle: subtitle,
-                                          onPick: (r) => openPlayer(
+                                          primary.copyWith(
+                                            candidateId: r.candidateId,
+                                          ),
+                                        ),
+                                        onDownload: (r) async {
+                                          await startDownload(
                                             context,
+                                            ref,
                                             primary.copyWith(
                                               candidateId: r.candidateId,
                                             ),
-                                          ),
-                                          onDownload: (r) async {
-                                            await startDownload(
+                                          );
+                                          if (context.mounted) {
+                                            showNote(
                                               context,
-                                              ref,
-                                              primary.copyWith(
-                                                candidateId: r.candidateId,
-                                              ),
+                                              'Added to Downloads.',
                                             );
-                                            if (context.mounted) {
-                                              showNote(
-                                                context,
-                                                'Added to Downloads.',
-                                              );
-                                            }
-                                          },
-                                        ),
-                                ),
+                                          }
+                                        },
+                                      ),
                               ),
                             ],
                           ),
@@ -272,9 +273,13 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                                 ),
                         ),
                         if (meta.description?.trim().isNotEmpty ?? false)
-                          ExpandableText(
-                            meta.description!.trim(),
-                            style: KType.body,
+                          // About 65 characters a line.
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: ExpandableText(
+                              meta.description!.trim(),
+                              style: KType.body,
+                            ),
                           ),
                         _Credits(
                           meta: meta,
@@ -307,34 +312,63 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                     top: KSpace.section,
                     bottom: KSpace.x1,
                   ),
-                  sliver: SliverToBoxAdapter(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: SeasonPicker(
-                            seasons: t.seasons,
-                            selected: season,
-                            onSelect: (s) => setState(() => _season = s),
+                  // (A wide window: the season and its episodes keep a
+                  // list's width, under the title.)
+                  sliver: SliverConstrainedCrossAxis(
+                    maxExtent: listWidth,
+                    sliver: SliverToBoxAdapter(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: SeasonPicker(
+                              seasons: t.seasons,
+                              selected: season,
+                              onSelect: (s) => setState(() => _season = s),
+                            ),
                           ),
-                        ),
-                        _SeasonMenu(
-                          season: season,
-                          onDownload: () =>
-                              unawaited(_downloadSeason(season, episodes)),
-                        ),
-                        const SizedBox(width: KSpace.margin - 12),
-                      ],
+                          _SeasonMenu(
+                            season: season,
+                            onDownload: () =>
+                                unawaited(_downloadSeason(season, episodes)),
+                          ),
+                          // (Lines up with the episodes' download icons.)
+                          const SizedBox(width: KSpace.margin),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                SliverList.builder(
-                  itemCount: episodes.length,
-                  itemBuilder: (_, i) => EpisodeRow(
-                    key: ValueKey(episodes[i].id),
-                    model: t,
-                    episode: episodes[i],
-                    now: _now,
-                  ),
+                SliverConstrainedCrossAxis(
+                  maxExtent: listWidth,
+                  sliver: twoColumns
+                      ? SliverList.builder(
+                          itemCount: (episodes.length + 1) ~/ 2,
+                          itemBuilder: (_, i) => Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final j in [i * 2, i * 2 + 1])
+                                Expanded(
+                                  child: j < episodes.length
+                                      ? EpisodeRow(
+                                          key: ValueKey(episodes[j].id),
+                                          model: t,
+                                          episode: episodes[j],
+                                          now: _now,
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                            ],
+                          ),
+                        )
+                      : SliverList.builder(
+                          itemCount: episodes.length,
+                          itemBuilder: (_, i) => EpisodeRow(
+                            key: ValueKey(episodes[i].id),
+                            model: t,
+                            episode: episodes[i],
+                            now: _now,
+                          ),
+                        ),
                 ),
               ],
               if (t.isSeries)
@@ -460,19 +494,37 @@ class _Header extends StatelessWidget {
               opacity: scrolled ? 1 : 0,
               duration: fade,
               curve: KMotion.curve,
-              child: GlassGroup(
-                child: Glass(
-                  radius: 0,
-                  tintStrength: 0.10,
-                  child: SizedBox(height: top + 56, width: double.infinity),
-                ),
-              ),
+              // A computer: the same frosted black as the title bar above
+              // it, so the two read as one band.
+              child: isDesktop
+                  ? ClipRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                        child: ColoredBox(
+                          color: const Color(0xB3000000),
+                          child: SizedBox(
+                            height: top + 56,
+                            width: double.infinity,
+                          ),
+                        ),
+                      ),
+                    )
+                  : GlassGroup(
+                      child: Glass(
+                        radius: 0,
+                        tintStrength: 0.10,
+                        child: SizedBox(
+                          height: top + 56,
+                          width: double.infinity,
+                        ),
+                      ),
+                    ),
             ),
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(
               KSpace.margin,
-              top + KSpace.x1,
+              top + (isDesktop ? KSpace.x3 : KSpace.x1),
               KSpace.margin,
               0,
             ),
@@ -497,8 +549,11 @@ class _Header extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: KSpace.x3),
-                  const CastButton(),
+                  // (Beside the side rail, Cast is at its foot.)
+                  if (!AppShell.onRail(context)) ...[
+                    const SizedBox(width: KSpace.x3),
+                    const CastButton(),
+                  ],
                 ],
               ),
             ),
@@ -694,6 +749,8 @@ class _BackButton extends StatelessWidget {
   Widget build(BuildContext context) => GlassIconButton(
     icon: Icons.chevron_left_rounded,
     label: 'Back',
+    // (A computer: the same 40 px back as Settings' pages.)
+    size: isDesktop ? 40 : 48,
     onPressed: () => context.canPop() ? context.pop() : context.go('/'),
   );
 }
@@ -737,4 +794,21 @@ class _Skeleton extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// The title's actions: four equal tiles under Play on a phone; labelled
+/// capsules in a row, left-aligned, in a wide window.
+class _Actions extends StatelessWidget {
+  const _Actions({required this.wide, required this.children});
+
+  final bool wide;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => wide
+      ? Wrap(spacing: KSpace.x3, runSpacing: KSpace.x3, children: children)
+      : Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [for (final c in children) Expanded(child: c)],
+        );
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/shell.dart';
+import '../../../app/desktop.dart';
 import '../../../ui/glass.dart';
 import '../../../ui/layout.dart';
 import '../../../ui/tint.dart';
@@ -30,41 +31,74 @@ class SettingsPage extends StatelessWidget {
   final List<Widget> children;
   final bool back;
 
+  void _back(BuildContext context) =>
+      context.canPop() ? context.pop() : context.go('/settings');
+
   @override
   Widget build(BuildContext context) => Scaffold(
     body: ListView(
       padding: EdgeInsets.only(
         top: MediaQuery.paddingOf(context).top + KSpace.x2,
         bottom: AppShell.bottomInset(context),
-        left: KLayout.side(context),
-        right: KLayout.side(context),
+        right: KLayout.rest(context),
       ),
       children: [
-        if (back)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: KSpace.margin),
-              child: GlassGroup(
-                child: GlassIconButton(
-                  icon: Icons.chevron_left_rounded,
-                  label: 'Back',
-                  onPressed: () => context.canPop()
-                      ? context.pop()
-                      : context.go('/settings'),
+        if (back && isDesktop)
+          // A computer: a small back chevron beside the title (Esc and the
+          // mouse's back button work too).
+          Padding(
+            // Top at 52 and left on the page's edge, as on a title page.
+            padding: const EdgeInsets.fromLTRB(
+              KSpace.margin,
+              KSpace.x1,
+              KSpace.margin,
+              0,
+            ),
+            child: Row(
+              children: [
+                GlassGroup(
+                  child: GlassIconButton(
+                    icon: Icons.chevron_left_rounded,
+                    label: 'Back',
+                    size: 40,
+                    onPressed: () => _back(context),
+                  ),
+                ),
+                const SizedBox(width: KSpace.x3),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(title, style: KType.h1),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          if (back)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: KSpace.margin),
+                child: GlassGroup(
+                  child: GlassIconButton(
+                    icon: Icons.chevron_left_rounded,
+                    label: 'Back',
+                    onPressed: () => _back(context),
+                  ),
                 ),
               ),
             ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              KSpace.margin,
+              back ? KSpace.x3 : KSpace.x4,
+              KSpace.margin,
+              0,
+            ),
+            child: Semantics(header: true, child: Text(title, style: KType.h1)),
           ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            KSpace.margin,
-            back ? KSpace.x3 : KSpace.x4,
-            KSpace.margin,
-            0,
-          ),
-          child: Semantics(header: true, child: Text(title, style: KType.h1)),
-        ),
+        ],
         if (intro != null) Note(intro!, top: KSpace.x2),
         const SizedBox(height: KSpace.x2),
         ...children,
@@ -102,7 +136,14 @@ class Note extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.fromLTRB(KSpace.margin, top, KSpace.margin, KSpace.x2),
-    child: Text(text, style: KType.body.copyWith(color: color)),
+    // About 65 characters a line at most (a wide window).
+    child: Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: Text(text, style: KType.body.copyWith(color: color)),
+      ),
+    ),
   );
 }
 

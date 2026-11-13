@@ -286,7 +286,7 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Out of sync? Tap “Line is spoken now” as you hear '
+                        'Out of sync? Choose “Line is spoken now” as you hear '
                         'the line. Hold − or + to move a whole second.',
                         style: KType.small,
                       ),

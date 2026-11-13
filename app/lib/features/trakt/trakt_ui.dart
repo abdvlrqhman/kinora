@@ -9,6 +9,7 @@ import '../../app/desktop.dart';
 import '../../services/trakt.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
+import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/sheet.dart';
@@ -148,17 +149,25 @@ class _TraktAccountPanelState extends ConsumerState<TraktAccountPanel> {
                 ),
               Padding(
                 padding: const EdgeInsets.all(KSpace.margin),
-                child: GlassButton(
-                  label: _waitingForCode
-                      ? 'Getting a code…'
-                      : _problem == null
-                      ? 'Sign in with Trakt'
-                      : 'Get a new code',
-                  icon: Icons.login_rounded,
-                  prominent: true,
-                  onPressed: _waitingForCode
-                      ? null
-                      : () => unawaited(_signIn()),
+                // (A wide window: the button at its own width.)
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  widthFactor: 1,
+                  child: SizedBox(
+                    width: KLayout.isWide(context) ? null : double.infinity,
+                    child: GlassButton(
+                      label: _waitingForCode
+                          ? 'Getting a code…'
+                          : _problem == null
+                          ? 'Sign in with Trakt'
+                          : 'Get a new code',
+                      icon: Icons.login_rounded,
+                      prominent: true,
+                      onPressed: _waitingForCode
+                          ? null
+                          : () => unawaited(_signIn()),
+                    ),
+                  ),
                 ),
               ),
               const Note(

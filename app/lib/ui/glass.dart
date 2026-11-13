@@ -5,6 +5,7 @@ import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'glass_mode.dart';
 import 'tint.dart';
 import 'tokens.dart';
+import 'widgets/pointer.dart';
 
 /// Shares one backdrop sample among the [Glass] widgets below it (cheaper
 /// than one layer per control). Use it around rows of controls.
@@ -129,34 +130,48 @@ class _GlassButtonState extends State<GlassButton> {
           ),
       ],
     );
+    void press() {
+      HapticFeedback.selectionClick();
+      widget.onPressed!();
+    }
+
     return Semantics(
       button: true,
       enabled: enabled,
       label: widget.semanticLabel ?? widget.label,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-        onTapCancel: () => setState(() => _down = false),
-        onTapUp: enabled ? (_) => setState(() => _down = false) : null,
-        onTap: enabled
-            ? () {
-                HapticFeedback.selectionClick();
-                widget.onPressed!();
-              }
-            : null,
-        child: AnimatedScale(
-          scale: _down && !reduce ? 0.96 : 1,
-          duration: KMotion.fast,
-          curve: KMotion.curve,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: widget.compact ? 44 : 48,
-              minWidth: widget.compact ? 44 : 48,
+      child: PointerFocus(
+        onActivate: enabled ? press : null,
+        builder: (context, hovered) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+          onTapCancel: () => setState(() => _down = false),
+          onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+          onTap: enabled ? press : null,
+          child: AnimatedScale(
+            scale: _down && !reduce ? 0.96 : 1,
+            duration: KMotion.fast,
+            curve: KMotion.curve,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: widget.compact ? 44 : 48,
+                minWidth: widget.compact ? 44 : 48,
+              ),
+              child: DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: ShapeDecoration(
+                  color: hovered ? hoverGlow : const Color(0x00000000),
+                  shape: const StadiumBorder(),
+                ),
+                child: lit
+                    ? LitCapsule(padding: padding, child: content)
+                    : Glass(
+                        tintStrength: 0.14,
+                        padding: padding,
+                        child: content,
+                      ),
+              ),
             ),
-            child: lit
-                ? LitCapsule(padding: padding, child: content)
-                : Glass(tintStrength: 0.14, padding: padding, child: content),
           ),
         ),
       ),
@@ -204,26 +219,38 @@ class GlassIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final press = onPressed == null
+        ? null
+        : () {
+            HapticFeedback.selectionClick();
+            onPressed!();
+          };
     return Semantics(
       button: true,
       label: label,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed == null
-            ? null
-            : () {
-                HapticFeedback.selectionClick();
-                onPressed!();
-              },
-        child: SizedBox.square(
-          dimension: size,
-          child: Glass(
-            child: Center(
-              child: Icon(
-                icon,
-                size: size * 0.46,
-                color: onPressed == null ? KColors.reel : KColors.lamp,
+      child: PointerFocus(
+        onActivate: press,
+        shape: const CircleBorder(),
+        builder: (context, hovered) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: press,
+          child: SizedBox.square(
+            dimension: size,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: ShapeDecoration(
+                color: hovered ? hoverGlow : const Color(0x00000000),
+                shape: const CircleBorder(),
+              ),
+              child: Glass(
+                child: Center(
+                  child: Icon(
+                    icon,
+                    size: size * 0.46,
+                    color: onPressed == null ? KColors.reel : KColors.lamp,
+                  ),
+                ),
               ),
             ),
           ),

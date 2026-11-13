@@ -369,7 +369,13 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     // only builds the rows on screen.
     final items = <Widget Function()>[
       () => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
+        // (The same place as Settings' title.)
+        padding: const EdgeInsets.fromLTRB(
+          KSpace.margin,
+          KSpace.x4,
+          KSpace.margin,
+          0,
+        ),
         child: Semantics(
           header: true,
           child: Text('Downloads', style: KType.h1),
@@ -433,10 +439,9 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     return Scaffold(
       body: ListView.builder(
         padding: EdgeInsets.only(
-          top: MediaQuery.paddingOf(context).top + KSpace.x4,
+          top: MediaQuery.paddingOf(context).top + KSpace.x2,
           bottom: AppShell.bottomInset(context),
-          left: KLayout.side(context),
-          right: KLayout.side(context),
+          right: KLayout.rest(context),
         ),
         itemCount: items.length,
         itemBuilder: (_, i) => items[i](),

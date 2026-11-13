@@ -7,12 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stremio/stremio.dart';
 
+import '../../app/desktop.dart';
 import '../../app/router.dart';
 import '../../app/shell.dart';
 import '../../services/play_request.dart';
 import '../../services/sources.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
+import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
@@ -100,7 +102,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             padding: EdgeInsets.fromLTRB(
               KSpace.margin,
               top + KSpace.x3,
-              KSpace.margin,
+              // (A wide window: a field, not a bar across it.)
+              KSpace.margin + KLayout.rest(context, 720),
               KSpace.x3,
             ),
             child: _SearchField(
@@ -171,7 +174,7 @@ class _SearchField extends StatelessWidget {
                 autocorrect: false,
                 inputFormatters: [LengthLimitingTextInputFormatter(2048)],
                 decoration: InputDecoration.collapsed(
-                  hintText: 'Movies, shows or a link',
+                  hintText: 'Movies, shows or a link…',
                   hintStyle: KType.body.copyWith(color: KColors.reel),
                 ),
               ),
@@ -234,6 +237,8 @@ class _Idle extends ConsumerWidget {
     return CustomScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
+        // The same room under the search field as the results get.
+        const SliverToBoxAdapter(child: SizedBox(height: KSpace.x3)),
         if (recents.isNotEmpty) ...[
           const _Header('Recent searches'),
           SliverToBoxAdapter(
@@ -539,10 +544,13 @@ class _ResultsState extends ConsumerState<_Results> {
   BuildContext context,
   double crossAxisExtent,
 ) {
-  final columns = ((crossAxisExtent - 2 * KSpace.margin) / 128).floor().clamp(
-    3,
-    6,
-  );
+  // A computer: as many columns as posters of Home's width fit.
+  final columns = isDesktop
+      ? ((crossAxisExtent - 2 * KSpace.margin + KSpace.x3) /
+                (PosterSize.widthOf(context) + KSpace.x3))
+            .floor()
+            .clamp(3, 12)
+      : ((crossAxisExtent - 2 * KSpace.margin) / 128).floor().clamp(3, 6);
   final width =
       (crossAxisExtent - 2 * KSpace.margin - (columns - 1) * KSpace.x3) /
       columns;
@@ -582,6 +590,7 @@ class _PosterGrid extends StatelessWidget {
           itemBuilder: (context, i) {
             final m = items[i];
             return Pressable(
+              lift: true,
               label: [m.name, ?m.releaseInfo].join(', '),
               onTap: () => onOpen(m),
               child: Column(

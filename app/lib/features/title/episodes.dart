@@ -11,6 +11,7 @@ import '../../services/downloads.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
 import '../../ui/glass.dart';
+import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
@@ -153,6 +154,16 @@ class EpisodeRow extends ConsumerWidget {
         : 'Airs ${shortDate(released, now)}';
     final runtime = isAired ? lengthOfEpisode(model) : null;
     final meta = KType.tabular(KType.small);
+    // A wide window: a larger still, the overview beside it.
+    final wide = KLayout.isWide(context);
+    final stillWidth = wide ? 220.0 : _stillWidth;
+    final overview = e.overview?.trim().isNotEmpty ?? false
+        ? ExpandableText(
+            e.overview!.trim(),
+            maxLines: 2,
+            style: KType.label.copyWith(color: KColors.haze),
+          )
+        : null;
 
     final request = model.request(
       episode: e,
@@ -187,7 +198,7 @@ class EpisodeRow extends ConsumerWidget {
                   child: Row(
                     children: [
                       SizedBox(
-                        width: _stillWidth,
+                        width: stillWidth,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(KRadius.still),
                           child: AspectRatio(
@@ -201,7 +212,7 @@ class EpisodeRow extends ConsumerWidget {
                                     url: e.thumbnail,
                                     memCacheWidth: decodeWidth(
                                       context,
-                                      _stillWidth,
+                                      stillWidth,
                                     ),
                                   ),
                                 ),
@@ -271,6 +282,10 @@ class EpisodeRow extends ConsumerWidget {
                                 if (when != null) Text(when, style: meta),
                               ],
                             ),
+                            if (wide && overview != null) ...[
+                              const SizedBox(height: KSpace.x2),
+                              overview,
+                            ],
                           ],
                         ),
                       ),
@@ -286,13 +301,9 @@ class EpisodeRow extends ConsumerWidget {
                 ),
             ],
           ),
-          if (e.overview?.trim().isNotEmpty ?? false) ...[
+          if (!wide && overview != null) ...[
             const SizedBox(height: KSpace.x2),
-            ExpandableText(
-              e.overview!.trim(),
-              maxLines: 2,
-              style: KType.label.copyWith(color: KColors.haze),
-            ),
+            overview,
           ],
         ],
       ),

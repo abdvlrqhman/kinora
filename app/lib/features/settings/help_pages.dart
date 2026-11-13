@@ -280,7 +280,7 @@ class AboutPage extends ConsumerWidget {
         ),
       ),
       ActionRow(
-        icon: Icons.system_update_rounded,
+        icon: Icons.update_rounded,
         label: 'Check for updates',
         onTap: () => unawaited(checkForUpdatesNow(context, ref)),
       ),

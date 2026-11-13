@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/desktop.dart';
 import '../../core/db/database.dart';
 import '../../core/format.dart';
 import '../../core/log.dart';
@@ -48,8 +49,8 @@ Future<void> showWifiWaitSheet(
               child: Text(waitingForWifi, style: KType.h2),
             ),
           ),
-          const Note(
-            'This download continues on its own when the phone is on Wi-Fi.',
+          Note(
+            'This download continues on its own when $thisDevice is on Wi-Fi.',
           ),
           SheetAction(
             icon: Icons.signal_cellular_alt_rounded,

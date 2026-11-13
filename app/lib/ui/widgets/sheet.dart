@@ -1,23 +1,66 @@
 import 'package:flutter/material.dart';
 
+import '../../app/desktop.dart';
+import '../../app/router.dart';
 import '../glass.dart';
 import '../tint.dart';
 import '../layout.dart';
 import '../tokens.dart';
 
-/// Shows a floating glass sheet that keeps the caller's accent.
+/// Shows a floating glass sheet that keeps the caller's accent. In a wide
+/// window it's a centered dialog instead (Esc or a click outside closes it).
 Future<T?> showGlassSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
 }) {
   final accent = KinoraTint.of(context);
   final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+  // Opened from outside the pages (the side rail): the app's navigator.
+  final host = Navigator.maybeOf(context) != null
+      ? context
+      : rootNavigatorKey.currentContext!;
+  if (KLayout.isWide(host)) {
+    return showDialog<T>(
+      context: host,
+      barrierColor: const Color(0xA6000000),
+      builder: (dialogContext) => KinoraTint(
+        accent: accent,
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: KSpace.margin,
+              right: KSpace.margin,
+              bottom: MediaQuery.viewInsetsOf(dialogContext).bottom,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: KLayout.sheet,
+                maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.86,
+              ),
+              child: Material(
+                type: MaterialType.transparency,
+                child: _Closable(
+                  onClose: () => Navigator.pop(dialogContext),
+                  child: _Panel(
+                    top: const SizedBox(height: KSpace.x3),
+                    // Content 24 from the edges (its own 20 plus 4).
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: builder(dialogContext),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<T>(
-    context: context,
+    context: host,
     useRootNavigator: true,
     isScrollControlled: true,
-    // (Wide windows: a sheet, not a banner across the screen.)
-    constraints: const BoxConstraints(maxWidth: KLayout.sheet),
     backgroundColor: Colors.transparent,
     barrierColor: const Color(0xA6000000),
     sheetAnimationStyle: reduce ? AnimationStyle.noAnimation : null,
@@ -37,31 +80,73 @@ Future<T?> showGlassSheet<T>(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.86,
             ),
-            // A Seat underlay so lit buttons behind don't blur through as a
-            // highlighted row.
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                // Opaque: a lit button behind would glow through like a
-                // selected row.
-                color: KColors.seat,
-                borderRadius: BorderRadius.circular(KRadius.sheet),
-              ),
-              child: GlassGroup(
-                child: Glass(
-                  radius: KRadius.sheet,
-                  tintStrength: 0.10,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const _Grabber(),
-                      Flexible(child: builder(sheetContext)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            // A computer has no drag: a close button, not a handle.
+            child: isDesktop
+                ? _Closable(
+                    onClose: () => Navigator.pop(sheetContext),
+                    child: _Panel(
+                      top: const SizedBox(height: KSpace.x3),
+                      child: builder(sheetContext),
+                    ),
+                  )
+                : _Panel(top: const _Grabber(), child: builder(sheetContext)),
           ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// A panel with a close button in its corner, 16 from the edges.
+class _Closable extends StatelessWidget {
+  const _Closable({required this.onClose, required this.child});
+
+  final VoidCallback onClose;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: [
+      child,
+      Positioned(
+        top: KSpace.x4,
+        right: KSpace.x4,
+        child: GlassIconButton(
+          icon: Icons.close_rounded,
+          label: 'Close',
+          size: 36,
+          onPressed: onClose,
+        ),
+      ),
+    ],
+  );
+}
+
+/// The sheet's glass, on a Seat underlay so lit buttons behind don't blur
+/// through as a highlighted row.
+class _Panel extends StatelessWidget {
+  const _Panel({required this.top, required this.child});
+
+  final Widget top;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: KColors.seat,
+      borderRadius: BorderRadius.circular(KRadius.sheet),
+    ),
+    child: GlassGroup(
+      child: Glass(
+        radius: KRadius.sheet,
+        tintStrength: 0.10,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            top,
+            Flexible(child: child),
+          ],
         ),
       ),
     ),

@@ -72,22 +72,31 @@ class _Placeholder extends StatelessWidget {
     color: KColors.seat,
     child: text == null
         ? const SizedBox.expand()
-        : Padding(
-            padding: const EdgeInsets.all(KSpace.x3),
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: Text(
-                text!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: KType.h2.copyWith(
-                  fontSize: 20,
-                  height: 1.05,
-                  color: KColors.haze,
-                ),
-              ),
-            ),
+        : LayoutBuilder(
+            // Too small for the name (a list thumbnail): a film mark.
+            builder: (context, box) => box.maxWidth < 110
+                ? const Center(
+                    child: Icon(Icons.movie_outlined, color: KColors.reel),
+                  )
+                : _name(),
           ),
+  );
+
+  Widget _name() => Padding(
+    padding: const EdgeInsets.all(KSpace.x3),
+    child: Align(
+      alignment: Alignment.bottomLeft,
+      child: Text(
+        text!,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: KType.h2.copyWith(
+          fontSize: 20,
+          height: 1.05,
+          color: KColors.haze,
+        ),
+      ),
+    ),
   );
 }
 

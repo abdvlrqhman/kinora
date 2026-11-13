@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:release_parser/release_parser.dart' as rp;
 import 'package:subtitles/subtitles.dart';
 
+import '../app/desktop.dart';
 import '../app/providers.dart';
 import '../core/lang.dart';
 import '../core/log.dart';
@@ -297,8 +298,8 @@ final class CastService extends ChangeNotifier {
     try {
       final lan = await NetworkInfo().getWifiIP();
       if (lan == null && a.source.kind != PlaybackKind.direct) {
-        throw const _CastFailure(
-          'Connect the phone to the same Wi-Fi as the TV.',
+        throw _CastFailure(
+          'Connect $thisDevice to the same network as the TV.',
         );
       }
       final engine = _ref.read(engineServiceProvider).engine;

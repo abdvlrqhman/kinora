@@ -86,7 +86,7 @@ class _VersionsSheetState extends ConsumerState<VersionsSheet> {
           ),
           // Rows only show a Download button: say what tapping one does.
           Text(
-            'Tap a version to play it.',
+            'Choose a version to play it.',
             style: KType.label.copyWith(color: KColors.haze),
           ),
         ],
@@ -215,7 +215,7 @@ class _Filters extends StatelessWidget {
       child: GlassGroup(
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: KSpace.margin - 4),
+          padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
           itemCount: chips.length,
           itemBuilder: (_, i) {
             final (value, label, count) = chips[i];

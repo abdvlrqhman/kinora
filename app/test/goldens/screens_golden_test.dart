@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 
 import 'package:dlna/dlna.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -549,6 +550,8 @@ void main() {
     ]) {
       final tag = '${window.width.round()}x${window.height.round()}';
       testScreen('tour $tag', (tester) async {
+        // Render as Windows does (scrollbars, no phone-only rows).
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         Future<void> snap(String name) async {
           await tester.pump(const Duration(milliseconds: 500));
           final bytes = await tester.runAsync(() async {
@@ -581,7 +584,7 @@ void main() {
         }
 
         Future<void> close() async {
-          await tester.tapAt(const Offset(4, 300));
+          rootNavigatorKey.currentState!.pop();
           await tester.pumpAndSettle();
         }
 
@@ -589,9 +592,7 @@ void main() {
           tester,
           desktop: true,
           window: window,
-          extra: [
-            searchProvider.overrideWith((ref, q) async => results),
-          ],
+          extra: [searchProvider.overrideWith((ref, q) async => results)],
         );
         await seedSeries(container().read(databaseProvider));
         await settleImages(tester);
@@ -603,6 +604,7 @@ void main() {
         await settleImages(tester);
         await snap('02_home_scrolled');
         await go('/');
+        // ignore: avoid_print
         await tapLabel('Sign in with Trakt');
         await snap('03_trakt_sheet');
         await close();
@@ -620,7 +622,7 @@ void main() {
         await snap('07_downloads');
         await go('/title/movie/tt100');
         await snap('08_title_movie');
-        await tapLabel(RegExp('Other versions'));
+        await tapLabel(RegExp('another version|Other versions'));
         await snap('09_versions_sheet');
         await close();
         await go('/title/series/tt200');
@@ -660,6 +662,7 @@ void main() {
           await tester.tap(next);
           await settleImages(tester);
         }
+        debugDefaultTargetPlatformOverride = null;
       });
     }
   });

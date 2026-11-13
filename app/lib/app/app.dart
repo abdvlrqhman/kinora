@@ -7,6 +7,7 @@ import '../ui/tokens.dart';
 import 'desktop.dart';
 import 'intro.dart';
 import 'router.dart';
+import 'shell.dart';
 
 /// Root widget.
 class KinoraApp extends ConsumerWidget {
@@ -25,7 +26,10 @@ class KinoraApp extends ConsumerWidget {
       themeMode: ThemeMode.dark,
       routerConfig: ref.watch(routerProvider),
       builder: (context, child) {
-        final app = KinoraTint(accent: KColors.marquee, child: child!);
+        final app = KinoraTint(
+          accent: KColors.marquee,
+          child: WideNav(child: child!),
+        );
         final shown = showIntro ? IntroOverlay(child: app) : app;
         return isDesktop ? DesktopFrame(child: shown) : shown;
       },

@@ -123,7 +123,15 @@ class SettingsScreen extends ConsumerWidget {
         SectionTitle(thisDeviceTitle),
         NavRow(
           label: 'Downloads',
-          value: s.wifiOnlyDownloads ? 'On Wi-Fi only' : 'On any network',
+          value: isDesktop
+              ? switch (s.downloadsAtOnce) {
+                  0 => 'All at once',
+                  1 => 'One at a time',
+                  final n => '$n at once',
+                }
+              : s.wifiOnlyDownloads
+              ? 'On Wi-Fi only'
+              : 'On any network',
           onTap: () => go('downloads'),
         ),
         NavRow(

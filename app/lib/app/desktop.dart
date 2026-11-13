@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'dart:ui' show ImageFilter;
+
+import 'package:flutter/gestures.dart' show kBackMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../ui/tokens.dart';
+import 'router.dart';
 import '../ui/widgets/brand.dart';
 
 /// Kinora draws its own window frame (Windows): the title bar, its drag
@@ -111,6 +116,30 @@ class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
       );
     }
     final mq = MediaQuery.of(context);
+    void back() {
+      final router = ProviderScope.containerOf(context).read(routerProvider);
+      // (Esc doesn't close the player: it only leaves full screen.)
+      if (router.canPop() &&
+          !router.routeInformationProvider.value.uri.path.startsWith(
+            '/player',
+          )) {
+        router.pop();
+      }
+    }
+
+    // Esc and the mouse's back button go back, as in a browser.
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): back},
+      child: Listener(
+        onPointerDown: (e) {
+          if (e.buttons & kBackMouseButton != 0) back();
+        },
+        child: _frame(mq),
+      ),
+    );
+  }
+
+  Widget _frame(MediaQueryData mq) {
     return Stack(
       children: [
         Positioned.fill(
@@ -142,63 +171,62 @@ class TitleBar extends StatelessWidget {
   final bool maximized;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    // Keeps the buttons readable over bright artwork. (Outside the app's
-    // pages: no Material above it, so its text sets its own style.)
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0x99000000), Color(0x00000000)],
-      ),
+  Widget build(BuildContext context) => ClipRect(
+    // Frosted: artwork shows through, and pages scrolled under it blur
+    // instead of running through the name. (Outside the app's pages: no
+    // Material above it, so its text sets its own style.)
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+      child: ColoredBox(color: const Color(0xB3000000), child: _bar()),
     ),
-    child: Row(
-      children: [
-        Expanded(
-          child: DragToMoveArea(
-            child: Semantics(
-              label: 'Kinora',
-              excludeSemantics: true,
-              child: Row(
-                children: [
-                  const SizedBox(width: KSpace.x3),
-                  const SizedBox.square(
-                    dimension: 22,
-                    child: CustomPaint(painter: KinoraMark()),
+  );
+
+  Widget _bar() => Row(
+    children: [
+      Expanded(
+        child: DragToMoveArea(
+          child: Semantics(
+            label: 'Kinora',
+            excludeSemantics: true,
+            child: Row(
+              children: [
+                const SizedBox(width: KSpace.x3),
+                const SizedBox.square(
+                  dimension: 22,
+                  child: CustomPaint(painter: KinoraMark()),
+                ),
+                const SizedBox(width: KSpace.x2),
+                Text(
+                  'Kinora',
+                  style: KType.label.copyWith(
+                    color: KColors.lamp,
+                    decoration: TextDecoration.none,
                   ),
-                  const SizedBox(width: KSpace.x2),
-                  Text(
-                    'Kinora',
-                    style: KType.label.copyWith(
-                      color: KColors.lamp,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                  const Spacer(),
-                ],
-              ),
+                ),
+                const Spacer(),
+              ],
             ),
           ),
         ),
-        CaptionButton(
-          glyph: CaptionGlyph.minimize,
-          label: 'Minimize',
-          onPressed: () => unawaited(windowManager.minimize()),
+      ),
+      CaptionButton(
+        glyph: CaptionGlyph.minimize,
+        label: 'Minimize',
+        onPressed: () => unawaited(windowManager.minimize()),
+      ),
+      CaptionButton(
+        glyph: maximized ? CaptionGlyph.restore : CaptionGlyph.maximize,
+        label: maximized ? 'Restore' : 'Maximize',
+        onPressed: () => unawaited(
+          maximized ? windowManager.unmaximize() : windowManager.maximize(),
         ),
-        CaptionButton(
-          glyph: maximized ? CaptionGlyph.restore : CaptionGlyph.maximize,
-          label: maximized ? 'Restore' : 'Maximize',
-          onPressed: () => unawaited(
-            maximized ? windowManager.unmaximize() : windowManager.maximize(),
-          ),
-        ),
-        CaptionButton(
-          glyph: CaptionGlyph.close,
-          label: 'Close',
-          onPressed: () => unawaited(windowManager.close()),
-        ),
-      ],
-    ),
+      ),
+      CaptionButton(
+        glyph: CaptionGlyph.close,
+        label: 'Close',
+        onPressed: () => unawaited(windowManager.close()),
+      ),
+    ],
   );
 }
 

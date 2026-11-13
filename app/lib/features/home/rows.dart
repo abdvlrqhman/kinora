@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/desktop.dart';
 import '../../app/router.dart';
 import '../../core/db/database.dart';
 import '../../core/format.dart';
@@ -76,8 +77,8 @@ class CatalogRowView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => RowSection(
     title: row.title,
-    height: PosterSize.height,
-    itemWidth: PosterSize.width,
+    height: PosterSize.heightOf(context),
+    itemWidth: PosterSize.widthOf(context),
     itemCount: row.items.length,
     itemBuilder: (context, i) {
       final m = row.items[i];
@@ -100,8 +101,8 @@ class MyListRow extends ConsumerWidget {
     if (items.isEmpty) return const SizedBox.shrink();
     return RowSection(
       title: 'My list',
-      height: PosterSize.height,
-      itemWidth: PosterSize.width,
+      height: PosterSize.heightOf(context),
+      itemWidth: PosterSize.widthOf(context),
       itemCount: items.length,
       itemBuilder: (context, i) {
         final m = items[i];
@@ -115,7 +116,10 @@ class MyListRow extends ConsumerWidget {
   }
 }
 
-const double _stillWidth = 240;
+/// Width of a Continue watching / New episodes card: larger in a wide
+/// computer window.
+double _stillWidthOf(BuildContext context) =>
+    isDesktop && MediaQuery.sizeOf(context).width >= 1180 ? 320 : 240;
 
 /// Unfinished titles with their progress; hidden when empty.
 class ContinueRow extends ConsumerWidget {
@@ -129,12 +133,12 @@ class ContinueRow extends ConsumerWidget {
     return RowSection(
       title: 'Continue watching',
       height:
-          _stillWidth * 9 / 16 +
+          _stillWidthOf(context) * 9 / 16 +
           KSpace.x2 +
           scaler.scale(18) +
           scaler.scale(16) +
           4,
-      itemWidth: _stillWidth,
+      itemWidth: _stillWidthOf(context),
       itemCount: items.length,
       itemBuilder: (_, i) =>
           ContinueTile(key: ValueKey(items[i].videoId), item: items[i]),
@@ -209,6 +213,7 @@ class ContinueTile extends ConsumerWidget {
     void remove() => unawaited(repo.dismiss(item.mediaId));
 
     return Pressable(
+      lift: true,
       label: [
         '${fresh ? 'Play' : 'Resume'} ${item.name}',
         ?episode,
@@ -246,7 +251,10 @@ class ContinueTile extends ConsumerWidget {
                     child: Artwork(
                       url: item.still ?? backdrop ?? item.poster,
                       fallbackText: item.name,
-                      memCacheWidth: decodeWidth(context, _stillWidth),
+                      memCacheWidth: decodeWidth(
+                        context,
+                        _stillWidthOf(context),
+                      ),
                     ),
                   ),
                   stillShade,
@@ -294,12 +302,12 @@ class NewEpisodesRow extends ConsumerWidget {
     return RowSection(
       title: 'New episodes',
       height:
-          _stillWidth * 9 / 16 +
+          _stillWidthOf(context) * 9 / 16 +
           KSpace.x2 +
           scaler.scale(18) +
           scaler.scale(16) +
           4,
-      itemWidth: _stillWidth,
+      itemWidth: _stillWidthOf(context),
       itemCount: shows.length,
       itemBuilder: (context, i) {
         final show = shows[i];
@@ -310,6 +318,7 @@ class NewEpisodesRow extends ConsumerWidget {
         final what = [number, if (count == 1) 'New' else '$count new'];
         void goToTitle() => openTitle(context, type: meta.type, id: meta.id);
         return Pressable(
+          lift: true,
           label: ['${meta.name}, $number', ?e.title, what.last].join(', '),
           hint: 'Plays $number',
           onTap: () => openPlayer(context, show.model.request(episode: e)),
@@ -325,7 +334,7 @@ class NewEpisodesRow extends ConsumerWidget {
                 fallbackText: meta.name,
                 radius: KRadius.still,
                 aspectRatio: 16 / 9,
-                memCacheWidth: decodeWidth(context, _stillWidth),
+                memCacheWidth: decodeWidth(context, _stillWidthOf(context)),
               ),
               const SizedBox(height: KSpace.x2),
               Text(

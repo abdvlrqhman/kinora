@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,12 +16,49 @@ import '../ui/widgets/media.dart';
 import 'providers.dart';
 import 'shell.dart';
 
-final _rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+/// The app's top navigator (dialogs opened from the side rail use it).
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
+/// Whether a dialog or sheet is open over the pages (the side rail dims
+/// with them).
+final popupOpen = ValueNotifier<bool>(false);
+
+class _PopupWatcher extends NavigatorObserver {
+  int _open = 0;
+
+  void _change(Route<dynamic>? route, int by) {
+    if (route is! PopupRoute) return;
+    _open = (_open + by).clamp(0, 1 << 20);
+    // (After the frame: navigation runs while the navigator is locked.)
+    SchedulerBinding.instance.addPostFrameCallback(
+      (_) => popupOpen.value = _open > 0,
+    );
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _change(route, 1);
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _change(route, -1);
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _change(route, -1);
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    _change(oldRoute, -1);
+    _change(newRoute, 1);
+  }
+}
 
 /// App routes. Title and player pages cover the tab bar.
 final routerProvider = Provider<GoRouter>((ref) {
+  // A new router starts clean (tests make one per app).
+  popupOpen.value = false;
+  AppShell.current = null;
   final router = GoRouter(
-    navigatorKey: _rootKey,
+    navigatorKey: rootNavigatorKey,
+    observers: [_PopupWatcher()],
     initialLocation: '/',
     redirect: (context, state) {
       final onboarded = ref.read(settingsProvider).onboarded;
@@ -63,7 +101,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/title/:type/:id',
-        parentNavigatorKey: _rootKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, state) => TitleScreen(
           type: state.pathParameters['type']!,
           id: state.pathParameters['id']!,
@@ -71,7 +109,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/player',
-        parentNavigatorKey: _rootKey,
+        parentNavigatorKey: rootNavigatorKey,
         // The artwork you tapped grows into the player (see artHeroTag);
         // with reduced motion it's an instant cut.
         pageBuilder: (context, state) {

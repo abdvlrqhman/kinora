@@ -103,7 +103,7 @@ final class DownloadsService implements DownloadActions {
             .get();
     for (final row in http) {
       if (await FileDownloader().taskForId(row.id) == null) {
-        await _fail(row.id, 'The download was interrupted. Tap to try again.');
+        await _fail(row.id, 'The download was interrupted. Try it again.');
       }
     }
     final active =
@@ -889,7 +889,7 @@ final class DownloadsService implements DownloadActions {
       for (final r in rows.where((r) => r.state != 'completed')) {
         await _fail(
           r.id,
-          'Couldn’t move this into Downloads. Check free space, then tap to try again.',
+          'Couldn’t move this into Downloads. Check free space, then try again.',
         );
       }
     } else if (e is TorrentFinished) {
@@ -903,8 +903,8 @@ final class DownloadsService implements DownloadActions {
         await _fail(
           r.id,
           RegExp('space|ENOSPC', caseSensitive: false).hasMatch(e.message)
-              ? 'Your device is out of space. Free some up, then tap to try again.'
-              : 'Saving failed. Check free space, then tap to try again.',
+              ? 'Your device is out of space. Free some up, then try again.'
+              : 'Saving failed. Check free space, then try again.',
         );
       }
     }
@@ -1002,7 +1002,7 @@ final class DownloadsService implements DownloadActions {
             await _fail(
               id,
               disk
-                  ? 'Your device is out of space. Free some up, then tap to try again.'
+                  ? 'Your device is out of space. Free some up, then try again.'
                   : 'The download link stopped working. Try another version.',
             );
           case TaskStatus.paused:

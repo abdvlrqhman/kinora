@@ -11,6 +11,7 @@ import '../../services/subtitles_service.dart';
 import '../../services/trakt.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
+import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../cast/cast_picker.dart';
 import '../settings/backup_page.dart';
@@ -46,6 +47,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final reduce = reduceMotion(context);
+    final wide = KLayout.isWide(context);
+    // A wide window's welcome and last step: the button right under the
+    // text, which sits in the middle of the window.
+    final inline = wide && (_step == 0 || _step == _last);
+    final next = GlassGroup(
+      child: GlassButton(
+        key: const ValueKey('onboarding-next'),
+        label: switch (_step) {
+          0 => 'Set up Kinora',
+          final s when s == _last => 'Start watching',
+          _ => 'Continue',
+        },
+        prominent: true,
+        onPressed: () => _step == _last ? unawaited(_finish()) : _go(_step + 1),
+      ),
+    );
     return PopScope(
       canPop: _step == 0,
       onPopInvokedWithResult: (didPop, _) {
@@ -55,110 +72,118 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         body: Stack(
           children: [
             if (_step == 0) const Positioned.fill(child: _Beam()),
-            SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_step > 0)
-                    _TopBar(
-                      step: _step,
-                      last: _last,
-                      onBack: () => _go(_step - 1),
-                      onSkip: _step < _last ? () => _go(_last) : null,
-                    ),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: reduce ? Duration.zero : KMotion.base,
-                      switchInCurve: KMotion.curve,
-                      switchOutCurve: KMotion.curve,
-                      child: KeyedSubtree(
-                        key: ValueKey(_step),
-                        child: switch (_step) {
-                          0 => const _Welcome(),
-                          1 => _Step(
-                            title: 'Your languages',
-                            intro:
-                                'Choose the languages you read and hear. You can '
-                                'change them any time in Settings.',
-                            children: languageSections(),
+            // A wide window: one centered column, the button under the text
+            // (not a phone screen stretched across it).
+            Center(
+              child: ConstrainedBox(
+                constraints: wide
+                    ? const BoxConstraints(maxWidth: 760, maxHeight: 760)
+                    : const BoxConstraints(),
+                child: SafeArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_step > 0)
+                        _TopBar(
+                          step: _step,
+                          last: _last,
+                          onBack: () => _go(_step - 1),
+                          onSkip: _step < _last ? () => _go(_last) : null,
+                        ),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: reduce ? Duration.zero : KMotion.base,
+                          switchInCurve: KMotion.curve,
+                          switchOutCurve: KMotion.curve,
+                          child: KeyedSubtree(
+                            key: ValueKey(_step),
+                            child: switch (_step) {
+                              0 => _Welcome(cta: inline ? next : null),
+                              1 => _Step(
+                                title: 'Your languages',
+                                intro:
+                                    'Choose the languages you read and hear. You can '
+                                    'change them any time in Settings.',
+                                children: languageSections(),
+                              ),
+                              2 => const _Step(
+                                title: 'Add your sources',
+                                intro:
+                                    'Kinora has no movies or shows of its own. You '
+                                    'add Stremio-compatible addons by their link, '
+                                    'and they bring catalogs, streams and '
+                                    'subtitles.',
+                                children: [
+                                  _RestoreRow(),
+                                  AddAddonField(),
+                                  SectionTitle('Start with these'),
+                                  SuggestedAddons(),
+                                  SectionTitle('Your sources'),
+                                  AddonList(),
+                                ],
+                              ),
+                              3 => const _Step(
+                                title: 'Instant playback',
+                                intro:
+                                    'Optional. A debrid service (Real-Debrid, '
+                                    'AllDebrid, Premiumize and others) keeps popular '
+                                    'versions ready, so they start at once, marked '
+                                    'Instant. Set up your stream source with your '
+                                    'debrid key on the source’s own site, then add the '
+                                    'link it gives you here.',
+                                children: [AddAddonField()],
+                              ),
+                              4 => _Step(
+                                title: 'Subtitle sites',
+                                intro: 'Optional. $subtitleSitesIntro',
+                                children: const [SubtitleSiteList()],
+                              ),
+                              5 when _trakt => const _Step(
+                                title: 'Already use Trakt?',
+                                intro:
+                                    'Optional. Sign in to bring in what you’ve '
+                                    'watched, where you stopped and your watchlist, '
+                                    'and keep them the same on your other devices '
+                                    'and in apps like Stremio and Kodi.',
+                                children: [TraktAccountPanel(intro: false)],
+                              ),
+                              5 || 6 when _step == _last - 1 => const _Step(
+                                title: 'Your TV',
+                                intro:
+                                    'Optional. Choose a TV on this Wi-Fi: Kinora picks '
+                                    'versions it can play and starts them there. You '
+                                    'can change it from Home any time.',
+                                children: [_TvPicker()],
+                              ),
+                              _ => _Done(
+                                onAddSource: () => _go(2),
+                                cta: inline ? next : null,
+                              ),
+                            },
                           ),
-                          2 => const _Step(
-                            title: 'Add your sources',
-                            intro:
-                                'Kinora has no movies or shows of its own. You '
-                                'add Stremio-compatible addons by their link, '
-                                'and they bring catalogs, streams and '
-                                'subtitles.',
-                            children: [
-                              _RestoreRow(),
-                              AddAddonField(),
-                              SectionTitle('Start with these'),
-                              SuggestedAddons(),
-                              SectionTitle('Your sources'),
-                              AddonList(),
-                            ],
-                          ),
-                          3 => const _Step(
-                            title: 'Instant playback',
-                            intro:
-                                'Optional. A debrid service (Real-Debrid, '
-                                'AllDebrid, Premiumize and others) keeps popular '
-                                'versions ready, so they start at once, marked '
-                                'Instant. Set up your stream source with your '
-                                'debrid key on the source’s own site, then add the '
-                                'link it gives you here.',
-                            children: [AddAddonField()],
-                          ),
-                          4 => _Step(
-                            title: 'Subtitle sites',
-                            intro: 'Optional. $subtitleSitesIntro',
-                            children: const [SubtitleSiteList()],
-                          ),
-                          5 when _trakt => const _Step(
-                            title: 'Already use Trakt?',
-                            intro:
-                                'Optional. Sign in to bring in what you’ve '
-                                'watched, where you stopped and your watchlist, '
-                                'and keep them the same on your other devices '
-                                'and in apps like Stremio and Kodi.',
-                            children: [TraktAccountPanel(intro: false)],
-                          ),
-                          5 || 6 when _step == _last - 1 => const _Step(
-                            title: 'Your TV',
-                            intro:
-                                'Optional. Choose a TV on this Wi-Fi: Kinora picks '
-                                'versions it can play and starts them there. You '
-                                'can change it from Home any time.',
-                            children: [_TvPicker()],
-                          ),
-                          _ => _Done(onAddSource: () => _go(2)),
-                        },
+                        ),
                       ),
-                    ),
+                      if (!inline)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            KSpace.margin,
+                            KSpace.margin,
+                            KSpace.margin,
+                            KSpace.x3,
+                          ),
+                          // A wide window: the button at its own width, at
+                          // the column's end; a phone: full width.
+                          child: Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: SizedBox(
+                              width: wide ? null : double.infinity,
+                              child: next,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      KSpace.margin,
-                      KSpace.margin,
-                      KSpace.margin,
-                      KSpace.x3,
-                    ),
-                    child: GlassGroup(
-                      child: GlassButton(
-                        key: const ValueKey('onboarding-next'),
-                        label: switch (_step) {
-                          0 => 'Set up Kinora',
-                          final s when s == _last => 'Start watching',
-                          _ => 'Continue',
-                        },
-                        prominent: true,
-                        onPressed: () => _step == _last
-                            ? unawaited(_finish())
-                            : _go(_step + 1),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
@@ -287,9 +312,13 @@ class _Step extends StatelessWidget {
 
 /// Scrolls when large text needs it; otherwise sits at the bottom.
 class _BottomAligned extends StatelessWidget {
-  const _BottomAligned({required this.children});
+  const _BottomAligned({required this.children, this.cta});
 
   final List<Widget> children;
+
+  /// A wide window: the step's button, right under the text, and the
+  /// whole block in the middle.
+  final Widget? cta;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -298,9 +327,17 @@ class _BottomAligned extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: c.maxHeight),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisAlignment: cta == null
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: children,
+          children: [
+            ...children,
+            if (cta case final cta?) ...[
+              const SizedBox(height: KSpace.x4),
+              cta,
+            ],
+          ],
         ),
       ),
     ),
@@ -309,10 +346,13 @@ class _BottomAligned extends StatelessWidget {
 
 /// The first frame: the Kinora wordmark lit by a projector beam.
 class _Welcome extends StatelessWidget {
-  const _Welcome();
+  const _Welcome({this.cta});
+
+  final Widget? cta;
 
   @override
   Widget build(BuildContext context) => _BottomAligned(
+    cta: cta,
     children: [
       ExcludeSemantics(
         child: Text(
@@ -400,9 +440,10 @@ class _TvPicker extends ConsumerWidget {
 }
 
 class _Done extends ConsumerWidget {
-  const _Done({required this.onAddSource});
+  const _Done({required this.onAddSource, this.cta});
 
   final VoidCallback onAddSource;
+  final Widget? cta;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -428,6 +469,7 @@ class _Done extends ConsumerWidget {
           ),
         );
     return _BottomAligned(
+      cta: cta,
       children: [
         Semantics(header: true, child: Text('You’re set', style: KType.hero)),
         const SizedBox(height: KSpace.x4),

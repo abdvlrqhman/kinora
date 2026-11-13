@@ -130,8 +130,8 @@ class _SimilarRowState extends ConsumerState<SimilarRow> {
   @override
   Widget build(BuildContext context) => RowSection(
     title: 'More like this',
-    height: PosterSize.height,
-    itemWidth: PosterSize.width,
+    height: PosterSize.heightOf(context),
+    itemWidth: PosterSize.widthOf(context),
     itemCount: widget.titles.length,
     itemBuilder: (context, i) {
       final s = widget.titles[i];

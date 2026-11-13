@@ -187,7 +187,7 @@ class StoragePage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  total == null ? ' ' : Fmt.bytes(total),
+                  total == null ? '—' : Fmt.bytes(total),
                   style: KType.tabular(KType.hero),
                 ),
                 Text(

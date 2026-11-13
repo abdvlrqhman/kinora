@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/desktop.dart';
 import '../../app/providers.dart';
 import '../../core/format.dart';
 import '../../core/settings.dart';
@@ -74,12 +75,15 @@ class DownloadSettingsPage extends ConsumerWidget {
     return SettingsPage(
       title: 'Downloads',
       children: [
-        SwitchRow(
-          label: 'Download on Wi-Fi only',
-          detail: 'Downloads wait for Wi-Fi instead of using mobile data.',
-          value: s.wifiOnlyDownloads,
-          onChanged: (v) => _save(ref, (s) => s.copyWith(wifiOnlyDownloads: v)),
-        ),
+        // (A computer has no mobile data to save.)
+        if (!isDesktop)
+          SwitchRow(
+            label: 'Download on Wi-Fi only',
+            detail: 'Downloads wait for Wi-Fi instead of using mobile data.',
+            value: s.wifiOnlyDownloads,
+            onChanged: (v) =>
+                _save(ref, (s) => s.copyWith(wifiOnlyDownloads: v)),
+          ),
         SwitchRow(
           label: 'Keep fully streamed episodes',
           detail: 'Episodes you stream to the end are kept in Downloads.',

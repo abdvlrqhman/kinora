@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stremio/stremio.dart';
 
+import '../../ui/layout.dart';
 import '../../app/router.dart';
 import '../../services/play_request.dart';
 import '../../services/resolver.dart';
@@ -120,11 +121,20 @@ class Billboard extends ConsumerWidget {
                                 : details,
                           ),
                           MyListButton(meta: meta),
-                          GlassIconButton(
-                            icon: Icons.info_outline_rounded,
-                            label: 'Details',
-                            onPressed: details,
-                          ),
+                          // A wide window: a labelled capsule like its
+                          // neighbours.
+                          if (KLayout.isWide(context))
+                            GlassButton(
+                              label: 'Details',
+                              icon: Icons.info_outline_rounded,
+                              onPressed: details,
+                            )
+                          else
+                            GlassIconButton(
+                              icon: Icons.info_outline_rounded,
+                              label: 'Details',
+                              onPressed: details,
+                            ),
                         ],
                       ),
                     );

@@ -259,7 +259,7 @@ class AudioChoice extends ConsumerWidget {
           detail: dub == null
               ? 'Choose a language for dubbed audio.'
               : 'When a version has it; otherwise the original plays. '
-                    'Tap to change.',
+                    'Choose to change it.',
           selected: dub != null,
           onTap: pickDub,
         ),
