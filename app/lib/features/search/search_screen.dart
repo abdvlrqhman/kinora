@@ -17,6 +17,7 @@ import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
+import '../../ui/widgets/chips.dart';
 import '../../ui/widgets/states.dart';
 import '../home/home_feed.dart';
 import '../../ui/widgets/page_header.dart';

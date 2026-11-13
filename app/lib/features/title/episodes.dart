@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stremio/stremio.dart';
@@ -10,9 +8,9 @@ import '../../core/format.dart';
 import '../../services/downloads.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
-import '../../ui/glass.dart';
 import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
+import '../../ui/widgets/chips.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import 'title_actions.dart';
@@ -47,62 +45,17 @@ class SeasonPicker extends StatelessWidget {
         ),
       );
     }
-    final height = math.max(
-      48.0,
-      MediaQuery.textScalerOf(context).scale(28) + 16,
-    );
-    return SizedBox(
-      height: height,
-      child: GlassGroup(
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: KSpace.margin - 4),
-          itemCount: seasons.length + 1,
-          itemBuilder: (context, i) {
-            if (i == 0) {
-              return Padding(
-                padding: const EdgeInsets.only(left: 4, right: KSpace.x1),
-                child: Center(
-                  child: ExcludeSemantics(
-                    child: Text('Season', style: KType.h2),
-                  ),
-                ),
-              );
-            }
-            final s = seasons[i - 1];
-            final isSelected = s == selected;
-            final text = Text(
-              s == 0 ? 'Specials' : '$s',
-              style: KType.h2.copyWith(
-                color: isSelected ? KColors.lamp : KColors.reel,
-              ),
-            );
-            return Semantics(
-              button: true,
-              selected: isSelected,
-              label: _seasonName(s),
-              excludeSemantics: true,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onSelect(s),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 48),
-                  child: isSelected
-                      ? Glass(
-                          tintStrength: 0.3,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Center(child: text),
-                        )
-                      : Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Center(child: text),
-                        ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
+    // One chip per season, the chosen one tinted; scrolls when long.
+    return ChipRow(
+      gutter: KSpace.margin,
+      children: [
+        for (final s in seasons)
+          ChoiceChipButton(
+            label: _seasonName(s),
+            selected: s == selected,
+            onTap: () => onSelect(s),
+          ),
+      ],
     );
   }
 }
@@ -153,10 +106,10 @@ class EpisodeRow extends ConsumerWidget {
         ? shortDate(released, now)
         : 'Airs ${shortDate(released, now)}';
     final runtime = isAired ? lengthOfEpisode(model) : null;
-    final meta = KType.tabular(KType.small);
+    final meta = KType.meta;
     // A wide window: a larger still, the overview beside it.
     final wide = KLayout.isWide(context);
-    final stillWidth = wide ? 220.0 : _stillWidth;
+    final stillWidth = wide ? 160.0 : _stillWidth;
     final overview = e.overview?.trim().isNotEmpty ?? false
         ? ExpandableText(
             e.overview!.trim(),
@@ -174,138 +127,156 @@ class EpisodeRow extends ConsumerWidget {
           : null,
     );
 
+    // A panel card per episode.
     final row = Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: KSpace.margin,
-        vertical: KSpace.x3,
+        vertical: 5,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: KColors.panel,
+          border: Border.all(color: KColors.edge),
+          borderRadius: BorderRadius.circular(KRadius.panel),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Pressable(
-                  label: [
-                    'Episode ${e.episode ?? ''}, $name',
-                    ?when,
-                    if (watched) 'Watched',
-                    if (partial) 'In progress',
-                    if (downloaded) 'Downloaded',
-                  ].join('. '),
-                  hint: isAired ? 'Plays the episode' : null,
-                  onTap: isAired ? () => openPlayer(context, request) : null,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: stillWidth,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(KRadius.still),
-                          child: AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                ArtHero(
-                                  videoId: e.id,
-                                  child: Artwork(
-                                    url: e.thumbnail,
-                                    memCacheWidth: decodeWidth(
-                                      context,
-                                      stillWidth,
+              Row(
+                children: [
+                  Expanded(
+                    child: Pressable(
+                      label: [
+                        'Episode ${e.episode ?? ''}, $name',
+                        ?when,
+                        if (watched) 'Watched',
+                        if (partial) 'In progress',
+                        if (downloaded) 'Downloaded',
+                      ].join('. '),
+                      hint: isAired ? 'Plays the episode' : null,
+                      onTap: isAired
+                          ? () => openPlayer(context, request)
+                          : null,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: stillWidth,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                KRadius.still,
+                              ),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ArtHero(
+                                      videoId: e.id,
+                                      child: Artwork(
+                                        url: e.thumbnail,
+                                        memCacheWidth: decodeWidth(
+                                          context,
+                                          stillWidth,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    if (watched)
+                                      const Positioned(
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        child: ProgressLine(
+                                          fraction: 1,
+                                          color: KColors.haze,
+                                        ),
+                                      ),
+                                    if (partial) ...[
+                                      stillShade,
+                                      Positioned(
+                                        left: KSpace.x2,
+                                        right: KSpace.x2,
+                                        bottom: KSpace.x2,
+                                        child: ProgressLine(
+                                          fraction:
+                                              progress.positionMs /
+                                              progress.durationMs,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                                if (watched)
-                                  const Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    child: ProgressLine(
-                                      fraction: 1,
-                                      color: KColors.haze,
-                                    ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: KSpace.x3),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: '$number  ',
+                                        style: KType.numeric.copyWith(
+                                          color: watched
+                                              ? KColors.muted
+                                              : KColors.limeLink,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: isolate(name),
+                                        style: KType.title.copyWith(
+                                          color: watched
+                                              ? KColors.haze
+                                              : KColors.lamp,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                if (partial) ...[
-                                  stillShade,
-                                  Positioned(
-                                    left: KSpace.x2,
-                                    right: KSpace.x2,
-                                    bottom: KSpace.x2,
-                                    child: ProgressLine(
-                                      fraction:
-                                          progress.positionMs /
-                                          progress.durationMs,
-                                    ),
-                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Wrap(
+                                  spacing: KSpace.x3,
+                                  runSpacing: 2,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    if (runtime != null)
+                                      Text(runtime.toUpperCase(), style: meta),
+                                    if (when != null)
+                                      Text(when.toUpperCase(), style: meta),
+                                  ],
+                                ),
+                                if (wide && overview != null) ...[
+                                  const SizedBox(height: KSpace.x2),
+                                  overview,
                                 ],
                               ],
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: KSpace.x3),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: '$number  ',
-                                    style: KType.tabular(
-                                      KType.label.copyWith(
-                                        color: KColors.haze,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: isolate(name),
-                                    style: KType.body.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Wrap(
-                              spacing: KSpace.x3,
-                              runSpacing: 2,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                if (runtime != null) Text(runtime, style: meta),
-                                if (when != null) Text(when, style: meta),
-                              ],
-                            ),
-                            if (wide && overview != null) ...[
-                              const SizedBox(height: KSpace.x2),
-                              overview,
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  if (isAired)
+                    _EpisodeDownload(
+                      row: download,
+                      request: request,
+                      number: number,
+                    ),
+                ],
               ),
-              if (isAired)
-                _EpisodeDownload(
-                  row: download,
-                  request: request,
-                  number: number,
-                ),
+              if (!wide && overview != null) ...[
+                const SizedBox(height: KSpace.x2),
+                overview,
+              ],
             ],
           ),
-          if (!wide && overview != null) ...[
-            const SizedBox(height: KSpace.x2),
-            overview,
-          ],
-        ],
+        ),
       ),
     );
     return row;

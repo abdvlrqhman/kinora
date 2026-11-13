@@ -34,6 +34,10 @@ enum AppTab {
 /// Asks Search to take the keyboard (the window bar's search field, Ctrl+K).
 final focusSearch = ValueNotifier<int>(0);
 
+/// Names of pushed pages by location, for the window bar ("Home / Harbor
+/// Lights"); title pages fill it in when their details arrive.
+final pageNames = ValueNotifier<Map<String, String>>(const {});
+
 /// The tab pages. On a phone they sit above a floating pill tab bar; in a
 /// wide window [WideNav] draws the sidebar around them instead.
 class AppShell extends StatelessWidget {
@@ -828,7 +832,12 @@ class _WindowBar extends StatelessWidget {
   final int tab;
 
   String get _where {
-    if (path.startsWith('/title')) return AppTab.values[tab].label;
+    if (path.startsWith('/title')) {
+      final name = pageNames.value[path];
+      return name == null
+          ? AppTab.values[tab].label
+          : '${AppTab.values[tab].label}  /  $name';
+    }
     const pages = {
       'sources': 'Sources',
       'languages': 'Languages and subtitles',
@@ -851,7 +860,12 @@ class _WindowBar extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: pageNames,
+    builder: (context, _, _) => _bar(context),
+  );
+
+  Widget _bar(BuildContext context) {
     final back = router.canPop() && path != '/';
     final title = Align(
       alignment: Alignment.centerLeft,

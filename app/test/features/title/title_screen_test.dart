@@ -172,7 +172,7 @@ void main() {
         expect(find.textContaining('North Wind'), findsOneWidget);
         expect(find.textContaining('Low Tide'), findsNothing);
         // Unaired: full contrast, says when it airs, and doesn't play.
-        expect(find.textContaining('Airs '), findsOneWidget);
+        expect(find.textContaining('AIRS '), findsOneWidget);
         expect(
           find.ancestor(
             of: find.textContaining('Open Water'),

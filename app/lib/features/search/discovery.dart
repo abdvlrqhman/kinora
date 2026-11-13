@@ -6,9 +6,9 @@ import 'package:stremio/stremio.dart';
 
 import '../../services/sources.dart';
 import '../home/home_feed.dart';
-import '../../ui/layout.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
+
 import '../../ui/widgets/pointer.dart';
 
 /// A catalog Discovery can browse: listed by an addon, needing nothing but
@@ -158,86 +158,6 @@ class BrowseNotifier extends AsyncNotifier<BrowsePage> {
       state = AsyncData(BrowsePage(page.items));
     }
   }
-}
-
-/// A choice chip: a field at rest, the accent's tint and edge when chosen.
-class ChoiceChipButton extends StatelessWidget {
-  const ChoiceChipButton({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = KinoraTint.of(context);
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      excludeSemantics: true,
-      child: PointerFocus(
-        onActivate: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(KRadius.button),
-        ),
-        builder: (context, hovered) => GestureDetector(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: KMotion.fast,
-            height: KLayout.isWide(context) ? 32 : 34,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: selected
-                  ? accent.withValues(alpha: 0.16)
-                  : hovered
-                  ? KColors.raised
-                  : KColors.panel,
-              border: Border.all(
-                color: selected
-                    ? accent.withValues(alpha: 0.45)
-                    : KColors.fieldEdge,
-              ),
-              borderRadius: BorderRadius.circular(KRadius.button),
-            ),
-            child: Text(
-              label,
-              maxLines: 1,
-              style: KType.label.copyWith(
-                color: selected ? KColors.onLime : KColors.body,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A row of chips that scrolls sideways from the page edge.
-class ChipRow extends StatelessWidget {
-  const ChipRow({super.key, required this.children, required this.gutter});
-
-  final List<Widget> children;
-  final double gutter;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: KLayout.isWide(context) ? 32 : 34,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: EdgeInsets.symmetric(horizontal: gutter),
-      itemCount: children.length,
-      separatorBuilder: (_, _) => const SizedBox(width: KSpace.x2),
-      itemBuilder: (_, i) => children[i],
-    ),
-  );
 }
 
 /// Movies, Shows, ...: one box, the chosen one tinted.
