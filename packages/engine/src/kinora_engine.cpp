@@ -56,6 +56,7 @@
 #include <libtorrent/bdecode.hpp>
 #include <libtorrent/error_code.hpp>
 #include <libtorrent/fingerprint.hpp>
+#include <libtorrent/ip_filter.hpp>
 #include <libtorrent/load_torrent.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/posix_disk_io.hpp>
@@ -910,9 +911,24 @@ bool parse_range(const std::string& value, std::int64_t size, std::int64_t& star
 struct Window {
   int first = -1;
   int last = -1;
+  // The stretch after the deadlines, at top priority (-1: none).
+  int band_first = -1;
+  int band_last = -1;
   std::uint32_t epoch = 0;
   steady::time_point issued{};
 };
+
+// Pieces of [from, to] still missing go back to the file's usual priority,
+// except those in [keep_first, keep_last].
+void unband(const lt::torrent_handle& h, const std::vector<std::uint8_t>& have, int from,
+            int to, int keep_first, int keep_last) {
+  for (int p = from; p <= to && from >= 0; ++p) {
+    if ((p < keep_first || p > keep_last) && p < static_cast<int>(have.size()) &&
+        !have[static_cast<std::size_t>(p)]) {
+      h.piece_priority(lt::piece_index_t{p}, lt::default_priority);
+    }
+  }
+}
 
 void clear_window(kn_session* s, const Route& r, Window& w) {
   if (w.first < 0) return;
@@ -932,6 +948,7 @@ void clear_window(kn_session* s, const Route& r, Window& w) {
         h.reset_piece_deadline(lt::piece_index_t{p});
       }
     }
+    unband(h, have, w.band_first, w.band_last, 0, -1);
   } catch (...) {
     // Torrent removed meanwhile.
   }
@@ -979,6 +996,20 @@ void move_window(kn_session* s, const Route& r, Window& w, int piece) {
         h.set_piece_deadline(lt::piece_index_t{p}, (p - first) * step);
       }
     }
+    // The stretch after the deadlines comes next. In-order mode alone would
+    // fill from the file's first missing piece: on a resume, the part
+    // already watched. Top-priority pieces go before that scan, and other
+    // files (a season pack's downloads) keep their turn after them.
+    int band_first = last + 1;
+    int band_last = std::min(file_last, last + count);
+    unband(h, have, w.band_first, w.band_last, first, band_last);
+    for (int p = band_first; p <= band_last; ++p) {
+      if (p < static_cast<int>(have.size()) && !have[static_cast<std::size_t>(p)]) {
+        h.piece_priority(lt::piece_index_t{p}, lt::top_priority);
+      }
+    }
+    w.band_first = band_first <= band_last ? band_first : -1;
+    w.band_last = band_last;
   } catch (...) {
     return;  // torrent removed meanwhile
   }
@@ -1353,6 +1384,16 @@ kn_session* kn_session_new(const uint8_t* config, int32_t config_len, char** err
     params.settings = sp;
     params.disk_io_constructor = lt::posix_disk_io_constructor;  // no mmap on mobile
     s->ses = std::make_unique<lt::session>(std::move(params));
+    if (s->test_mode) {
+      // Tests' peers are on 127.0.0.1, which libtorrent leaves out of rate
+      // limits (its local class): count every address as global, so a test
+      // can slow a download down to see what it fetches first.
+      lt::ip_filter classes;
+      auto const both = (1u << static_cast<std::uint32_t>(lt::session::global_peer_class_id)) |
+                        (1u << static_cast<std::uint32_t>(lt::session::tcp_peer_class_id));
+      classes.add_rule(lt::address_v4::any(), lt::address_v4::broadcast(), both);
+      s->ses->set_peer_class_filter(classes);
+    }
     kn_session* raw = s.release();
     raw->alert_thread = std::thread(alert_loop, raw);
     if (shared) {

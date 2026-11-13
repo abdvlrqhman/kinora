@@ -5,6 +5,7 @@
 @Tags(['native'])
 library;
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -78,6 +79,96 @@ void main() {
   });
 
   tearDownAll(() => root.delete(recursive: true));
+
+  test(
+    'a stream that starts mid-file buffers ahead of it, not from the start',
+    () async {
+      // Resuming at 16 MiB of 64 MiB: after the deadline window (24 MiB)
+      // the next stretch comes before the part already watched.
+      const mib = 1 << 20;
+      final rnd = Random(7);
+      // Never zero: a byte on disk that isn't zero has arrived.
+      final big = Uint8List.fromList(
+        List.generate(64 * mib, (_) => rnd.nextInt(255) + 1),
+      );
+      const bigName = 'Kinora.Resume.2026.1080p.WEB-DL.mkv';
+      await Directory('${root.path}/seed-big').create();
+      await File('${root.path}/seed-big/$bigName').writeAsBytes(big);
+      final bigTorrent = TestTorrent.single(bigName, big);
+
+      final seeder = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory('${root.path}/rs1').create()).path,
+          statePath: '${root.path}/seed-big.state',
+        ),
+      );
+      addTearDown(seeder.dispose);
+      seeder.add(
+        AddTorrent.torrentFile(
+          bigTorrent.bytes,
+          savePath: '${root.path}/seed-big',
+          seedMode: true,
+        ),
+      );
+      await _until(() => seeder.listenPort > 0);
+      final leecher = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory('${root.path}/rs2').create()).path,
+          statePath: '${root.path}/dl-big.state',
+          // Slow enough to see the order pieces come in.
+          downloadRateLimit: 4 * mib,
+        ),
+      );
+      addTearDown(leecher.dispose);
+      final dl = '${root.path}/dl-big';
+      final ih = leecher.add(
+        AddTorrent.magnet(
+          bigTorrent.magnet(bigName),
+          savePath: dl,
+          peers: ['127.0.0.1:${seeder.listenPort}'],
+        ),
+      );
+      await leecher.waitForFiles(ih, timeout: const Duration(seconds: 60));
+      final stream = leecher.openStream(ih, 0, bitrate: 100 << 10);
+
+      // A player reading from 16 MiB on, slowly: it keeps the connection
+      // (and so the window) open, as mpv does while it plays.
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final req = await client.getUrl(stream.uri());
+      req.headers.set(HttpHeaders.rangeHeader, 'bytes=${16 * mib}-');
+      final res = await req.close();
+      final first = Completer<void>();
+      late final StreamSubscription<List<int>> reading;
+      reading = res.listen((_) {
+        if (!first.isCompleted) first.complete();
+        reading.pause();
+      });
+      await first.future.timeout(const Duration(seconds: 60));
+
+      // Until 46 MiB of the file is in: the window and part of what's next.
+      await _until(
+        () => (leecher.fileProgress(ih)?.first ?? 0) >= 46 * mib,
+        timeout: const Duration(seconds: 90),
+      );
+      final file = await File('$dl/$bigName').open();
+      Future<double> arrived(int from, int to) async {
+        await file.setPosition(from);
+        final bytes = await file.read(to - from);
+        return bytes.where((b) => b != 0).length / (to - from);
+      }
+
+      final ahead = await arrived(44 * mib, 46 * mib);
+      final watched = await arrived(4 * mib, 6 * mib);
+      await file.close();
+      await reading.cancel();
+      expect(ahead, greaterThan(0.9), reason: 'what comes next is in');
+      expect(watched, lessThan(0.1), reason: 'the part before waits');
+    },
+    timeout: const Timeout(Duration(minutes: 4)),
+  );
 
   test('version', () {
     expect(KinoraEngine.version(), contains('libtorrent 2.'));
