@@ -438,28 +438,13 @@ class _Sidebar extends ConsumerWidget {
       count: count,
       onTap: () => onTab(t.index),
     );
-    final wordmark = Padding(
-      padding: const EdgeInsets.only(left: 12),
+    const wordmark = Padding(
+      padding: EdgeInsets.only(left: 12),
       child: SizedBox(
         height: 34,
-        child: Row(
-          children: [
-            const SizedBox.square(
-              dimension: 24,
-              child: CustomPaint(painter: KinoraMark()),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'KINORA',
-              style: KType.h2.copyWith(
-                fontSize: 19,
-                letterSpacing: 1.6,
-                color: KColors.title,
-                fontWeight: FontWeight.w700,
-                fontVariations: const [FontVariation.weight(700)],
-              ),
-            ),
-          ],
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: KinoraWordmark(capHeight: 15),
         ),
       ),
     );
@@ -478,7 +463,10 @@ class _Sidebar extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (isDesktop) DragToMoveArea(child: wordmark) else wordmark,
+                if (isDesktop)
+                  const DragToMoveArea(child: wordmark)
+                else
+                  wordmark,
                 const SizedBox(height: 24),
                 item(AppTab.home),
                 const SizedBox(height: 2),

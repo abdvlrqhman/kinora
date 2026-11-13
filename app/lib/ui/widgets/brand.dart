@@ -74,3 +74,67 @@ class KinoraMark extends CustomPainter {
   bool shouldRepaint(KinoraMark oldDelegate) =>
       oldDelegate.lamp != lamp || oldDelegate.light != light;
 }
+
+/// The wordmark: the mark is the K, then "INORA" in the display face, both
+/// [capHeight] tall.
+class KinoraWordmark extends StatelessWidget {
+  const KinoraWordmark({super.key, this.capHeight = 14});
+
+  final double capHeight;
+
+  // The K on the mark's 1024 grid: stem left edge, cap top, cap height and
+  // the width across the chevron's tips.
+  static const _left = 274.0, _top = 252.0, _cap = 520.0, _width = 467.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = capHeight / _cap;
+    // Unbounded's caps are about 0.72 of its size.
+    final fontSize = capHeight / 0.72;
+    return Semantics(
+      label: 'Kinora',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: _width * scale,
+            height: capHeight,
+            child: CustomPaint(painter: _Letter(scale)),
+          ),
+          SizedBox(width: fontSize * 0.08),
+          Text(
+            'INORA',
+            style: TextStyle(
+              fontFamily: KType.display,
+              fontSize: fontSize,
+              height: 1,
+              fontWeight: FontWeight.w700,
+              fontVariations: const [FontVariation.weight(700)],
+              letterSpacing: fontSize * 0.06,
+              color: KColors.title,
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Letter extends CustomPainter {
+  const _Letter(this.scale);
+
+  final double scale;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas
+      ..translate(-KinoraWordmark._left * scale, -KinoraWordmark._top * scale)
+      ..scale(scale);
+    const KinoraMark().paint(canvas, const Size(1024, 1024));
+  }
+
+  @override
+  bool shouldRepaint(_Letter old) => old.scale != scale;
+}

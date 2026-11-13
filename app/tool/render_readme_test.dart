@@ -1,7 +1,9 @@
 // Renders the README's images into ../docs/ (the repo root):
 // - banner.png: the README header;
 // - social-preview.png: GitHub › Settings › Social preview (1280 × 640);
-// - screens.png: five screens, made from the golden renders in test/goldens.
+// - screens.png: five phone screens, made from the golden renders in
+//   test/goldens;
+// - desktop.png: Kinora on a computer (the desktop Home render).
 // Run from app/: flutter test tool/render_readme_test.dart
 // (after `flutter test --update-goldens`, so the screens are current).
 import 'dart:io';
@@ -18,9 +20,9 @@ import '../test/goldens/golden_helper.dart';
 
 const _tagline =
     'Stream or download movies and shows, with subtitles in your languages, '
-    'on your phone and on your TV.';
+    'on your phone, your computer and your TV.';
 
-/// The mark switched on in a dark room: its violet light is the only color.
+/// The mark switched on in a dark room: its lime light is the only color.
 class _Banner extends StatelessWidget {
   const _Banner(this.size);
   final Size size;
@@ -116,7 +118,7 @@ class _Banner extends StatelessWidget {
 const _shots = [
   ('screens/home.png', 'Pick up where you left off'),
   ('screens/title_series_episodes.png', 'Every episode, with its progress'),
-  ('screens/version_sheet.png', 'The best version, explained'),
+  ('screens/search_results.png', 'Discover across your sources'),
   ('downloads.png', 'Downloads you control'),
   ('screens/cast_picker.png', 'Cast to your TV'),
 ];
@@ -233,6 +235,11 @@ void main() {
       _Screens(images!),
       _Screens.size,
       '../docs/screens.png',
+    );
+    await tester.runAsync(
+      () =>
+          File('test/goldens/screens/desktop_home.png')
+              .copy('../docs/desktop.png'),
     );
   });
 }

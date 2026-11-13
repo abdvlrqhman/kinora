@@ -271,29 +271,11 @@ class _Wordmark extends StatelessWidget {
   const _Wordmark();
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: SizedBox(
-      height: 44,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox.square(
-            dimension: 20,
-            child: CustomPaint(painter: KinoraMark()),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'KINORA',
-            style: KType.h2.copyWith(
-              fontSize: 16,
-              letterSpacing: 1.4,
-              color: KColors.title,
-              fontWeight: FontWeight.w700,
-              fontVariations: const [FontVariation.weight(700)],
-            ),
-          ),
-        ],
-      ),
+  Widget build(BuildContext context) => const SizedBox(
+    height: 44,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: KinoraWordmark(capHeight: 13),
     ),
   );
 }
