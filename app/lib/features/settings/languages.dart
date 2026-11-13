@@ -36,7 +36,7 @@ List<Widget> languageSections() => const [
   SubtitleModeChoice(),
 ];
 
-/// Settings › Languages and subtitles.
+/// Settings › Languages.
 class LanguagesPage extends ConsumerWidget {
   const LanguagesPage({super.key});
 
@@ -44,7 +44,7 @@ class LanguagesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsProvider);
     return SettingsPage(
-      title: 'Languages and subtitles',
+      title: 'Languages',
       children: [
         ...languageSections(),
         const SectionTitle('Subtitles'),
@@ -74,15 +74,14 @@ class SubtitleLanguageList extends ConsumerWidget {
     final langs = ref.watch(
       settingsProvider.select((s) => s.subtitleLanguages),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return RowPanel(
+      rows: [
         ReorderableListView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           buildDefaultDragHandles: false,
           proxyDecorator: (child, _, _) =>
-              Material(color: KColors.seat, child: child),
+              Material(color: KColors.raised, child: child),
           onReorderItem: (from, to) {
             final list = [...langs];
             list.insert(to, list.removeAt(from));
@@ -148,7 +147,8 @@ class _LanguageRow extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 56),
         child: Row(
           children: [
-            const SizedBox(width: KSpace.margin),
+            // As far in as the panel's other rows.
+            const SizedBox(width: 16),
             SizedBox(
               width: 28,
               child: ExcludeSemantics(
@@ -245,8 +245,8 @@ class AudioChoice extends ConsumerWidget {
       }
     }
 
-    return Column(
-      children: [
+    return RowPanel(
+      rows: [
         ChoiceRow(
           label: 'Original language',
           detail: 'Hear each film as it was made.',
@@ -292,8 +292,8 @@ class SubtitleModeChoice extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(settingsProvider.select((s) => s.subtitleMode));
-    return Column(
-      children: [
+    return RowPanel(
+      rows: [
         for (final m in SubtitleMode.values)
           ChoiceRow(
             label: subtitleModeText(m).$1,

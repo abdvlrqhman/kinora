@@ -73,7 +73,7 @@ List<Widget> _grouped(List<Widget> children) {
   var run = <Widget>[];
   void flush() {
     if (run.isEmpty) return;
-    out.add(_RowGroup(rows: run));
+    out.add(RowPanel(rows: run));
     run = [];
   }
 
@@ -89,8 +89,9 @@ List<Widget> _grouped(List<Widget> children) {
   return out;
 }
 
-class _RowGroup extends StatelessWidget {
-  const _RowGroup({required this.rows});
+/// Setting rows on one panel card, divided by hairlines.
+class RowPanel extends StatelessWidget {
+  const RowPanel({super.key, required this.rows});
 
   final List<Widget> rows;
 

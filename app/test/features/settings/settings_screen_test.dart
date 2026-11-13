@@ -38,7 +38,7 @@ void main() {
 
     const pages = {
       'Sources': 'Sources',
-      'Languages and subtitles': 'Languages and subtitles',
+      'Languages': 'Languages',
       'Subtitle sites': 'Subtitle sites',
       'Playback': 'Playback',
       'Downloads': 'Downloads',

@@ -13,6 +13,7 @@ import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
+import '../../ui/widgets/brand.dart';
 import '../cast/cast_picker.dart';
 import '../settings/backup_page.dart';
 import '../settings/languages.dart';
@@ -354,16 +355,8 @@ class _Welcome extends StatelessWidget {
   Widget build(BuildContext context) => _BottomAligned(
     cta: cta,
     children: [
-      ExcludeSemantics(
-        child: Text(
-          'Kinora',
-          style: KType.hero.copyWith(
-            fontSize: 72,
-            height: 68 / 72,
-            letterSpacing: -0.5,
-          ),
-        ),
-      ),
+      // The logo, large: the lime mark is its K.
+      const ExcludeSemantics(child: KinoraWordmark(capHeight: 44)),
       const SizedBox(height: KSpace.x3),
       Semantics(
         header: true,

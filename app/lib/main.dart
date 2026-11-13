@@ -24,7 +24,11 @@ import 'services/subtitles_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  if (isDesktop) await initDesktopWindow();
+  if (isDesktop) {
+    await initDesktopWindow();
+  } else {
+    unawaited(keepPhoneUpright());
+  }
   final paths = await AppPaths.resolve();
   Log.attach(paths.logs);
   FlutterError.onError = (d) =>

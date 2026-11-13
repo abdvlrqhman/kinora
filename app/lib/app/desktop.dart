@@ -22,6 +22,18 @@ bool? desktopOverride;
 /// Height of Kinora's title bar.
 const double kTitleBarHeight = 40;
 
+/// Outside the player a phone stays upright, as streaming apps do (its
+/// pages are laid out for it); tablets and computers turn freely.
+Future<void> keepPhoneUpright() {
+  final display =
+      WidgetsBinding.instance.platformDispatcher.views.first.display;
+  final phone =
+      !isDesktop && display.size.shortestSide / display.devicePixelRatio < 600;
+  return SystemChrome.setPreferredOrientations(
+    phone ? const [DeviceOrientation.portraitUp] : const [],
+  );
+}
+
 /// Opens the window without the system frame, sized for watching.
 Future<void> initDesktopWindow() async {
   await windowManager.ensureInitialized();

@@ -62,6 +62,16 @@ class _FeedState extends ConsumerState<_Feed> {
   /// more rows arrive (cleared on refresh).
   List<MetaPreview>? _featured;
 
+  /// How solid the phone's top bar is: clear over the hero, black once the
+  /// rows scroll under the wordmark.
+  final _barShade = ValueNotifier<double>(0);
+
+  @override
+  void dispose() {
+    _barShade.dispose();
+    super.dispose();
+  }
+
   void _reload() {
     _featured = null;
     ref
@@ -118,33 +128,64 @@ class _FeedState extends ConsumerState<_Feed> {
           edgeOffset: pad.top,
           color: KColors.lamp,
           backgroundColor: KColors.seat,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: featured != null
-                    ? HeroCarousel(items: featured)
-                    : rows.isLoading ||
-                          (rows.value?.complete == false) ||
-                          fresh.isLoading
-                    ? const BillboardSkeleton()
-                    : SizedBox(height: pad.top + 56),
-              ),
-              const SliverToBoxAdapter(child: ContinueRow()),
-              const SliverToBoxAdapter(child: NewEpisodesRow()),
-              // The first catalog, ranked.
-              if (catalogs.isNotEmpty)
-                SliverToBoxAdapter(child: TrendingRow(row: catalogs.first)),
-              const SliverToBoxAdapter(child: MyListRow()),
-              ..._rows(rows),
-              SliverToBoxAdapter(
-                child: SizedBox(height: AppShell.bottomInset(context)),
-              ),
-            ],
+          child: NotificationListener<ScrollUpdateNotification>(
+            onNotification: (n) {
+              if (n.depth == 0) {
+                _barShade.value = (n.metrics.pixels / 120).clamp(0.0, 1.0);
+              }
+              return false;
+            },
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: featured != null
+                      ? HeroCarousel(items: featured)
+                      : rows.isLoading ||
+                            (rows.value?.complete == false) ||
+                            fresh.isLoading
+                      ? const BillboardSkeleton()
+                      : SizedBox(height: pad.top + 56),
+                ),
+                const SliverToBoxAdapter(child: ContinueRow()),
+                const SliverToBoxAdapter(child: NewEpisodesRow()),
+                // The first catalog, ranked.
+                if (catalogs.isNotEmpty)
+                  SliverToBoxAdapter(child: TrendingRow(row: catalogs.first)),
+                const SliverToBoxAdapter(child: MyListRow()),
+                ..._rows(rows),
+                SliverToBoxAdapter(
+                  child: SizedBox(height: AppShell.bottomInset(context)),
+                ),
+              ],
+            ),
           ),
         ),
         // Fixed: scrolled content fades under the status bar and Cast.
         const TopShade(),
+        if (!AppShell.onRail(context))
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: pad.top + KSpace.x1 * 2 + 48,
+            child: IgnorePointer(
+              child: ValueListenableBuilder(
+                valueListenable: _barShade,
+                builder: (_, shade, _) => Opacity(
+                  opacity: shade,
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color(0xF0000000),
+                      border: Border(
+                        bottom: BorderSide(color: KColors.divider),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         // A phone: the wordmark over the hero (the sidebar has it otherwise).
         if (!AppShell.onRail(context))
           Positioned(

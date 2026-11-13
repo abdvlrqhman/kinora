@@ -133,7 +133,7 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
     child: ListView(
       padding: const EdgeInsets.only(bottom: KSpace.x4),
       children: fix == SubtitleFix.sites
-          ? [_Note(subtitleSitesIntro), const SubtitleSiteList()]
+          ? [_Note(subtitleSitesIntro), const SubtitleSiteList(panel: false)]
           : languageSections(),
     ),
   );

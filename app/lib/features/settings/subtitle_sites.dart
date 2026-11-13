@@ -30,18 +30,26 @@ String get subtitleSitesIntro =>
 
 /// Every site in [subtitleProviderCatalog], each with its switch.
 class SubtitleSiteList extends StatelessWidget {
-  const SubtitleSiteList({super.key, this.showTest = false});
+  const SubtitleSiteList({super.key, this.showTest = false, this.panel = true});
 
   final bool showTest;
 
+  /// On a panel card (Settings, onboarding); bare inside the player's own.
+  final bool panel;
+
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
+  Widget build(BuildContext context) {
+    final tiles = [
       for (final info in subtitleProviderCatalog)
         SubtitleSiteTile(info: info, showTest: showTest),
-    ],
-  );
+    ];
+    return panel
+        ? RowPanel(rows: tiles)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: tiles,
+          );
+  }
 }
 
 /// What a subtitle site said, in words.
@@ -287,12 +295,8 @@ class _SubtitleSiteTileState extends ConsumerState<SubtitleSiteTile> {
       if (_error != null)
         Semantics(liveRegion: true, child: Note(_error!, color: KColors.cut)),
       Padding(
-        padding: const EdgeInsets.fromLTRB(
-          KSpace.margin,
-          KSpace.x1,
-          KSpace.margin,
-          KSpace.x3,
-        ),
+        // In line with the row's text.
+        padding: const EdgeInsets.fromLTRB(16, KSpace.x1, 16, KSpace.x3),
         child: GlassGroup(
           child: Wrap(
             spacing: KSpace.x2,
@@ -319,12 +323,7 @@ class _SubtitleSiteTileState extends ConsumerState<SubtitleSiteTile> {
   );
 
   Widget _testRow() => Padding(
-    padding: const EdgeInsets.fromLTRB(
-      KSpace.margin,
-      0,
-      KSpace.margin,
-      KSpace.x3,
-    ),
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, KSpace.x3),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

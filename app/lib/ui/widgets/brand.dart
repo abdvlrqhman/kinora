@@ -105,6 +105,8 @@ class KinoraWordmark extends StatelessWidget {
           SizedBox(width: fontSize * 0.08),
           Text(
             'INORA',
+            // A logo, sized with the drawn K: it doesn't grow with text.
+            textScaler: TextScaler.noScaling,
             style: TextStyle(
               fontFamily: KType.display,
               fontSize: fontSize,

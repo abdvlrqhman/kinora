@@ -31,7 +31,7 @@ String styleSummary(SubtitleStyle s) => [
   if (s.bold) 'bold',
 ].join(', ');
 
-/// Settings › Languages and subtitles › Subtitle style, with a live preview
+/// Settings › Languages › Subtitle style, with a live preview
 /// over a sample frame. Sliders preview while dragging and save on release.
 class SubtitleStylePage extends StatelessWidget {
   const SubtitleStylePage({super.key});
@@ -130,16 +130,24 @@ class _SubtitleStyleControlsState extends ConsumerState<SubtitleStyleControls> {
           onChanged: (v) => _preview(_style.copyWith(backgroundOpacity: v)),
           onChangeEnd: (v) => _save(_style.copyWith(backgroundOpacity: v)),
         ),
-        SwitchRow(
-          label: 'Outline',
-          detail: 'A dark edge keeps text readable on bright scenes.',
-          value: s.outline,
-          onChanged: (v) => _save(_style.copyWith(outline: v)),
-        ),
-        SwitchRow(
-          label: 'Bold',
-          value: s.bold,
-          onChanged: (v) => _save(_style.copyWith(bold: v)),
+        // Rows pad 16 for a panel; out here they line up with the sliders.
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: KSpace.margin - 16),
+          child: Column(
+            children: [
+              SwitchRow(
+                label: 'Outline',
+                detail: 'A dark edge keeps text readable on bright scenes.',
+                value: s.outline,
+                onChanged: (v) => _save(_style.copyWith(outline: v)),
+              ),
+              SwitchRow(
+                label: 'Bold',
+                value: s.bold,
+                onChanged: (v) => _save(_style.copyWith(bold: v)),
+              ),
+            ],
+          ),
         ),
         _SliderRow(
           label: 'Height above the bottom',

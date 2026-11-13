@@ -206,8 +206,8 @@ class _SuggestedAddonsState extends ConsumerState<SuggestedAddons> {
   @override
   Widget build(BuildContext context) {
     final installed = ref.watch(addonsProvider).value ?? const [];
-    return Column(
-      children: [
+    return RowPanel(
+      rows: [
         for (final s in suggestedAddons)
           if (installed.any((a) => a.addon.transportUrl.toString() == s.url))
             ActionRow(
@@ -306,46 +306,55 @@ class _AddonListState extends ConsumerState<AddonList> {
     final health = widget.showHealth
         ? ref.read(aggregatorProvider).health
         : const <Uri, AddonHealth>{};
-    return ReorderableListView(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      proxyDecorator: (child, _, _) =>
-          Material(color: KColors.seat, child: child),
-      onReorderItem: (from, to) =>
-          unawaited(ref.read(addonsProvider.notifier).reorder(from, to)),
-      children: [
-        for (final (i, a) in list.indexed)
-          Dismissible(
-            key: ValueKey(a.id),
-            direction: DismissDirection.endToStart,
-            confirmDismiss: (_) => _confirmRemove(a),
-            onDismissed: (_) => unawaited(_remove(a)),
-            background: const ColoredBox(
-              color: Color(0x33FF6B6B),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: EdgeInsets.only(right: KSpace.margin),
-                  child: Icon(Icons.delete_outline_rounded, color: KColors.cut),
+    return RowPanel(
+      rows: [
+        ReorderableListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          proxyDecorator: (child, _, _) =>
+              Material(color: KColors.raised, child: child),
+          onReorderItem: (from, to) =>
+              unawaited(ref.read(addonsProvider.notifier).reorder(from, to)),
+          children: [
+            for (final (i, a) in list.indexed)
+              Dismissible(
+                key: ValueKey(a.id),
+                direction: DismissDirection.endToStart,
+                confirmDismiss: (_) => _confirmRemove(a),
+                onDismissed: (_) => unawaited(_remove(a)),
+                background: const ColoredBox(
+                  color: Color(0x33FF6B6B),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 16),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: KColors.cut,
+                      ),
+                    ),
+                  ),
+                ),
+                child: _AddonRow(
+                  index: i,
+                  addon: a,
+                  health: widget.showHealth
+                      ? addonHealthText(health[a.addon.transportUrl])
+                      : null,
+                  onLongPress: () => unawaited(_menu(a)),
+                  onRemove: () async {
+                    if (await _confirmRemove(a)) await _remove(a);
+                  },
+                  onToggle: (v) => unawaited(
+                    ref
+                        .read(addonsProvider.notifier)
+                        .setEnabled(a.id, enabled: v),
+                  ),
                 ),
               ),
-            ),
-            child: _AddonRow(
-              index: i,
-              addon: a,
-              health: widget.showHealth
-                  ? addonHealthText(health[a.addon.transportUrl])
-                  : null,
-              onLongPress: () => unawaited(_menu(a)),
-              onRemove: () async {
-                if (await _confirmRemove(a)) await _remove(a);
-              },
-              onToggle: (v) => unawaited(
-                ref.read(addonsProvider.notifier).setEnabled(a.id, enabled: v),
-              ),
-            ),
-          ),
+          ],
+        ),
       ],
     );
   }
@@ -382,8 +391,9 @@ class _AddonRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 64),
           child: Padding(
+            // As far in as the panel's other rows.
             padding: const EdgeInsets.fromLTRB(
-              KSpace.margin,
+              16,
               KSpace.x3,
               KSpace.x2,
               KSpace.x3,

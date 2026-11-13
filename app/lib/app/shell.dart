@@ -828,7 +828,7 @@ class _WindowBar extends StatelessWidget {
     }
     const pages = {
       'sources': 'Sources',
-      'languages': 'Languages and subtitles',
+      'languages': 'Languages',
       'style': 'Subtitle style',
       'subtitle-sites': 'Subtitle sites',
       'trakt': 'Trakt',
@@ -854,7 +854,13 @@ class _WindowBar extends StatelessWidget {
   );
 
   Widget _bar(BuildContext context) {
-    final back = router.canPop() && path != '/';
+    // From the address: the navigator's own stack (canPop) lags a page.
+    final back = !const {
+      '/',
+      '/search',
+      '/downloads',
+      '/settings',
+    }.contains(path);
     final title = Align(
       alignment: Alignment.centerLeft,
       child: Text(
@@ -885,7 +891,12 @@ class _WindowBar extends StatelessWidget {
                   _BarIcon(
                     icon: Icons.chevron_left_rounded,
                     label: 'Back',
-                    onTap: router.pop,
+                    // (Opened straight from a link: up to its tab.)
+                    onTap: () => router.canPop()
+                        ? router.pop()
+                        : router.go(
+                            path.startsWith('/settings/') ? '/settings' : '/',
+                          ),
                   ),
                   const SizedBox(width: 10),
                 ],

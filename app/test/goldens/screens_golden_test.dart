@@ -113,13 +113,22 @@ void main() {
   Future<void> pumpHome(
     WidgetTester tester, {
     bool desktop = false,
-    Size window = const Size(1280, 800),
+    Size? window,
+    // The phone goldens show Harbor Lights without its details.
+    bool? seriesDetails,
     List<Override> extra = const [],
   }) async {
     tester.view
-      ..physicalSize = desktop ? window : const Size(390, 844) * 3
+      ..physicalSize = desktop
+          ? window ?? const Size(1280, 800)
+          : (window ?? const Size(390, 844)) * 3
       ..devicePixelRatio = desktop ? 1 : 3;
-    if (!desktop) phoneInsets(tester);
+    if (!desktop && (window?.shortestSide ?? 0) >= 600) {
+      // A tablet: the status bar and the home indicator.
+      tester.view.padding = const FakeViewPadding(top: 72, bottom: 60);
+    } else if (!desktop) {
+      phoneInsets(tester);
+    }
     addTearDown(tester.view.reset);
 
     final db = testDb();
@@ -280,8 +289,8 @@ void main() {
                 name: 'Glass Harbor',
                 background: art('harbor_backdrop'),
               ),
-              'tt200' when desktop => series(),
-              _ => throw StateError('No details'),
+              'tt200' when seriesDetails ?? desktop => series(),
+              _ => throw StateError('No source has details for this title.'),
             },
           ),
         ],
@@ -584,16 +593,22 @@ void main() {
       ])
         preview(id, name, type: type, poster: art(poster), year: '2021'),
     ];
-    for (final window in const [
-      Size(1280, 800),
-      Size(1920, 1080),
+    for (final (window, desk) in const [
+      (Size(1280, 800), true),
+      (Size(1920, 1080), true),
       // The smallest window Kinora allows.
-      Size(960, 640),
+      (Size(960, 640), true),
+      // A phone (it stays upright) and a tablet on its side.
+      (Size(390, 844), false),
+      (Size(1194, 834), false),
     ]) {
       final tag = '${window.width.round()}x${window.height.round()}';
       testScreen('tour $tag', (tester) async {
+        desktopOverride = desk;
         // Render as Windows does (scrollbars, no phone-only rows).
-        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        debugDefaultTargetPlatformOverride = desk
+            ? TargetPlatform.windows
+            : TargetPlatform.iOS;
         Future<void> snap(String name) async {
           await tester.pump(const Duration(milliseconds: 500));
           final bytes = await tester.runAsync(() async {
@@ -632,8 +647,9 @@ void main() {
 
         await pumpHome(
           tester,
-          desktop: true,
+          desktop: desk,
           window: window,
+          seriesDetails: true,
           extra: [searchProvider.overrideWith((ref, q) async => results)],
         );
         await seedSeries(container().read(databaseProvider));
@@ -669,8 +685,9 @@ void main() {
         await close();
         await go('/title/series/tt200');
         await snap('10_title_series');
-        await tester.drag(
-          find.byType(CustomScrollView).first,
+        // Whatever scrolls the page, as a finger would.
+        await tester.dragFrom(
+          Offset(window.width / 2, window.height * 0.8),
           Offset(0, -window.height * 0.7),
         );
         await settleImages(tester);

@@ -183,7 +183,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       unawaited(setFullScreen(false));
     } else {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-      unawaited(SystemChrome.setPreferredOrientations(const []));
+      unawaited(keepPhoneUpright());
       unawaited(ScreenBrightness.instance.resetApplicationScreenBrightness());
     }
     super.dispose();

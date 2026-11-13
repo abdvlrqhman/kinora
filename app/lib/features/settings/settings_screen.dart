@@ -89,7 +89,7 @@ class SettingsScreen extends ConsumerWidget {
           onTap: () => go('sources'),
         ),
         NavRow(
-          label: 'Languages and subtitles',
+          label: 'Languages',
 
           icon: Icons.translate_rounded,
           value: [

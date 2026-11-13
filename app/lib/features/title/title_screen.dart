@@ -871,11 +871,13 @@ class _Bare extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     children: [
       Positioned.fill(child: child),
-      Positioned(
-        top: MediaQuery.paddingOf(context).top + KSpace.x1,
-        left: KSpace.margin,
-        child: const GlassGroup(child: _BackButton()),
-      ),
+      // (Beside the sidebar, the window bar has Back.)
+      if (!AppShell.onRail(context))
+        Positioned(
+          top: MediaQuery.paddingOf(context).top + KSpace.x1,
+          left: KSpace.margin,
+          child: const GlassGroup(child: _BackButton()),
+        ),
     ],
   );
 }

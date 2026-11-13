@@ -519,6 +519,14 @@ void main() {
           PlayerController.debugLast != c &&
           PlayerController.debugLast?.phase == PlayerPhase.playing,
       reason: 'downloaded episode opens',
+      state: () {
+        final p = PlayerController.debugLast;
+        return 'new: ${p != c} ${p?.phase} "${p?.status}" ${p?.error} '
+            'source: ${p?.source?.kind} ${p?.source?.uri} '
+            'mpv: playing ${p?.player.state.playing} '
+            '${p?.player.state.position}/${p?.player.state.duration} '
+            'buffering ${p?.player.state.buffering}';
+      },
     );
     final offline = PlayerController.debugLast!;
     expect(offline.source!.kind, PlaybackKind.local);
