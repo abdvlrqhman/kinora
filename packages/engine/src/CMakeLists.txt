@@ -1,5 +1,6 @@
-# Builds libkinora_engine (Android via the Android Gradle Plugin, or the host
-# for native tests: cmake -S src -B build -DKN_PREBUILT=<vcpkg x64-linux dir>).
+# Builds libkinora_engine (Android via the Android Gradle Plugin, Windows via
+# the plugin's windows/CMakeLists.txt, or the host for native tests:
+# cmake -S src -B build -DKN_PREBUILT=<vcpkg x64-linux dir>).
 # The Flutter tooling requires CMake 3.10 compatibility.
 cmake_minimum_required(VERSION 3.10)
 project(kinora_engine_library VERSION 0.1.0 LANGUAGES C CXX)
@@ -18,15 +19,31 @@ if(ANDROID)
     message(FATAL_ERROR "kinora_engine: unsupported Android ABI ${ANDROID_ABI}")
   endif()
   set(KN_PREBUILT "${CMAKE_CURRENT_SOURCE_DIR}/../prebuilt/${KN_TRIPLET}")
+elseif(NOT KN_PREBUILT AND WIN32)
+  set(KN_PREBUILT "${CMAKE_CURRENT_SOURCE_DIR}/../prebuilt/x64-windows-static-md")
 elseif(NOT KN_PREBUILT)
   set(KN_PREBUILT "${CMAKE_CURRENT_SOURCE_DIR}/../prebuilt/x64-linux")
 endif()
 
-if(NOT EXISTS "${KN_PREBUILT}/lib/libtorrent-rasterbar.a")
+if(WIN32)
+  set(KN_TORRENT_LIB "${KN_PREBUILT}/lib/torrent-rasterbar.lib")
+else()
+  set(KN_TORRENT_LIB "${KN_PREBUILT}/lib/libtorrent-rasterbar.a")
+endif()
+if(NOT EXISTS "${KN_TORRENT_LIB}")
   message(FATAL_ERROR
     "kinora_engine: libtorrent not found in ${KN_PREBUILT}. "
     "CI downloads it from the engine workflow; locally run "
     "packages/engine/tool/fetch_prebuilt.sh.")
+endif()
+
+if(MSVC)
+  # libtorrent is built against the release C runtime: use it in Debug too
+  # (only a C API crosses the DLL boundary, so the app may differ).
+  foreach(flags CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG)
+    string(REPLACE "/MDd" "/MD" ${flags} "${${flags}}")
+    string(REPLACE "/RTC1" "" ${flags} "${${flags}}")
+  endforeach()
 endif()
 
 add_library(kinora_engine SHARED kinora_engine.cpp)
@@ -44,6 +61,25 @@ target_compile_definitions(kinora_engine PRIVATE
   TORRENT_ABI_VERSION=100 TORRENT_USE_RTC=0
   TORRENT_USE_OPENSSL TORRENT_USE_LIBCRYPTO TORRENT_SSL_PEERS
   OPENSSL_NO_SSL2 OPENSSL_NO_SSL3 OPENSSL_NO_TLS1 OPENSSL_NO_TLS1_1 OPENSSL_NO_DTLS1)
+
+if(WIN32)
+  # Windows adds its own flags to libtorrent's (_WIN32_WINNT and such): take
+  # every define from its pkg-config file.
+  file(STRINGS "${KN_PREBUILT}/lib/pkgconfig/libtorrent-rasterbar.pc" KN_PC_CFLAGS
+       REGEX "^Cflags:")
+  string(REGEX MATCHALL "-D[^ \"]+" KN_PC_DEFINES "${KN_PC_CFLAGS}")
+  list(TRANSFORM KN_PC_DEFINES REPLACE "^-D" "")
+  message(STATUS "kinora_engine: libtorrent defines ${KN_PC_DEFINES}")
+  target_compile_definitions(kinora_engine PRIVATE
+    ${KN_PC_DEFINES} WIN32_LEAN_AND_MEAN NOMINMAX BOOST_ALL_NO_LIB
+    $<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=0>)
+  target_compile_options(kinora_engine PRIVATE /EHsc /GR /O2 /utf-8 /bigobj)
+  file(GLOB KN_LIBS "${KN_PREBUILT}/lib/*.lib")
+  target_link_libraries(kinora_engine PRIVATE
+    ${KN_LIBS} ws2_32 mswsock iphlpapi crypt32 bcrypt dbghelp advapi32 user32)
+  return()
+endif()
+
 target_compile_options(kinora_engine PRIVATE -fexceptions -frtti -O2)
 
 file(GLOB KN_BOOST_LIBS "${KN_PREBUILT}/lib/libboost_*.a")

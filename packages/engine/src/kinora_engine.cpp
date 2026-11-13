@@ -9,6 +9,14 @@
 //   picker), waits for each piece, then reads it straight from disk.
 #include "kinora_engine.h"
 
+#if defined(_WIN32)
+#include <winsock2.h>  // before windows.h
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <fcntl.h>
+#include <io.h>
+#include <sys/stat.h>
+#else
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -19,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -61,9 +70,16 @@
 #include <libtorrent/version.hpp>
 #include <libtorrent/write_resume_data.hpp>
 
+#if defined(_WIN32)
+// Sockets are kept as int: Windows socket handles fit in 32 bits, and
+// INVALID_SOCKET becomes -1 like a failed POSIX call.
+#define KN_SOCK(fd) static_cast<SOCKET>(fd)
+#else
 static_assert(sizeof(off_t) == 8, "kinora_engine needs a 64-bit off_t (_FILE_OFFSET_BITS=64)");
+#define KN_SOCK(fd) (fd)
+#endif
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
 #define KN_SEND_FLAGS 0
 #else
 #define KN_SEND_FLAGS MSG_NOSIGNAL
@@ -74,6 +90,157 @@ using namespace std::chrono_literals;
 using steady = std::chrono::steady_clock;
 
 namespace {
+
+// --------------------------------------------------------------- platform --
+// Sockets and files the same way on POSIX and Windows. Paths are UTF-8.
+
+#if defined(_WIN32)
+std::wstring widen(const std::string& s) {
+  if (s.empty()) return {};
+  int n = ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+  std::wstring w(static_cast<std::size_t>(n), L'\0');
+  ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), &w[0], n);
+  return w;
+}
+#define KN_PATH(p) widen(p).c_str()
+#else
+#define KN_PATH(p) (p)
+#endif
+
+// A call cut short by a signal, to retry (Winsock has none).
+bool interrupted() {
+#if defined(_WIN32)
+  return false;
+#else
+  return errno == EINTR;
+#endif
+}
+
+std::int64_t sock_send(int fd, const char* data, std::size_t len) {
+#if defined(_WIN32)
+  return ::send(KN_SOCK(fd), data, static_cast<int>(std::min<std::size_t>(len, 1u << 30)), 0);
+#else
+  return ::send(fd, data, len, KN_SEND_FLAGS);
+#endif
+}
+
+std::int64_t sock_recv(int fd, char* buf, std::size_t len) {
+#if defined(_WIN32)
+  return ::recv(KN_SOCK(fd), buf, static_cast<int>(len), 0);
+#else
+  return ::recv(fd, buf, len, 0);
+#endif
+}
+
+void sock_close(int fd) {
+#if defined(_WIN32)
+  ::closesocket(KN_SOCK(fd));
+#else
+  ::close(fd);
+#endif
+}
+
+void sock_shutdown(int fd) {
+#if defined(_WIN32)
+  ::shutdown(KN_SOCK(fd), SD_BOTH);
+#else
+  ::shutdown(fd, SHUT_RDWR);
+#endif
+}
+
+void sock_option(int fd, int level, int name, int value) {
+  ::setsockopt(KN_SOCK(fd), level, name, reinterpret_cast<const char*>(&value), sizeof(value));
+}
+
+void sock_timeouts(int fd, int recv_seconds, int send_seconds) {
+#if defined(_WIN32)
+  DWORD r = static_cast<DWORD>(recv_seconds) * 1000, w = static_cast<DWORD>(send_seconds) * 1000;
+#else
+  timeval r{recv_seconds, 0}, w{send_seconds, 0};
+#endif
+  ::setsockopt(KN_SOCK(fd), SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&r), sizeof(r));
+  ::setsockopt(KN_SOCK(fd), SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&w), sizeof(w));
+}
+
+// Waits up to `ms` for `fd` to be readable: data, a connection or a hang-up.
+int sock_wait(int fd, int ms) {
+#if defined(_WIN32)
+  WSAPOLLFD p{KN_SOCK(fd), POLLRDNORM, 0};
+  return ::WSAPoll(&p, 1, ms);
+#else
+  pollfd p{fd, POLLIN, 0};
+  return ::poll(&p, 1, ms);
+#endif
+}
+
+int file_open(const std::string& path) {
+#if defined(_WIN32)
+  // Shared for writing and deleting: libtorrent is still filling the file.
+  HANDLE h = ::CreateFileW(widen(path).c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (h == INVALID_HANDLE_VALUE) return -1;
+  int fd = ::_open_osfhandle(reinterpret_cast<intptr_t>(h), _O_RDONLY);
+  if (fd < 0) ::CloseHandle(h);
+  return fd;
+#else
+  return ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+#endif
+}
+
+std::int64_t file_read(int fd, char* buf, std::size_t len, std::int64_t pos) {
+#if defined(_WIN32)
+  OVERLAPPED o{};
+  o.Offset = static_cast<DWORD>(pos & 0xffffffff);
+  o.OffsetHigh = static_cast<DWORD>(pos >> 32);
+  DWORD got = 0;
+  HANDLE h = reinterpret_cast<HANDLE>(::_get_osfhandle(fd));
+  if (!::ReadFile(h, buf, static_cast<DWORD>(len), &got, &o)) {
+    return ::GetLastError() == ERROR_HANDLE_EOF ? 0 : -1;
+  }
+  return got;
+#else
+  return ::pread(fd, buf, len, static_cast<off_t>(pos));
+#endif
+}
+
+void file_close(int fd) {
+#if defined(_WIN32)
+  ::_close(fd);
+#else
+  ::close(fd);
+#endif
+}
+
+// Size of the file at `path`, or -1 when it isn't there.
+std::int64_t file_size(const std::string& path) {
+#if defined(_WIN32)
+  struct _stat64 st {};
+  return ::_wstat64(widen(path).c_str(), &st) == 0 ? st.st_size : -1;
+#else
+  struct stat st {};
+  return ::stat(path.c_str(), &st) == 0 ? st.st_size : -1;
+#endif
+}
+
+std::string last_error() {
+#if defined(_WIN32)
+  return "error " + std::to_string(::GetLastError());
+#else
+  return std::strerror(errno);
+#endif
+}
+
+// Replaces `to` with `from` (std::rename won't overwrite on Windows).
+bool replace_file(const std::string& from, const std::string& to) {
+#if defined(_WIN32)
+  return ::MoveFileExW(widen(from).c_str(), widen(to).c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+  return std::rename(from.c_str(), to.c_str()) == 0;
+#endif
+}
+
+// ------------------------------------------------------------------ state --
 
 constexpr const char* kEngineVersion = "0.1.0";
 constexpr int kMaxClients = 24;
@@ -188,7 +355,7 @@ std::string mime_for(const std::string& path) {
 }
 
 bool read_file(const std::string& path, std::vector<char>& out) {
-  std::ifstream in(path, std::ios::binary);
+  std::ifstream in(KN_PATH(path), std::ios::binary);
   if (!in) return false;
   out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   return true;
@@ -197,12 +364,12 @@ bool read_file(const std::string& path, std::vector<char>& out) {
 bool write_file_atomic(const std::string& path, const std::vector<char>& data) {
   std::string tmp = path + ".tmp";
   {
-    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+    std::ofstream out(KN_PATH(tmp), std::ios::binary | std::ios::trunc);
     if (!out) return false;
     out.write(data.data(), static_cast<std::streamsize>(data.size()));
     if (!out) return false;
   }
-  return std::rename(tmp.c_str(), path.c_str()) == 0;
+  return replace_file(tmp, path);
 }
 
 lt::bdecode_node decode(const uint8_t* data, int32_t len, lt::error_code& ec) {
@@ -648,9 +815,9 @@ void apply_config(lt::settings_pack& sp, const lt::bdecode_node& c, bool initial
 
 bool send_all(int fd, const char* data, std::size_t len) {
   while (len > 0) {
-    ssize_t n = ::send(fd, data, len, KN_SEND_FLAGS);
+    std::int64_t n = sock_send(fd, data, len);
     if (n < 0) {
-      if (errno == EINTR) continue;
+      if (interrupted()) continue;
       return false;
     }
     data += n;
@@ -661,10 +828,15 @@ bool send_all(int fd, const char* data, std::size_t len) {
 
 bool client_alive(int fd) {
   char c;
+#if defined(_WIN32)
+  if (sock_wait(fd, 0) <= 0) return true;  // nothing to read: still there
+  return ::recv(KN_SOCK(fd), &c, 1, MSG_PEEK) > 0;  // 0: hung up, -1: reset
+#else
   ssize_t n = ::recv(fd, &c, 1, MSG_PEEK | MSG_DONTWAIT);
   if (n == 0) return false;
   if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return false;
   return true;
+#endif
 }
 
 struct Request {
@@ -678,8 +850,8 @@ bool read_request(int fd, Request& req) {
   char chunk[2048];
   while (buf.find("\r\n\r\n") == std::string::npos) {
     if (buf.size() > 16384) return false;
-    ssize_t n = ::recv(fd, chunk, sizeof(chunk), 0);
-    if (n < 0 && errno == EINTR) continue;
+    std::int64_t n = sock_recv(fd, chunk, sizeof(chunk));
+    if (n < 0 && interrupted()) continue;
     if (n <= 0) return false;
     buf.append(chunk, static_cast<std::size_t>(n));
   }
@@ -887,7 +1059,7 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
     Window* w;
     int* fd;
     ~Cleanup() {
-      if (*fd >= 0) ::close(*fd);
+      if (*fd >= 0) file_close(*fd);
       clear_window(s, *r, *w);
       r->connections.fetch_sub(1);
     }
@@ -906,9 +1078,9 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
         std::lock_guard<std::mutex> lk(s->mu);  // move_storage may repoint it
         path = r->disk_path;
       }
-      file_fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+      file_fd = file_open(path);
       if (file_fd < 0) {
-        push_log(s, "stream open failed: " + path + " " + std::strerror(errno));
+        push_log(s, "stream open failed: " + path + " " + last_error());
         break;
       }
     }
@@ -917,8 +1089,8 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
     while (pos < chunk_end) {
       std::size_t want = static_cast<std::size_t>(
           std::min<std::int64_t>(static_cast<std::int64_t>(buf.size()), chunk_end - pos));
-      ssize_t n = ::pread(file_fd, buf.data(), want, static_cast<off_t>(pos));
-      if (n < 0 && errno == EINTR) continue;
+      std::int64_t n = file_read(file_fd, buf.data(), want, pos);
+      if (n < 0 && interrupted()) continue;
       if (n <= 0) {
         ok = false;
         break;
@@ -933,12 +1105,11 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
 }
 
 void serve_file(kn_session* s, int fd, const Request& req, std::shared_ptr<Route> r) {
-  struct stat st {};
-  if (::stat(r->disk_path.c_str(), &st) != 0) {
+  std::int64_t size = file_size(r->disk_path);
+  if (size < 0) {
     send_status(fd, "404 Not Found");
     return;
   }
-  std::int64_t size = st.st_size;
   std::int64_t start = 0, end = 0;
   auto range_it = req.headers.find("range");
   bool ranged = range_it != req.headers.end();
@@ -961,29 +1132,25 @@ void serve_file(kn_session* s, int fd, const Request& req, std::shared_ptr<Route
   head << "\r\n";
   std::string hs = head.str();
   if (!send_all(fd, hs.data(), hs.size()) || req.method == "HEAD") return;
-  int file_fd = ::open(r->disk_path.c_str(), O_RDONLY | O_CLOEXEC);
+  int file_fd = file_open(r->disk_path);
   if (file_fd < 0) return;
   std::vector<char> buf(256 * 1024);
   std::int64_t pos = start;
   while (pos <= end && !r->closed.load()) {
     std::size_t want = static_cast<std::size_t>(
         std::min<std::int64_t>(static_cast<std::int64_t>(buf.size()), end + 1 - pos));
-    ssize_t n = ::pread(file_fd, buf.data(), want, static_cast<off_t>(pos));
-    if (n < 0 && errno == EINTR) continue;
+    std::int64_t n = file_read(file_fd, buf.data(), want, pos);
+    if (n < 0 && interrupted()) continue;
     if (n <= 0 || !send_all(fd, buf.data(), static_cast<std::size_t>(n))) break;
     pos += n;
   }
-  ::close(file_fd);
+  file_close(file_fd);
 }
 
 void handle_client(kn_session* s, int fd) {
-  timeval tv{15, 0};
-  ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-  timeval stv{60, 0};
-  ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &stv, sizeof(stv));
+  sock_timeouts(fd, 15, 60);
 #if defined(__APPLE__)
-  int one = 1;
-  ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+  sock_option(fd, SOL_SOCKET, SO_NOSIGPIPE, 1);
 #endif
   try {
     Request req;
@@ -1018,25 +1185,22 @@ void handle_client(kn_session* s, int fd) {
     std::lock_guard<std::mutex> lk(s->server_mu);
     s->client_fds.erase(fd);
   }
-  ::shutdown(fd, SHUT_RDWR);
-  ::close(fd);
+  sock_shutdown(fd);
+  sock_close(fd);
   s->client_count.fetch_sub(1);
 }
 
 void accept_loop(kn_session* s) {
   while (!s->stopping.load()) {
-    pollfd pfd{s->listen_fd, POLLIN, 0};
-    int rc = ::poll(&pfd, 1, 250);
-    if (rc <= 0) continue;
-    int fd = ::accept(s->listen_fd, nullptr, nullptr);
+    if (sock_wait(s->listen_fd, 250) <= 0) continue;
+    int fd = static_cast<int>(::accept(KN_SOCK(s->listen_fd), nullptr, nullptr));
     if (fd < 0) continue;
     if (s->client_count.load() >= kMaxClients) {
       send_status(fd, "503 Service Unavailable");
-      ::close(fd);
+      sock_close(fd);
       continue;
     }
-    int one = 1;
-    ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    sock_option(fd, IPPROTO_TCP, TCP_NODELAY, 1);
     {
       std::lock_guard<std::mutex> lk(s->server_mu);
       s->client_fds.insert(fd);
@@ -1049,7 +1213,7 @@ void accept_loop(kn_session* s) {
         std::lock_guard<std::mutex> lk(s->server_mu);
         s->client_fds.erase(fd);
       }
-      ::close(fd);
+      sock_close(fd);
       s->client_count.fetch_sub(1);
     }
   }
@@ -1058,22 +1222,23 @@ void accept_loop(kn_session* s) {
 int ensure_server(kn_session* s) {
   std::lock_guard<std::mutex> lk(s->server_mu);
   if (s->listen_fd >= 0) return s->port;
-  int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  int fd = static_cast<int>(::socket(AF_INET, SOCK_STREAM, 0));
   if (fd < 0) return 0;
-  int one = 1;
-  ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+#if !defined(_WIN32)  // (on Windows it would let others take the port)
+  sock_option(fd, SOL_SOCKET, SO_REUSEADDR, 1);
+#endif
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
   // Loopback in tests; all interfaces otherwise so a TV on the LAN can pull.
   addr.sin_addr.s_addr = htonl(s->test_mode ? INADDR_LOOPBACK : INADDR_ANY);
   addr.sin_port = 0;
-  if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 ||
-      ::listen(fd, 16) != 0) {
-    ::close(fd);
+  if (::bind(KN_SOCK(fd), reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 ||
+      ::listen(KN_SOCK(fd), 16) != 0) {
+    sock_close(fd);
     return 0;
   }
   socklen_t len = sizeof(addr);
-  ::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len);
+  ::getsockname(KN_SOCK(fd), reinterpret_cast<sockaddr*>(&addr), &len);
   s->listen_fd = fd;
   s->port = ntohs(addr.sin_port);
   s->accept_thread = std::thread(accept_loop, s);
@@ -1091,13 +1256,13 @@ void stop_server(kn_session* s) {
   while (s->client_count.load() > 0) {
     {
       std::lock_guard<std::mutex> lk(s->server_mu);
-      for (int fd : s->client_fds) ::shutdown(fd, SHUT_RDWR);
+      for (int fd : s->client_fds) sock_shutdown(fd);
     }
     s->piece_cv.notify_all();
     std::this_thread::sleep_for(20ms);
   }
   std::lock_guard<std::mutex> lk(s->server_mu);
-  if (s->listen_fd >= 0) ::close(s->listen_fd);
+  if (s->listen_fd >= 0) sock_close(s->listen_fd);
   s->listen_fd = -1;
 }
 
@@ -1147,7 +1312,12 @@ void kn_free_string(char* s) { std::free(s); }
 
 kn_session* kn_session_new(const uint8_t* config, int32_t config_len, char** error) {
   try {
+#if defined(_WIN32)
+    WSADATA wsa;
+    ::WSAStartup(MAKEWORD(2, 2), &wsa);  // counted; the session's sockets need it
+#else
     ::signal(SIGPIPE, SIG_IGN);
+#endif
     lt::error_code ec;
     lt::bdecode_node c = decode(config, config_len, ec);
     if (ec || c.type() != lt::bdecode_node::dict_t) {

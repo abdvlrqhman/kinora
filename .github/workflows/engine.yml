@@ -1,8 +1,8 @@
 name: engine
 
 # libtorrent (+ OpenSSL, Boost) static libs for every target, then a native
-# end-to-end test of the engine on Linux. Called by the app workflow; can also
-# be run by hand.
+# end-to-end test of the engine on Linux and Windows. Called by the app
+# workflow; can also be run by hand.
 on:
   workflow_call:
   workflow_dispatch:
@@ -25,10 +25,14 @@ jobs:
           - { triplet: x64-linux, os: ubuntu-24.04 }
           - { triplet: arm64-ios, os: macos-15 }
           - { triplet: arm64-ios-simulator, os: macos-15 } # the iPhone simulator E2E
+          - { triplet: x64-windows-static-md, os: windows-2025, optional: true }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # (Windows is new: it doesn't hold up the phone builds while it settles.)
+    continue-on-error: ${{ matrix.optional == true }}
+    timeout-minutes: 120
     defaults:
       run:
+        shell: bash
         working-directory: packages/engine
     env:
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.vcpkg-bin,readwrite
@@ -53,7 +57,11 @@ jobs:
           cd "$RUNNER_TEMP/vcpkg"
           git fetch -q --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_COMMIT"
           git checkout -q FETCH_HEAD
-          ./bootstrap-vcpkg.sh -disableMetrics
+          if [ "$RUNNER_OS" = Windows ]; then
+            cmd //c "bootstrap-vcpkg.bat -disableMetrics"
+          else
+            ./bootstrap-vcpkg.sh -disableMetrics
+          fi
 
       - name: Android NDK ${{ env.ANDROID_NDK_VERSION }}
         if: steps.libs.outputs.cache-hit != 'true' && endsWith(matrix.triplet, '-android')
@@ -107,21 +115,32 @@ jobs:
           path: ${{ runner.temp }}/vcpkg/buildtrees/**/*.log
 
   native-test:
-    name: engine native e2e (linux)
+    name: engine native e2e (${{ matrix.name }})
     needs: libtorrent
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux, os: ubuntu-24.04, triplet: x64-linux, lib: build/engine/libkinora_engine.so }
+          - { name: windows, os: windows-2025, triplet: x64-windows-static-md, lib: build/engine/Release/kinora_engine.dll, optional: true }
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional == true }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: libtorrent-x64-linux
-          path: packages/engine/prebuilt/x64-linux
-      - name: Build libkinora_engine (host)
+          name: libtorrent-${{ matrix.triplet }}
+          path: packages/engine/prebuilt/${{ matrix.triplet }}
+      - name: Build kinora_engine (host)
         run: |
           cmake -S packages/engine/src -B build/engine -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/engine -j 4
-          echo "KINORA_ENGINE_LIB=$PWD/build/engine/libkinora_engine.so" >> "$GITHUB_ENV"
+          cmake --build build/engine --config Release -j 4
+          root=$(pwd -W 2>/dev/null || pwd)  # (a C:/ path on Windows)
+          echo "KINORA_ENGINE_LIB=$root/${{ matrix.lib }}" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2.23.0
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}

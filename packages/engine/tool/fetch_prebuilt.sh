@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 repo=abdvlrqhman/kinora
 run=${1:-$(gh run list -R "$repo" --workflow app.yml --branch main --status success -L 1 --json databaseId -q '.[0].databaseId')}
-for triplet in arm64-android arm-neon-android x64-android x64-linux; do
+for triplet in arm64-android arm-neon-android x64-android x64-linux x64-windows-static-md; do
   rm -rf "prebuilt/$triplet"
   gh run download "$run" -R "$repo" -n "libtorrent-$triplet" -D "prebuilt/$triplet" || echo "skip $triplet"
 done

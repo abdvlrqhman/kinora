@@ -184,6 +184,7 @@ final class EngineBindings {
         return DynamicLibrary.process(); // statically linked pods
       }
     }
+    if (Platform.isWindows) return DynamicLibrary.open('kinora_engine.dll');
     return DynamicLibrary.open('libkinora_engine.so');
   }
 
