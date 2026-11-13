@@ -50,7 +50,7 @@ void main() {
         );
   }
 
-  testScreen('shows the billboard, Continue watching, My list and rows', (
+  testScreen('shows the billboard, Keep watching, My list and rows', (
     tester,
   ) async {
     final db = testDb();
@@ -79,8 +79,8 @@ void main() {
     expect(find.text('The Long Light'), findsWidgets); // billboard + poster
     expect(find.text('2h 10m'), findsOneWidget);
     expect(find.text('Drama, Mystery'), findsOneWidget);
-    expect(find.text('Continue watching'), findsOneWidget);
-    expect(find.text('S1 E3  30m left'), findsOneWidget);
+    expect(find.text('Keep watching'), findsOneWidget);
+    expect(find.text('S1 E3 · 30M LEFT'), findsOneWidget);
     expect(find.text('My list'), findsNWidgets(2)); // row title + button
     expect(find.text('Popular movies'), findsOneWidget);
     expect(find.text('Popular shows'), findsOneWidget);
@@ -92,13 +92,13 @@ void main() {
     expect(nav.played.last.type, 'movie');
     await nav.back(tester);
 
-    // A poster opens its title page.
-    await tester.tap(find.bySemanticsLabel('Glass Harbor'));
+    // A poster opens its title page (the first catalog is ranked).
+    await tester.tap(find.bySemanticsLabel('Rank 2, Glass Harbor'));
     await tester.pumpAndSettle();
     expect(nav.locations.last, '/title/movie/tt101');
     await nav.back(tester);
 
-    // Continue watching resumes where it stopped.
+    // Keep watching resumes where it stopped.
     await tester.tap(find.bySemanticsLabel(RegExp('^Resume Harbor Lights')));
     await tester.pumpAndSettle();
     expect(nav.played.last.videoId, 'tt200:1:3');
@@ -115,7 +115,7 @@ void main() {
     expect(loads, 2);
   });
 
-  testScreen('long-press on Continue watching offers row actions', (
+  testScreen('long-press on Keep watching offers row actions', (
     tester,
   ) async {
     final db = testDb();
@@ -150,7 +150,7 @@ void main() {
     final kept = await db.select(db.watchProgress).get();
     expect(kept, isNotEmpty);
     expect(kept.every((r) => r.dismissed), isTrue);
-    expect(find.text('Continue watching'), findsNothing);
+    expect(find.text('Keep watching'), findsNothing);
   });
 
   testScreen('invites adding a source when none is installed', (tester) async {
@@ -250,7 +250,7 @@ void main() {
         'Resume S1 E3',
       );
       expect(find.textContaining('1080p WEB-DL, 214 seeds'), findsOneWidget);
-      expect(find.textContaining('30m left'), findsWidgets);
+      expect(find.textContaining('30M LEFT'), findsOneWidget);
       expect(find.bySemanticsLabel('Details'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('billboard-play')));
       await tester.pumpAndSettle();

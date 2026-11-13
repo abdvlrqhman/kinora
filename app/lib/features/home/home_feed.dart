@@ -313,3 +313,23 @@ MetaPreview? pickFeatured(
   if (pool.isNotEmpty) return pool[day % pool.length];
   return rows.firstOrNull?.items.firstOrNull;
 }
+
+/// Home's featured titles, up to [count]: today's pick first, then other
+/// titles with artwork from the rows, each once.
+List<MetaPreview> pickFeaturedList(
+  List<CatalogRow> rows,
+  List<NewEpisodes> fresh,
+  DateTime today, {
+  int count = 6,
+}) {
+  final first = pickFeatured(rows, fresh, today);
+  if (first == null) return const [];
+  final seen = {first.id};
+  return [
+    first,
+    ...rows
+        .expand((r) => r.items.take(8))
+        .where((m) => m.background != null && seen.add(m.id))
+        .take(count - 1),
+  ];
+}

@@ -179,7 +179,12 @@ void main() {
         poster: art('dune_poster'),
         background: art('dune_backdrop'),
       ),
-      preview('tt101', 'Glass Harbor', poster: art('harbor_poster')),
+      preview(
+        'tt101',
+        'Glass Harbor',
+        poster: art('harbor_poster'),
+        background: art('harbor_backdrop'),
+      ),
       preview('tt102', 'Ember', poster: art('ember_poster')),
       preview('tt103', 'Glacier', poster: art('glacier_poster')),
     ]);
@@ -195,12 +200,14 @@ void main() {
         'North Wind',
         type: 'series',
         poster: art('forest_poster'),
+        background: art('forest_backdrop'),
       ),
       preview(
         'tt202',
         'Neon Coast',
         type: 'series',
         poster: art('neon_poster'),
+        background: art('neon_backdrop'),
       ),
     ]);
 

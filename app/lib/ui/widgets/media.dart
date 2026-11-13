@@ -42,6 +42,7 @@ class Pressable extends StatefulWidget {
     this.hint,
     this.actions,
     this.lift = false,
+    this.plain = false,
   });
 
   final String label;
@@ -50,6 +51,9 @@ class Pressable extends StatefulWidget {
   /// Artwork (posters, stills): grows a little under the mouse. Rows get a
   /// faint highlight instead.
   final bool lift;
+
+  /// No hover effect of its own (the child draws one).
+  final bool plain;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -105,12 +109,12 @@ class _PressableState extends State<Pressable> {
                 ? 1
                 : _down
                 ? 0.97
-                : hovered && widget.lift
+                : hovered && widget.lift && !widget.plain
                 ? 1.03
                 : 1,
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOut,
-            child: hovered && !widget.lift
+            child: hovered && !widget.lift && !widget.plain
                 ? DecoratedBox(
                     position: DecorationPosition.foreground,
                     decoration: BoxDecoration(

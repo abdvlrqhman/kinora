@@ -42,7 +42,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   String _query = '';
 
   @override
+  void initState() {
+    super.initState();
+    focusSearch.addListener(_takeKeyboard);
+  }
+
+  /// The window bar's search field or Ctrl+K: type straight away.
+  void _takeKeyboard() {
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _focus.requestFocus(),
+      );
+    }
+  }
+
+  @override
   void dispose() {
+    focusSearch.removeListener(_takeKeyboard);
     _debounce?.cancel();
     _controller.dispose();
     _focus.dispose();

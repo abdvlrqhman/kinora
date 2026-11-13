@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
-import 'glass_mode.dart';
 import 'tint.dart';
 import 'tokens.dart';
 import 'widgets/pointer.dart';
 
-/// Shares one backdrop sample among the [Glass] widgets below it (cheaper
-/// than one layer per control). Use it around rows of controls.
+/// Groups glass controls. (The flat panels need no shared backdrop; kept so
+/// screens mark their control rows the same way.)
 class GlassGroup extends StatelessWidget {
   /// Creates a group.
   const GlassGroup({super.key, required this.child});
@@ -16,14 +14,11 @@ class GlassGroup extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => LiquidGlassLayer(
-    settings: LiquidGlassSettings.ios27RegularDark(),
-    fake: !realGlass,
-    child: child,
-  );
+  Widget build(BuildContext context) => child;
 }
 
-/// A liquid-glass surface tinted by the current accent.
+/// A control's surface: a near-black panel at 85% with a faint white edge,
+/// readable over artwork and on the black ground alike.
 ///
 /// Capsule by default; pass [radius] for rounded rectangles (sheets, panels).
 class Glass extends StatelessWidget {
@@ -42,22 +37,18 @@ class Glass extends StatelessWidget {
   final double? radius;
   final EdgeInsetsGeometry padding;
 
-  /// How much of the accent mixes into the glass (0..1).
+  /// (Unused by the flat panel; kept for callers.)
   final double tintStrength;
 
   @override
-  Widget build(BuildContext context) {
-    final accent = KinoraTint.of(context);
-    return LiquidGlass.auto(
-      shape: LiquidRoundedSuperellipse(borderRadius: radius ?? 999),
-      settings: LiquidGlassSettings.ios27RegularDark(),
-      fake: !realGlass,
-      appearance: LiquidGlassAppearance.ios27RegularDark(
-        tint: accent.withValues(alpha: tintStrength),
-      ),
-      child: Padding(padding: padding, child: child),
-    );
-  }
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xD90E0E0C),
+      border: Border.all(color: const Color(0x1FFFFFFF)),
+      borderRadius: BorderRadius.circular(radius ?? 999),
+    ),
+    child: Padding(padding: padding, child: child),
+  );
 }
 
 /// A glass capsule button. Presses scale down slightly (motion that answers
@@ -92,14 +83,18 @@ class GlassButton extends StatefulWidget {
 class _GlassButtonState extends State<GlassButton> {
   bool _down = false;
 
+  static final _shape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(KRadius.button),
+  );
+
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    // The primary action is lit: a solid accent capsule with a dark label.
+    // The main action wears the accent as a tint and an edge, never a fill.
     final lit = widget.prominent && enabled;
     final fg = lit
-        ? KColors.blackout
+        ? KColors.onLime
         : enabled
         ? KColors.lamp
         : KColors.reel;
@@ -121,10 +116,10 @@ class _GlassButtonState extends State<GlassButton> {
               widget.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: (widget.compact ? KType.body : KType.title).copyWith(
+              style: (widget.compact ? KType.label : KType.title).copyWith(
                 color: fg,
-                fontWeight: lit ? FontWeight.w700 : FontWeight.w600,
-                fontVariations: lit ? const [FontVariation.weight(700)] : null,
+                fontWeight: FontWeight.w600,
+                fontVariations: const [FontVariation.weight(600)],
               ),
             ),
           ),
@@ -142,6 +137,7 @@ class _GlassButtonState extends State<GlassButton> {
       excludeSemantics: true,
       child: PointerFocus(
         onActivate: enabled ? press : null,
+        shape: _shape,
         builder: (context, hovered) => GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: enabled ? (_) => setState(() => _down = true) : null,
@@ -154,19 +150,23 @@ class _GlassButtonState extends State<GlassButton> {
             curve: KMotion.curve,
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: widget.compact ? 44 : 48,
-                minWidth: widget.compact ? 44 : 48,
+                minHeight: widget.compact ? 40 : 44,
+                minWidth: widget.compact ? 40 : 44,
               ),
               child: DecoratedBox(
                 position: DecorationPosition.foreground,
                 decoration: ShapeDecoration(
                   color: hovered ? hoverGlow : const Color(0x00000000),
-                  shape: const StadiumBorder(),
+                  shape: _shape,
                 ),
                 child: lit
-                    ? LitCapsule(padding: padding, child: content)
+                    ? LitCapsule(
+                        padding: padding,
+                        shape: _shape,
+                        child: content,
+                      )
                     : Glass(
-                        tintStrength: 0.14,
+                        radius: KRadius.button,
                         padding: padding,
                         child: content,
                       ),
@@ -179,10 +179,10 @@ class _GlassButtonState extends State<GlassButton> {
   }
 }
 
-/// A solid capsule in the readable accent ([KinoraTint.lit]): the one
-/// projector-lit control on a screen. Put Blackout content on it.
+/// The main action's look: the accent as a soft tint over a dark base and
+/// a 1.5 px accent edge. Put [KColors.onLime] content on it.
 class LitCapsule extends StatelessWidget {
-  /// Creates a lit capsule.
+  /// Creates the main action's surface.
   const LitCapsule({
     super.key,
     required this.child,
@@ -192,13 +192,24 @@ class LitCapsule extends StatelessWidget {
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final ShapeBorder shape;
+  final OutlinedBorder shape;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: ShapeDecoration(color: KinoraTint.lit(context), shape: shape),
-    child: Padding(padding: padding, child: child),
-  );
+  Widget build(BuildContext context) {
+    final accent = KinoraTint.of(context);
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: Color.alphaBlend(
+          accent.withValues(alpha: 0.12),
+          const Color(0xE60E0E0C),
+        ),
+        shape: shape.copyWith(
+          side: BorderSide(color: accent.withValues(alpha: 0.75), width: 1.5),
+        ),
+      ),
+      child: Padding(padding: padding, child: child),
+    );
+  }
 }
 
 /// Round glass icon button (player controls, close, cast).

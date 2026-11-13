@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/gestures.dart' show kBackMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +9,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../ui/tokens.dart';
 import 'router.dart';
-import '../ui/widgets/brand.dart';
+import 'shell.dart' show focusSearch;
 
 /// Kinora draws its own window frame (Windows): the title bar, its drag
 /// area and the minimize, maximize and close buttons.
@@ -31,7 +29,7 @@ Future<void> initDesktopWindow() async {
     const WindowOptions(
       title: 'Kinora',
       size: Size(1280, 800),
-      minimumSize: Size(400, 600),
+      minimumSize: Size(960, 640),
       center: true,
       backgroundColor: KColors.blackout,
       titleBarStyle: TitleBarStyle.hidden,
@@ -66,8 +64,6 @@ class DesktopFrame extends StatefulWidget {
 }
 
 class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
-  bool _maximized = false;
-
   @override
   void initState() {
     super.initState();
@@ -78,8 +74,7 @@ class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
 
   Future<void> _read() async {
     try {
-      final maximized = await windowManager.isMaximized();
-      if (mounted) setState(() => _maximized = maximized);
+      windowMaximized.value = await windowManager.isMaximized();
     } on Object {
       // (Tests: no window.)
     }
@@ -95,9 +90,9 @@ class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
   }
 
   @override
-  void onWindowMaximize() => setState(() => _maximized = true);
+  void onWindowMaximize() => windowMaximized.value = true;
   @override
-  void onWindowUnmaximize() => setState(() => _maximized = false);
+  void onWindowUnmaximize() => windowMaximized.value = false;
   @override
   void onWindowEnterFullScreen() => windowFullScreen.value = true;
   @override
@@ -115,7 +110,6 @@ class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
         child: widget.child,
       );
     }
-    final mq = MediaQuery.of(context);
     void back() {
       final router = ProviderScope.containerOf(context).read(routerProvider);
       // (Esc doesn't close the player: it only leaves full screen.)
@@ -127,106 +121,68 @@ class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
       }
     }
 
-    // Esc and the mouse's back button go back, as in a browser.
+    void search() {
+      final router = ProviderScope.containerOf(context).read(routerProvider);
+      rootNavigatorKey.currentState?.popUntil((r) => r.isFirst);
+      router.go('/search');
+      focusSearch.value++;
+    }
+
+    // Esc, Alt+Left and the mouse's back button go back, as in a browser;
+    // Ctrl+K searches. (The frame itself is drawn by WideNav.)
     return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.escape): back},
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): back,
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): back,
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): search,
+      },
       child: Listener(
         onPointerDown: (e) {
           if (e.buttons & kBackMouseButton != 0) back();
         },
-        child: _frame(mq),
+        child: widget.child,
       ),
-    );
-  }
-
-  Widget _frame(MediaQueryData mq) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: MediaQuery(
-            data: mq.copyWith(
-              padding: mq.padding.copyWith(top: kTitleBarHeight),
-              viewPadding: mq.viewPadding.copyWith(top: kTitleBarHeight),
-            ),
-            child: widget.child,
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          height: kTitleBarHeight,
-          child: TitleBar(maximized: _maximized),
-        ),
-      ],
     );
   }
 }
 
-/// Kinora's title bar: the mark and name, a drag area (double-click to
-/// maximize) and the window buttons.
-class TitleBar extends StatelessWidget {
-  const TitleBar({super.key, required this.maximized});
+/// Whether the window fills the screen (maximized), for the window buttons.
+final windowMaximized = ValueNotifier<bool>(false);
 
-  final bool maximized;
+/// Minimize, maximize (or restore) and close, [height] tall.
+class WindowButtons extends StatelessWidget {
+  const WindowButtons({super.key, this.height = kTitleBarHeight});
+
+  final double height;
 
   @override
-  Widget build(BuildContext context) => ClipRect(
-    // Frosted: artwork shows through, and pages scrolled under it blur
-    // instead of running through the name. (Outside the app's pages: no
-    // Material above it, so its text sets its own style.)
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-      child: ColoredBox(color: const Color(0xB3000000), child: _bar()),
-    ),
-  );
-
-  Widget _bar() => Row(
-    children: [
-      Expanded(
-        child: DragToMoveArea(
-          child: Semantics(
-            label: 'Kinora',
-            excludeSemantics: true,
-            child: Row(
-              children: [
-                const SizedBox(width: KSpace.x3),
-                const SizedBox.square(
-                  dimension: 22,
-                  child: CustomPaint(painter: KinoraMark()),
-                ),
-                const SizedBox(width: KSpace.x2),
-                Text(
-                  'Kinora',
-                  style: KType.label.copyWith(
-                    color: KColors.lamp,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-                const Spacer(),
-              ],
-            ),
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: windowMaximized,
+    builder: (context, maximized, _) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CaptionButton(
+          glyph: CaptionGlyph.minimize,
+          label: 'Minimize',
+          height: height,
+          onPressed: () => unawaited(windowManager.minimize()),
+        ),
+        CaptionButton(
+          glyph: maximized ? CaptionGlyph.restore : CaptionGlyph.maximize,
+          label: maximized ? 'Restore' : 'Maximize',
+          height: height,
+          onPressed: () => unawaited(
+            maximized ? windowManager.unmaximize() : windowManager.maximize(),
           ),
         ),
-      ),
-      CaptionButton(
-        glyph: CaptionGlyph.minimize,
-        label: 'Minimize',
-        onPressed: () => unawaited(windowManager.minimize()),
-      ),
-      CaptionButton(
-        glyph: maximized ? CaptionGlyph.restore : CaptionGlyph.maximize,
-        label: maximized ? 'Restore' : 'Maximize',
-        onPressed: () => unawaited(
-          maximized ? windowManager.unmaximize() : windowManager.maximize(),
+        CaptionButton(
+          glyph: CaptionGlyph.close,
+          label: 'Close',
+          height: height,
+          onPressed: () => unawaited(windowManager.close()),
         ),
-      ),
-      CaptionButton(
-        glyph: CaptionGlyph.close,
-        label: 'Close',
-        onPressed: () => unawaited(windowManager.close()),
-      ),
-    ],
+      ],
+    ),
   );
 }
 
@@ -240,11 +196,13 @@ class CaptionButton extends StatefulWidget {
     required this.glyph,
     required this.label,
     required this.onPressed,
+    this.height = kTitleBarHeight,
   });
 
   final CaptionGlyph glyph;
   final String label;
   final VoidCallback onPressed;
+  final double height;
 
   @override
   State<CaptionButton> createState() => _CaptionButtonState();
@@ -281,7 +239,7 @@ class _CaptionButtonState extends State<CaptionButton> {
           child: AnimatedContainer(
             duration: KMotion.fast,
             width: 46,
-            height: kTitleBarHeight,
+            height: widget.height,
             color: background,
             alignment: Alignment.center,
             child: SizedBox.square(

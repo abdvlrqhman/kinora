@@ -62,12 +62,15 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   fonts:
-    - family: BigShoulders
+    - family: Unbounded
       fonts:
-        - asset: assets/fonts/BigShouldersDisplay.ttf
-    - family: Figtree
+        - asset: assets/fonts/Unbounded.ttf
+    - family: ReadexPro
       fonts:
-        - asset: assets/fonts/Figtree.ttf
+        - asset: assets/fonts/ReadexPro.ttf
+    - family: GeistMono
+      fonts:
+        - asset: assets/fonts/GeistMono.ttf
 
 # Generated from assets/icon/*.png (tool/render_icon_test.dart).
 flutter_launcher_icons:

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stremio/stremio.dart';
@@ -6,7 +8,9 @@ import '../../ui/layout.dart';
 import '../../app/router.dart';
 import '../../services/play_request.dart';
 import '../../services/resolver.dart';
+import '../../services/tmdb.dart';
 import '../../ui/glass.dart';
+import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
@@ -15,8 +19,8 @@ import '../cast/cast_picker.dart';
 import '../title/title_actions.dart';
 import '../title/title_model.dart';
 
-/// Short enough that Continue watching clears the tab bar at rest.
-double _height(BuildContext context) =>
+/// Short enough that Keep watching shows at rest.
+double billboardHeight(BuildContext context) =>
     (MediaQuery.sizeOf(context).height * 0.56).clamp(420, 600);
 
 /// Full-bleed featured title: backdrop, logo, facts, then Play (which says
@@ -59,7 +63,7 @@ class Billboard extends ConsumerWidget {
     void details() => openTitle(context, type: meta.type, id: meta.id);
 
     return SizedBox(
-      height: _height(context),
+      height: billboardHeight(context),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -159,7 +163,7 @@ class BillboardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: _height(context),
+    height: billboardHeight(context),
     child: const Padding(
       padding: EdgeInsets.all(KSpace.margin),
       child: Column(
@@ -173,4 +177,121 @@ class BillboardSkeleton extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The top of Home: featured titles you swipe (or page with the arrows and
+/// the arrow keys on a computer), one at a time, with dots for where you
+/// are. It never moves on its own.
+class HeroCarousel extends StatefulWidget {
+  const HeroCarousel({super.key, required this.items});
+
+  final List<MetaPreview> items;
+
+  @override
+  State<HeroCarousel> createState() => _HeroCarouselState();
+}
+
+class _HeroCarouselState extends State<HeroCarousel> {
+  final _pages = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  void _go(int page) {
+    final to = page.clamp(0, widget.items.length - 1);
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (reduce) {
+      _pages.jumpToPage(to);
+    } else {
+      unawaited(
+        _pages.animateToPage(to, duration: KMotion.slow, curve: KMotion.curve),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.items;
+    final wide = KLayout.isWide(context);
+    final accent = KinoraTint.of(context);
+    return SizedBox(
+      height: billboardHeight(context),
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _pages,
+            itemCount: items.length,
+            onPageChanged: (p) => setState(() => _page = p),
+            itemBuilder: (context, i) => Consumer(
+              builder: (context, ref, _) {
+                final m = items[i];
+                final rich = ref
+                    .watch(richMetaProvider((type: m.type, id: m.id)))
+                    .value;
+                return Billboard(meta: rich ?? m);
+              },
+            ),
+          ),
+          if (items.length > 1)
+            Positioned(
+              right: wide ? 24 : 16,
+              bottom: wide ? 26 : 22,
+              child: Semantics(
+                label: 'Featured ${_page + 1} of ${items.length}',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < items.length; i++)
+                      GestureDetector(
+                        onTap: () => _go(i),
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 3,
+                            vertical: 8,
+                          ),
+                          child: AnimatedContainer(
+                            duration: KMotion.base,
+                            curve: KMotion.curve,
+                            width: i == _page ? 20 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: i == _page
+                                  ? accent
+                                  : const Color(0x4DFFFFFF),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (wide) ...[
+                      const SizedBox(width: 14),
+                      GlassIconButton(
+                        icon: Icons.chevron_left_rounded,
+                        label: 'Previous featured title',
+                        size: 34,
+                        onPressed: _page > 0 ? () => _go(_page - 1) : null,
+                      ),
+                      const SizedBox(width: 8),
+                      GlassIconButton(
+                        icon: Icons.chevron_right_rounded,
+                        label: 'Next featured title',
+                        size: 34,
+                        onPressed: _page < items.length - 1
+                            ? () => _go(_page + 1)
+                            : null,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

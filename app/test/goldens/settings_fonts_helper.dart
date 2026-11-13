@@ -38,8 +38,9 @@ Future<void> loadKinoraFonts() async {
     if (any) await loader.load();
   }
 
-  await load('Figtree', ['assets/fonts/Figtree.ttf']);
-  await load('BigShoulders', ['assets/fonts/BigShouldersDisplay.ttf']);
+  await load('ReadexPro', ['assets/fonts/ReadexPro.ttf']);
+  await load('Unbounded', ['assets/fonts/Unbounded.ttf']);
+  await load('GeistMono', ['assets/fonts/GeistMono.ttf']);
   await load('MaterialIcons', [
     p.join(
       flutterRoot,

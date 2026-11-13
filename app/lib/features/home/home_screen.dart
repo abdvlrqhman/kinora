@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +8,10 @@ import 'package:stremio/stremio.dart';
 
 import '../../app/shell.dart';
 import '../../services/sources.dart';
-import '../../services/tmdb.dart';
 import '../../services/trakt.dart';
 import '../../ui/glass.dart';
 import '../../ui/tokens.dart';
+import '../../ui/widgets/brand.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/states.dart';
 import '../cast/cast_picker.dart';
@@ -57,9 +58,9 @@ class _Feed extends ConsumerStatefulWidget {
 }
 
 class _FeedState extends ConsumerState<_Feed> {
-  /// Today's billboard, kept for the visit so it doesn't jump as more rows
-  /// arrive (cleared on refresh).
-  MetaPreview? _featured;
+  /// Today's featured titles, kept for the visit so they don't jump as
+  /// more rows arrive (cleared on refresh).
+  List<MetaPreview>? _featured;
 
   void _reload() {
     _featured = null;
@@ -80,17 +81,21 @@ class _FeedState extends ConsumerState<_Feed> {
     }
   }
 
-  /// Picks the billboard once rows have started arriving and the shows you
-  /// follow have been checked for new episodes.
-  MetaPreview? _pick(HomeRows? feed, AsyncValue<List<NewEpisodes>> fresh) {
+  /// Picks the featured titles once rows have started arriving and the
+  /// shows you follow have been checked for new episodes.
+  List<MetaPreview>? _pick(
+    HomeRows? feed,
+    AsyncValue<List<NewEpisodes>> fresh,
+  ) {
     if (_featured != null || feed == null || fresh.isLoading) {
       return _featured;
     }
-    return _featured = pickFeatured(
+    final list = pickFeaturedList(
       feed.rows,
       fresh.value ?? const [],
       DateTime.now(),
     );
+    return list.isEmpty ? null : _featured = list;
   }
 
   @override
@@ -103,12 +108,9 @@ class _FeedState extends ConsumerState<_Feed> {
     });
     final rows = ref.watch(homeRowsProvider);
     final fresh = ref.watch(newEpisodesProvider);
-    final pick = _pick(rows.value, fresh);
-    final featured = pick == null
-        ? null
-        : ref.watch(richMetaProvider((type: pick.type, id: pick.id))).value ??
-              pick;
+    final featured = _pick(rows.value, fresh);
     final pad = MediaQuery.paddingOf(context);
+    final catalogs = rows.value?.rows ?? const <CatalogRow>[];
     return Stack(
       children: [
         RefreshIndicator.adaptive(
@@ -121,7 +123,7 @@ class _FeedState extends ConsumerState<_Feed> {
             slivers: [
               SliverToBoxAdapter(
                 child: featured != null
-                    ? Billboard(meta: featured)
+                    ? HeroCarousel(items: featured)
                     : rows.isLoading ||
                           (rows.value?.complete == false) ||
                           fresh.isLoading
@@ -130,6 +132,9 @@ class _FeedState extends ConsumerState<_Feed> {
               ),
               const SliverToBoxAdapter(child: ContinueRow()),
               const SliverToBoxAdapter(child: NewEpisodesRow()),
+              // The first catalog, ranked.
+              if (catalogs.isNotEmpty)
+                SliverToBoxAdapter(child: TrendingRow(row: catalogs.first)),
               const SliverToBoxAdapter(child: MyListRow()),
               ..._rows(rows),
               SliverToBoxAdapter(
@@ -140,6 +145,13 @@ class _FeedState extends ConsumerState<_Feed> {
         ),
         // Fixed: scrolled content fades under the status bar and Cast.
         const TopShade(),
+        // A phone: the wordmark over the hero (the sidebar has it otherwise).
+        if (!AppShell.onRail(context))
+          Positioned(
+            top: pad.top + KSpace.x2,
+            left: 16,
+            child: const _Wordmark(),
+          ),
         // (Beside the side rail they're at its foot.)
         if (!AppShell.onRail(context))
           Positioned(
@@ -189,9 +201,10 @@ class _FeedState extends ConsumerState<_Feed> {
       ),
     ],
     AsyncValue(value: final v?) => [
+      // (The first one is Trending now, above My list.)
       SliverList.builder(
-        itemCount: v.rows.length,
-        itemBuilder: (_, i) => CatalogRowView(row: v.rows[i]),
+        itemCount: math.max(0, v.rows.length - 1),
+        itemBuilder: (_, i) => CatalogRowView(row: v.rows[i + 1]),
       ),
       // More sources still answering.
       if (!v.complete) const SliverToBoxAdapter(child: _SkeletonRows(rows: 1)),
@@ -250,6 +263,37 @@ class _SkeletonRows extends StatelessWidget {
           ),
         ],
       ],
+    ),
+  );
+}
+
+class _Wordmark extends StatelessWidget {
+  const _Wordmark();
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: SizedBox(
+      height: 44,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox.square(
+            dimension: 20,
+            child: CustomPaint(painter: KinoraMark()),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'KINORA',
+            style: KType.h2.copyWith(
+              fontSize: 16,
+              letterSpacing: 1.4,
+              color: KColors.title,
+              fontWeight: FontWeight.w700,
+              fontVariations: const [FontVariation.weight(700)],
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
