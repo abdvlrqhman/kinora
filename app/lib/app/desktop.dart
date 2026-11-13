@@ -154,16 +154,7 @@ class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    if (windowFullScreen.value) {
-      // Esc leaves full screen anywhere, as in every Windows player.
-      return CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              unawaited(setFullScreen(false)),
-        },
-        child: widget.child,
-      );
-    }
+    final full = windowFullScreen.value;
     void back() {
       final router = ProviderScope.containerOf(context).read(routerProvider);
       // (Esc doesn't close the player: it only leaves full screen.)
@@ -183,16 +174,26 @@ class _DesktopFrameState extends State<DesktopFrame> with WindowListener {
     }
 
     // Esc, Alt+Left and the mouse's back button go back, as in a browser;
-    // Ctrl+K searches. (The frame itself is drawn by WideNav.)
+    // Ctrl+K searches. In full screen Esc leaves it, as in every Windows
+    // player. (The frame itself is drawn by WideNav.) The same widgets
+    // either way: a different shape here would rebuild the whole app below,
+    // player and router included.
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): back,
-        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): back,
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true): search,
-      },
+      bindings: full
+          ? {
+              const SingleActivator(LogicalKeyboardKey.escape): () =>
+                  unawaited(setFullScreen(false)),
+            }
+          : {
+              const SingleActivator(LogicalKeyboardKey.escape): back,
+              const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
+                  back,
+              const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+                  search,
+            },
       child: Listener(
         onPointerDown: (e) {
-          if (e.buttons & kBackMouseButton != 0) back();
+          if (!full && e.buttons & kBackMouseButton != 0) back();
         },
         child: widget.child,
       ),
