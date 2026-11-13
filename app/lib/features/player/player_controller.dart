@@ -101,6 +101,9 @@ class PlayerController extends ChangeNotifier {
   bool _inPip = false;
   bool _wasCasting = false;
   Timer? _startWatchdog;
+
+  /// An error while starting: the start fails if nothing plays soon.
+  Timer? _errorGrace;
   StreamSubscription<bool>? _pipSub;
   StreamSubscription<AudioInterruptionEvent>? _interruptSub;
   StreamSubscription<void>? _noisySub;
@@ -189,12 +192,24 @@ class PlayerController extends ChangeNotifier {
   /// the next one (resolved releases) or say so.
   void _onPlayerError(String e) {
     Log.w('player', e);
-    if (phase == PlayerPhase.playing && !_started) unawaited(_failStart());
+    if (phase != PlayerPhase.playing || _started) return;
+    // Some errors don't stop playback (no hardware decoder, no audio
+    // device: a VM or Remote Desktop): give the file a moment to play.
+    final gen = _generation;
+    _errorGrace?.cancel();
+    _errorGrace = Timer(errorGrace, () {
+      if (gen == _generation && !_disposed) unawaited(_failStart());
+    });
   }
+
+  /// How long a start that reported an error has to show it plays.
+  @visibleForTesting
+  static Duration errorGrace = const Duration(seconds: 4);
 
   Future<void> _failStart() async {
     if (_started || phase != PlayerPhase.playing) return;
     _startWatchdog?.cancel();
+    _errorGrace?.cancel();
     final src = source;
     final req = _request;
     final failedId = src?.release?.candidateId;
@@ -333,6 +348,7 @@ class PlayerController extends ChangeNotifier {
     _tracksApplied = false;
     _started = false;
     _startWatchdog?.cancel();
+    _errorGrace?.cancel();
     _pending = null;
     upNextDismissed = false;
     _prefetchedNext = false;
@@ -1487,6 +1503,7 @@ class PlayerController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _startWatchdog?.cancel();
+    _errorGrace?.cancel();
     _lifecycle.dispose();
     unawaited(_pipSub?.cancel());
     unawaited(_interruptSub?.cancel());
