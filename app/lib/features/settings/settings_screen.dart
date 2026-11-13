@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../services/trakt.dart';
 import '../../services/sources.dart';
 import '../../services/subtitles_service.dart';
 import 'help_pages.dart';
 import 'languages.dart';
 import 'preference_pages.dart';
+import 'trakt_page.dart';
 import 'sources.dart';
 import 'storage_page.dart';
 import 'subtitle_sites.dart';
@@ -25,6 +27,7 @@ final List<RouteBase> settingsRoutes = [
     ],
   ),
   GoRoute(path: 'subtitle-sites', builder: (_, _) => const SubtitleSitesPage()),
+  GoRoute(path: 'trakt', builder: (_, _) => const TraktPage()),
   GoRoute(path: 'playback', builder: (_, _) => const PlaybackPage()),
   GoRoute(path: 'downloads', builder: (_, _) => const DownloadSettingsPage()),
   GoRoute(path: 'network', builder: (_, _) => const NetworkPage()),
@@ -48,6 +51,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsProvider);
+    final trakt = ref.watch(traktSyncProvider);
     final addons = ref.watch(addonsProvider).value;
     final on = addons?.where((a) => a.enabled).length ?? 0;
     final sites = [
@@ -86,6 +90,16 @@ class SettingsScreen extends ConsumerWidget {
           label: 'Subtitle sites',
           value: sites.isEmpty ? 'None on' : sites.join(', '),
           onTap: () => go('subtitle-sites'),
+        ),
+        ListenableBuilder(
+          listenable: trakt,
+          builder: (_, _) => NavRow(
+            label: 'Trakt',
+            value: trakt.signedIn
+                ? 'Syncing as ${trakt.user}'
+                : 'Keep what you watch the same everywhere',
+            onTap: () => go('trakt'),
+          ),
         ),
         NavRow(
           label: 'Playback',

@@ -3,12 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/providers.dart';
 import '../core/db/database.dart';
 import '../data/repositories.dart';
+import 'trakt.dart';
 
 final libraryRepositoryProvider = Provider(
-  (ref) => LibraryRepository(ref.watch(databaseProvider)),
+  (ref) => LibraryRepository(
+    ref.watch(databaseProvider),
+    onToggled: (id, type, {required added}) =>
+        ref.read(traktSyncProvider).listChanged(id, type, added: added),
+  ),
 );
 final progressRepositoryProvider = Provider(
-  (ref) => ProgressRepository(ref.watch(databaseProvider)),
+  (ref) => ProgressRepository(
+    ref.watch(databaseProvider),
+    onChanged: (row, {unwatched = false}) =>
+        ref.read(traktSyncProvider).progressSaved(row, unwatched: unwatched),
+  ),
 );
 final trackMemoryProvider = Provider(
   (ref) => TrackMemoryRepository(ref.watch(databaseProvider)),

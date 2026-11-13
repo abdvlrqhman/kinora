@@ -4,8 +4,12 @@ import '../core/db/database.dart';
 
 /// "My list".
 final class LibraryRepository {
-  LibraryRepository(this._db);
+  LibraryRepository(this._db, {this.onToggled});
   final AppDatabase _db;
+
+  /// Told after a title is added or removed (Trakt sync).
+  final void Function(String mediaId, String type, {required bool added})?
+  onToggled;
 
   Stream<List<LibraryItem>> watchAll() => (_db.select(
     _db.libraryItems,
@@ -23,7 +27,19 @@ final class LibraryRepository {
     required String name,
     String? poster,
     String? background,
-  }) => _db.transaction(() async {
+  }) async {
+    final added = await _toggle(mediaId, type, name, poster, background);
+    onToggled?.call(mediaId, type, added: added);
+    return added;
+  }
+
+  Future<bool> _toggle(
+    String mediaId,
+    String type,
+    String name,
+    String? poster,
+    String? background,
+  ) => _db.transaction(() async {
     final existing = await (_db.select(
       _db.libraryItems,
     )..where((t) => t.mediaId.equals(mediaId))).getSingleOrNull();
@@ -50,8 +66,11 @@ final class LibraryRepository {
 
 /// Watch positions. A video counts as watched past 92% (credits).
 final class ProgressRepository {
-  ProgressRepository(this._db);
+  ProgressRepository(this._db, {this.onChanged});
   final AppDatabase _db;
+
+  /// Told after a video's progress or watched mark changes (Trakt sync).
+  final void Function(WatchProgressData row, {bool unwatched})? onChanged;
   static const watchedFraction = 0.92;
 
   Future<WatchProgressData?> get(String videoId) => (_db.select(
@@ -101,11 +120,11 @@ final class ProgressRepository {
     int? episode,
     String? poster,
     String? still,
-  }) {
+  }) async {
     final done =
         duration > Duration.zero &&
         position.inMilliseconds / duration.inMilliseconds >= watchedFraction;
-    return _db
+    await _db
         .into(_db.watchProgress)
         .insertOnConflictUpdate(
           WatchProgressCompanion.insert(
@@ -125,17 +144,27 @@ final class ProgressRepository {
             updatedAt: Value(DateTime.now()),
           ),
         );
+    await _told(videoId);
   }
 
-  Future<void> setWatched(String videoId, {required bool watched}) =>
-      (_db.update(
-        _db.watchProgress,
-      )..where((t) => t.videoId.equals(videoId))).write(
-        WatchProgressCompanion(
-          completed: Value(watched),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  Future<void> setWatched(String videoId, {required bool watched}) async {
+    await (_db.update(
+      _db.watchProgress,
+    )..where((t) => t.videoId.equals(videoId))).write(
+      WatchProgressCompanion(
+        completed: Value(watched),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    await _told(videoId, unwatched: !watched);
+  }
+
+  Future<void> _told(String videoId, {bool unwatched = false}) async {
+    final tell = onChanged;
+    if (tell == null) return;
+    final row = await get(videoId);
+    if (row != null) tell(row, unwatched: unwatched);
+  }
 
   /// Hides a title from Continue watching; progress and watched marks stay.
   Future<void> dismiss(String mediaId) =>

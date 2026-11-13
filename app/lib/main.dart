@@ -16,6 +16,7 @@ import 'data/settings_store.dart';
 import 'features/player/player_controller.dart';
 import 'services/downloads.dart';
 import 'services/downloads_service.dart';
+import 'services/trakt.dart';
 import 'services/engine_service.dart';
 import 'services/subtitles_service.dart';
 import 'ui/glass_mode.dart';
@@ -46,14 +47,24 @@ Future<void> main() async {
   final container = ProviderContainer(
     overrides: appOverrides(paths: paths, db: db, settings: settings),
   );
+  final trakt = container.read(traktSyncProvider);
   AppLifecycleListener(
     onPause: () {
       container.read(engineServiceProvider).checkpoint();
       unawaited(Log.flush());
     },
+    // Back in Kinora: what changed on Trakt meanwhile (at most every 5 min).
+    onResume: () {
+      final last = trakt.lastSync;
+      if (last == null ||
+          DateTime.now().difference(last) > const Duration(minutes: 5)) {
+        unawaited(trakt.syncNow());
+      }
+    },
   );
   // Restores unfinished downloads and follows background transfers.
   unawaited(container.read(downloadsServiceProvider).start());
+  unawaited(trakt.start());
   runApp(
     UncontrolledProviderScope(container: container, child: const KinoraApp()),
   );

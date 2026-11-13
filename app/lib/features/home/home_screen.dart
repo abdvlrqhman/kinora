@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,7 @@ import 'package:stremio/stremio.dart';
 import '../../app/shell.dart';
 import '../../services/sources.dart';
 import '../../services/tmdb.dart';
+import '../../services/trakt.dart';
 import '../../ui/glass.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/media.dart';
@@ -64,6 +67,7 @@ class _FeedState extends ConsumerState<_Feed> {
       ..invalidate(homeRowsProvider)
       ..invalidate(newEpisodesProvider)
       ..invalidate(continueItemsProvider);
+    unawaited(ref.read(traktSyncProvider).syncNow());
   }
 
   Future<void> _refresh() async {

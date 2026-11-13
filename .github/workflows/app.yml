@@ -16,6 +16,8 @@ concurrency:
 
 env:
   FLUTTER_VERSION: 3.47.7
+# Kinora's Trakt app id (public, not a secret) comes from the repository
+# variable TRAKT_CLIENT_ID; without it the builds have no Trakt sign-in.
 
 jobs:
   engine:
@@ -88,6 +90,7 @@ jobs:
           KINORA_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           flutter build apk --release --split-per-abi \
+            --dart-define=TRAKT_CLIENT_ID=${{ vars.TRAKT_CLIENT_ID }} \
             --target-platform android-arm,android-arm64 \
             --build-number ${{ github.run_number }}
           cd build/app/outputs/flutter-apk
@@ -234,7 +237,8 @@ jobs:
           cache: true
       - name: Build unsigned IPA (SideStore signs it on the phone)
         run: |
-          flutter build ios --release --no-codesign --build-number ${{ github.run_number }}
+          flutter build ios --release --no-codesign --build-number ${{ github.run_number }} \
+            --dart-define=TRAKT_CLIENT_ID=${{ vars.TRAKT_CLIENT_ID }}
           mkdir -p dist/Payload
           cp -R build/ios/iphoneos/Runner.app dist/Payload/
           cd dist && zip -qry Kinora.ipa Payload && ls -la

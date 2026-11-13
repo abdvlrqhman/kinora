@@ -59,4 +59,11 @@ final class SecureKeys {
 
   Future<void> delete(String providerId) =>
       _storage.delete(key: '$_prefix$providerId');
+
+  /// Other secrets Kinora keeps for the user (a Trakt sign-in).
+  Future<String?> readSecret(String key) => _storage.read(key: 'secret.$key');
+
+  Future<void> writeSecret(String key, String? value) => value == null
+      ? _storage.delete(key: 'secret.$key')
+      : _storage.write(key: 'secret.$key', value: value);
 }
