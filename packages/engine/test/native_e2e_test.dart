@@ -168,6 +168,7 @@ void main() {
       expect(watched, lessThan(0.1), reason: 'the part before waits');
     },
     timeout: const Timeout(Duration(minutes: 4)),
+    skip: _lib == null ? 'KINORA_ENGINE_LIB not set' : false,
   );
 
   test('version', () {
