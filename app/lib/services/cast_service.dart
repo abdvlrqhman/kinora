@@ -115,7 +115,7 @@ final class CastService extends ChangeNotifier {
     }
     String? ip;
     try {
-      ip = await NetworkInfo().getWifiIP();
+      ip = await lanAddress();
     } on Object {
       ip = null;
     }
@@ -296,7 +296,7 @@ final class CastService extends ChangeNotifier {
         .read(castTargetCapsProvider.notifier)
         .set(d.isSamsung ? samsungFullHdCaps : null);
     try {
-      final lan = await NetworkInfo().getWifiIP();
+      final lan = await lanAddress();
       if (lan == null && a.source.kind != PlaybackKind.direct) {
         throw _CastFailure(
           'Connect $thisDevice to the same network as the TV.',
@@ -631,3 +631,46 @@ final castServiceProvider = Provider<CastService>((ref) {
   ref.onDispose(s.dispose);
   return s;
 });
+
+/// This device's address on the local network, for the TV to pull from:
+/// the Wi-Fi address on a phone; on a computer (often on Ethernet, with no
+/// Wi-Fi address) its private IPv4.
+Future<String?> lanAddress() async {
+  try {
+    final wifi = await NetworkInfo().getWifiIP();
+    if (wifi != null && wifi.isNotEmpty) return wifi;
+  } on Object {
+    // Not available here: look at the interfaces.
+  }
+  try {
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+    );
+    return pickLanAddress([
+      for (final i in interfaces)
+        for (final a in i.addresses) a.address,
+    ]);
+  } on Object {
+    return null;
+  }
+}
+
+/// The likeliest home-network address among [addresses]: 192.168.x first,
+/// then 10.x, then 172.16-31.x (often a virtual adapter's); never loopback
+/// or link-local.
+String? pickLanAddress(List<String> addresses) {
+  int? rank(String a) {
+    final p = a.split('.').map(int.tryParse).toList();
+    if (p.length != 4 || p.contains(null)) return null;
+    if (p[0] == 192 && p[1] == 168) return 0;
+    if (p[0] == 10) return 1;
+    if (p[0] == 172 && p[1]! >= 16 && p[1]! <= 31) return 2;
+    return null;
+  }
+
+  final ranked = [
+    for (final a in addresses)
+      if (rank(a) case final r?) (a, r),
+  ]..sort((x, y) => x.$2 - y.$2);
+  return ranked.firstOrNull?.$1;
+}

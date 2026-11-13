@@ -1,27 +1,31 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Kinora: stream or download movies and shows, with subtitles in your languages, on your phone and on your TV." width="100%">
+  <img src="docs/banner.png" alt="Kinora: stream or download movies and shows, with subtitles in your languages, on your phone, your computer and your TV." width="100%">
 </p>
 
 <p align="center">
-  <a href="https://github.com/abdvlrqhman/kinora/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/abdvlrqhman/kinora?color=B48CFF&labelColor=17141B&label=release"></a>
+  <a href="https://github.com/abdvlrqhman/kinora/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/abdvlrqhman/kinora?color=BEF264&labelColor=0A0A09&label=release"></a>
   <a href="https://github.com/abdvlrqhman/kinora/actions/workflows/app.yml"><img alt="Build and end-to-end tests" src="https://github.com/abdvlrqhman/kinora/actions/workflows/app.yml/badge.svg?branch=main"></a>
-  <img alt="iPhone and Android" src="https://img.shields.io/badge/iPhone%20%26%20Android-17141B?logo=flutter&logoColor=B48CFF">
-  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/github/license/abdvlrqhman/kinora?color=17141B&labelColor=17141B"></a>
+  <img alt="iPhone, Android and Windows" src="https://img.shields.io/badge/iPhone%20%C2%B7%20Android%20%C2%B7%20Windows-0A0A09?logo=flutter&logoColor=BEF264">
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/github/license/abdvlrqhman/kinora?color=0A0A09&labelColor=0A0A09"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora.ipa"><b>Download for iPhone</b></a>
   &nbsp;&nbsp;&nbsp;
   <a href="https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-arm64-v8a-release.apk"><b>Download for Android</b></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-windows-x64.zip"><b>Download for Windows</b></a>
 </p>
 
 Kinora plays movies and shows from torrents and debrid services in one player.
 For every episode it picks the best version for your screen and your
 subtitle languages, and says why. It casts to your TV, keeps what you watch
-as downloads, and keeps everything on your phone: no accounts, no tracking.
+as downloads, and keeps everything on your device: no Kinora account, no
+tracking. Sign in to Trakt if you like, and what you watch follows you
+everywhere.
 
 <p align="center">
-  <img src="docs/screens.png" alt="Five Kinora screens: Home with Continue watching, a show's episodes, the list of versions with the best one explained, Downloads, and casting to a TV." width="100%">
+  <img src="docs/screens.png" alt="Five Kinora screens on a phone: Home with featured titles and Keep watching, a show's episodes, Discovery, Downloads, and casting to a TV." width="100%">
 </p>
 
 ## What it does
@@ -45,8 +49,16 @@ as downloads, and keeps everything on your phone: no accounts, no tracking.
 - **Cast to your TV.** DLNA, tuned for Samsung, with subtitles. Kinora warns
   you before casting a version the TV can't play, and rides out Wi-Fi
   hiccups.
-- **Liquid Glass.** Real refracting glass on phones that draw with Metal or
-  Vulkan, frosted glass on the others.
+- **Discovery.** Browse your sources' catalogs by type and genre, search
+  them all at once, or paste a magnet or video link to play it.
+- **Trakt, if you like.** Sign in with a code at trakt.tv (Kinora never sees
+  your password): what you watched, where you stopped and your watchlist
+  stay the same on every device, and in apps like Stremio and Kodi.
+- **Backup.** Move your sources and keys to another device as a code locked
+  with a passphrase you choose. Kinora keeps no copy anywhere.
+- **On your computer too.** A Windows app in its own window, with a sidebar,
+  keyboard shortcuts (Space, the arrows, F for full screen, Ctrl+K to
+  search) and the mouse's back button.
 - **Updates in the app.** Kinora tells you when a new version is out and
   shows what changed. You can turn this off in Settings › About.
 
@@ -75,6 +87,20 @@ The iPhone build is unsigned, so it installs through
 Apps installed with a free Apple ID run for 7 days at a time, and SideStore
 refreshes them. If Kinora stops opening, open SideStore and refresh it.
 
+**Windows 10 or 11 (64-bit)**
+
+1. Download [`Kinora-windows-x64.zip`](https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-windows-x64.zip)
+   and unzip it anywhere, for example in your Documents.
+2. Open `Kinora.exe` in the `Kinora` folder. The app isn't code-signed, so
+   Windows may say it protected your PC: choose **More info**, then **Run
+   anyway**.
+3. When Kinora offers an update, it downloads the new zip: close Kinora and
+   unzip it over the old folder. Your library and settings stay.
+
+<p align="center">
+  <img src="docs/desktop.png" alt="Kinora on Windows: the sidebar, featured titles and Keep watching." width="100%">
+</p>
+
 Every release is listed on the [Releases](https://github.com/abdvlrqhman/kinora/releases)
 page, with what changed.
 
@@ -89,7 +115,10 @@ page, with what changed.
    - Add your own keys for more subtitle sites.
    - Add a TMDB key for cast, photos and "More like this".
 
-   Keys stay in the phone's Keychain or Keystore.
+   Keys stay in the device's secure storage (Keychain, Keystore or the
+   Windows credential store).
+4. Moving from another device? Restore your sources and keys from a backup
+   code on the sources step.
 
 ## Privacy
 
@@ -97,11 +126,12 @@ Kinora has no accounts, no analytics and no ads. It only connects to:
 
 - the sources and subtitle sites you add;
 - TMDB, if you add a key;
+- Trakt, if you sign in;
 - the torrent swarm, plus a public tracker list it refreshes daily;
 - GitHub, once per launch, to check for a new version (you can turn this
   off).
 
-Logs stay on your phone. **Settings › Diagnostics › Copy diagnostics** gives
+Logs stay on your device. **Settings › Diagnostics › Copy diagnostics** gives
 you a copy to share, with keys and addon links left out.
 
 ## Questions
@@ -142,11 +172,11 @@ Android, a notification tells you how many are waiting.
 </details>
 
 <details>
-<summary><b>The glass looks frosted, not like liquid glass</b></summary>
+<summary><b>Windows says it protected my PC</b></summary>
 
-Real liquid glass needs a phone that draws with Metal (every supported
-iPhone) or Vulkan. **Settings › Diagnostics** says which one your phone
-uses, and **Try liquid glass again** tests it once more.
+Kinora isn't code-signed, so Windows SmartScreen warns about it the first
+time. Choose **More info**, then **Run anyway**. Windows Firewall may also
+ask once: allow Kinora on private networks so your TV can play from it.
 </details>
 
 <details>
@@ -159,10 +189,10 @@ second.
 
 ## Build it yourself
 
-Everything builds in GitHub Actions, so you don't need a Mac or a local
-toolchain. Fork the repo, and the `app` workflow builds the APKs and the IPA
-and runs every test, including the end-to-end tests on an Android emulator
-and an iPhone simulator.
+Everything builds in GitHub Actions, so you don't need a Mac, a Windows PC
+or a local toolchain. Fork the repo, and the `app` workflow builds the APKs,
+the IPA and the Windows zip, and runs every test, including the end-to-end
+tests on an Android emulator, an iPhone simulator and Windows.
 
 To work locally you need [Flutter 3.47.7](https://docs.flutter.dev/install).
 
@@ -185,9 +215,8 @@ gh run download <run-id> -n libtorrent-arm64-ios     -D packages/engine/ios/preb
 
 | Workflow | What it does |
 |---|---|
-| `app` | Analyzes and tests the app and every package. Builds the Android APKs and the unsigned iPhone IPA, and runs the end-to-end test on an Android emulator and an iPhone simulator. Tagging `vX.Y.Z` publishes a release. |
-| `engine` | Builds libtorrent 2.1 with OpenSSL and Boost for Android, iPhone (and its simulator) and Linux, then runs a native end-to-end test of the engine. |
-| `glass` | Checks that real liquid glass draws on an iPhone simulator. |
+| `app` | Analyzes and tests the app and every package. Builds the Android APKs, the unsigned iPhone IPA and the Windows zip (and starts it once), and runs the end-to-end test on an Android emulator, an iPhone simulator and Windows. Tagging `vX.Y.Z` publishes a release. |
+| `engine` | Builds libtorrent 2.1 with OpenSSL and Boost for Android, iPhone (and its simulator), Linux and Windows, then runs a native end-to-end test of the engine on Linux and Windows. |
 
 ## Repository
 
@@ -201,7 +230,7 @@ gh run download <run-id> -n libtorrent-arm64-ios     -D packages/engine/ios/preb
 | [`packages/ranking`](packages/ranking) | Picks the best version and explains it |
 | [`packages/subtitles`](packages/subtitles) | Subtitle sites, matching, charsets, formats |
 | [`packages/dlna`](packages/dlna) | TV discovery and control (Samsung extensions) |
-| [`DESIGN.md`](DESIGN.md) | The design system: colors, type, glass, motion |
+| [`DESIGN.md`](DESIGN.md) | The design system: colors, type, layout, motion |
 | [`PLAN.md`](PLAN.md) | Architecture and the decisions behind it |
 
 ## Contributing
@@ -225,9 +254,10 @@ keep their own licenses.
 Built with [Flutter](https://flutter.dev),
 [libtorrent](https://libtorrent.org), [mpv](https://mpv.io) (through
 [media_kit](https://github.com/media-kit/media-kit)) and
-[liquid_glass_renderer](https://pub.dev/packages/liquid_glass_renderer).
-Type: [Big Shoulders Display](https://fonts.google.com/specimen/Big+Shoulders)
-and [Figtree](https://fonts.google.com/specimen/Figtree), both under the SIL
-Open Font License.
+[window_manager](https://pub.dev/packages/window_manager).
+Type: [Unbounded](https://fonts.google.com/specimen/Unbounded),
+[Readex Pro](https://fonts.google.com/specimen/Readex+Pro) and
+[Geist Mono](https://fonts.google.com/specimen/Geist+Mono), all under the
+SIL Open Font License.
 
 Powered by [Spacie](https://spacie.net).
