@@ -6,6 +6,7 @@ import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/features/search/search_model.dart';
 import 'package:kinora/features/search/search_screen.dart';
 import 'package:kinora/services/sources.dart';
+import 'package:stremio/stremio.dart';
 
 import '../harness.dart';
 
@@ -249,7 +250,23 @@ void main() {
       const SearchScreen(),
       db: db,
       overrides: [
-        ...withSource(),
+        // A source with a catalog to browse.
+        enabledAddonsProvider.overrideWith(
+          (ref) async => [
+            Addon(
+              transportUrl: testAddon.transportUrl,
+              manifest: AddonManifest.fromJson({
+                'id': 'test.addon',
+                'name': 'Test source',
+                'resources': ['catalog', 'meta'],
+                'types': ['movie'],
+                'catalogs': [
+                  {'type': 'movie', 'id': 'Popular movies'},
+                ],
+              }),
+            ),
+          ],
+        ),
         homeRowsProvider.overrideWith(
           (ref) => Stream.value(
             HomeRows([

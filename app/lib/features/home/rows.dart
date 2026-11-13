@@ -24,8 +24,8 @@ import 'home_feed.dart';
 abstract final class HomeSizes {
   static bool _wide(BuildContext c) => KLayout.isWide(c);
 
-  /// Page edge.
-  static double gutter(BuildContext c) => _wide(c) ? 24 : 16;
+  /// Page edge (the same on every page).
+  static double gutter(BuildContext c) => KSpace.margin;
   static double gap(BuildContext c) => _wide(c) ? 16 : 12;
   static double sectionGap(BuildContext c) => _wide(c) ? 32 : 24;
 

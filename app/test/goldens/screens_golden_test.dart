@@ -220,7 +220,47 @@ void main() {
             const AppSettings(onboarded: true),
           ),
           databaseProvider.overrideWithValue(db),
-          ...withSource(),
+          // A source whose catalogs Home shows and Discovery browses.
+          enabledAddonsProvider.overrideWith(
+            (ref) async => [
+              Addon(
+                transportUrl: testAddon.transportUrl,
+                manifest: AddonManifest.fromJson({
+                  'id': 'test.addon',
+                  'name': 'Test source',
+                  'resources': ['catalog', 'meta'],
+                  'types': ['movie', 'series'],
+                  'catalogs': [
+                    {
+                      'type': 'movie',
+                      'id': 'Popular movies',
+                      'name': 'Popular',
+                      'extra': [
+                        {
+                          'name': 'genre',
+                          'options': [
+                            'Action',
+                            'Comedy',
+                            'Drama',
+                            'Mystery',
+                            'Sci-Fi',
+                            'Thriller',
+                          ],
+                        },
+                        {'name': 'skip'},
+                      ],
+                    },
+                    {'type': 'movie', 'id': 'New movies', 'name': 'New'},
+                    {
+                      'type': 'series',
+                      'id': 'Popular shows',
+                      'name': 'Popular',
+                    },
+                  ],
+                }),
+              ),
+            ],
+          ),
           ...extra,
           homeRowsProvider.overrideWith(
             (ref) => Stream.value(HomeRows([movies, shows])),
@@ -552,8 +592,8 @@ void main() {
     for (final window in const [
       Size(1280, 800),
       Size(1920, 1080),
-      Size(1000, 680),
-      Size(700, 820),
+      // The smallest window Kinora allows.
+      Size(960, 640),
     ]) {
       final tag = '${window.width.round()}x${window.height.round()}';
       testScreen('tour $tag', (tester) async {

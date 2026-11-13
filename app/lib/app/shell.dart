@@ -22,7 +22,7 @@ import 'router.dart';
 
 enum AppTab {
   home('Home', Icons.home_outlined),
-  search('Search', Icons.search_rounded),
+  search('Discovery', Icons.explore_outlined),
   downloads('Downloads', Icons.file_download_outlined),
   settings('Settings', Icons.tune_rounded);
 
@@ -45,8 +45,7 @@ class AppShell extends StatelessWidget {
   static StatefulNavigationShell? current;
 
   /// True beside the sidebar: no tab bar at the bottom.
-  static bool onRail(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<_OnRail>()?.on ?? false;
+  static bool onRail(BuildContext context) => RailScope.of(context);
 
   /// Height the tab bar occupies, so pages can pad their last item.
   static double bottomInset(BuildContext context) =>
@@ -385,7 +384,7 @@ class _WideNavState extends ConsumerState<WideNav> {
                   ),
                   // Its own semantics container: a page's modal barrier
                   // would otherwise hide the sidebar from screen readers.
-                  child: _OnRail(
+                  child: RailScope(
                     on: on,
                     child: Semantics(container: true, child: widget.child),
                   ),
@@ -892,13 +891,15 @@ class _WindowBar extends StatelessWidget {
                   child: isDesktop ? DragToMoveArea(child: title) : title,
                 ),
                 const SizedBox(width: 12),
-                _SearchField(
-                  onTap: () {
-                    rootNavigatorKey.currentState?.popUntil((r) => r.isFirst);
-                    router.go('/search');
-                    focusSearch.value++;
-                  },
-                ),
+                // (Discovery has its own field.)
+                if (!path.startsWith('/search'))
+                  _SearchField(
+                    onTap: () {
+                      rootNavigatorKey.currentState?.popUntil((r) => r.isFirst);
+                      router.go('/search');
+                      focusSearch.value++;
+                    },
+                  ),
                 const SizedBox(width: 8),
                 CastTargetBuilder(
                   builder: (context, tv) => _BarIcon(
@@ -1087,14 +1088,4 @@ class _DimWithPopups extends StatelessWidget {
     ),
     child: child,
   );
-}
-
-/// Marks pages beside the sidebar (no tab bar to clear at the bottom).
-class _OnRail extends InheritedWidget {
-  const _OnRail({required this.on, required super.child});
-
-  final bool on;
-
-  @override
-  bool updateShouldNotify(_OnRail old) => old.on != on;
 }

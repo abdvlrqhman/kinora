@@ -128,7 +128,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    await tester.tap(find.text('Find something to watch'));
+    await tester.tap(find.text('Discover something to watch'));
     await tester.pumpAndSettle();
     expect(kit.nav.locations, ['/search']);
   });

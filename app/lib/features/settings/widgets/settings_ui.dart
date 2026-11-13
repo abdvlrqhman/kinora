@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/shell.dart';
-import '../../../app/desktop.dart';
 import '../../../ui/glass.dart';
 import '../../../ui/layout.dart';
 import '../../../ui/tint.dart';
 import '../../../ui/tokens.dart';
 import '../../../ui/widgets/media.dart';
+import '../../../ui/widgets/page_header.dart';
 import '../../../ui/widgets/sheet.dart';
 
 /// Whether motion should be skipped.
@@ -38,68 +38,23 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
     body: ListView(
       padding: EdgeInsets.only(
-        top: MediaQuery.paddingOf(context).top + KSpace.x2,
         bottom: AppShell.bottomInset(context),
         right: KLayout.rest(context),
       ),
       children: [
-        if (back && isDesktop)
-          // A computer: a small back chevron beside the title (Esc and the
-          // mouse's back button work too).
-          Padding(
-            // Top at 52 and left on the page's edge, as on a title page.
-            padding: const EdgeInsets.fromLTRB(
-              KSpace.margin,
-              KSpace.x1,
-              KSpace.margin,
-              0,
-            ),
-            child: Row(
-              children: [
-                GlassGroup(
-                  child: GlassIconButton(
-                    icon: Icons.chevron_left_rounded,
-                    label: 'Back',
-                    size: 40,
-                    onPressed: () => _back(context),
-                  ),
-                ),
-                const SizedBox(width: KSpace.x3),
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(title, style: KType.h1),
-                  ),
-                ),
-              ],
-            ),
-          )
-        else ...[
-          if (back)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: KSpace.margin),
-                child: GlassGroup(
-                  child: GlassIconButton(
-                    icon: Icons.chevron_left_rounded,
-                    label: 'Back',
-                    onPressed: () => _back(context),
-                  ),
-                ),
-              ),
-            ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              KSpace.margin,
-              back ? KSpace.x3 : KSpace.x4,
-              KSpace.margin,
-              0,
-            ),
-            child: Semantics(header: true, child: Text(title, style: KType.h1)),
-          ),
-        ],
-        if (intro != null) Note(intro!, top: KSpace.x2),
+        // (A wide window: the window bar names the page and goes back.)
+        PageHeader(
+          title: title,
+          leading: back
+              ? GlassIconButton(
+                  icon: Icons.chevron_left_rounded,
+                  label: 'Back',
+                  size: 40,
+                  onPressed: () => _back(context),
+                )
+              : null,
+        ),
+        if (intro != null) Note(intro!, top: PageHeader.gap),
         const SizedBox(height: KSpace.x2),
         ...children,
       ],

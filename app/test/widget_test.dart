@@ -35,6 +35,6 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('tab-search')));
     await tester.pumpAndSettle();
-    expect(find.text('Search'), findsWidgets);
+    expect(find.text('Discovery'), findsWidgets);
   });
 }

@@ -18,6 +18,7 @@ import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
+import '../../ui/widgets/page_header.dart';
 import '../../ui/widgets/sheet.dart';
 import '../../ui/widgets/states.dart';
 import '../settings/languages.dart';
@@ -348,17 +349,25 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     }
     if (rows.isEmpty) {
       return Scaffold(
-        body: Padding(
-          padding: EdgeInsets.only(bottom: AppShell.bottomInset(context)),
-          child: EmptyState(
-            icon: Icons.download_rounded,
-            title: 'Nothing here yet',
-            message:
-                'Downloads you start, and episodes you stream to the end, '
-                'appear here.',
-            actionLabel: 'Find something to watch',
-            onAction: () => context.go('/search'),
-          ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const PageHeader(title: 'Downloads'),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: AppShell.bottomInset(context)),
+                child: EmptyState(
+                  icon: Icons.file_download_outlined,
+                  title: 'Nothing here yet',
+                  message:
+                      'Downloads you start, and episodes you stream to the '
+                      'end, appear here.',
+                  actionLabel: 'Discover something to watch',
+                  onAction: () => context.go('/search'),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -368,19 +377,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     // One flat, lazily built list: an open show with hundreds of episodes
     // only builds the rows on screen.
     final items = <Widget Function()>[
-      () => Padding(
-        // (The same place as Settings' title.)
-        padding: const EdgeInsets.fromLTRB(
-          KSpace.margin,
-          KSpace.x4,
-          KSpace.margin,
-          0,
-        ),
-        child: Semantics(
-          header: true,
-          child: Text('Downloads', style: KType.h1),
-        ),
-      ),
+      () => const PageHeader(title: 'Downloads'),
       () => _Summary(used: used, free: free),
     ];
     Widget row(DownloadRow r) => _EpisodeRow(
@@ -439,7 +436,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     return Scaffold(
       body: ListView.builder(
         padding: EdgeInsets.only(
-          top: MediaQuery.paddingOf(context).top + KSpace.x2,
           bottom: AppShell.bottomInset(context),
           right: KLayout.rest(context),
         ),

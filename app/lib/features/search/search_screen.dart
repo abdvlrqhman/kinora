@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stremio/stremio.dart';
 
-import '../../app/desktop.dart';
 import '../../app/router.dart';
 import '../../app/shell.dart';
 import '../../services/play_request.dart';
@@ -20,10 +19,13 @@ import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/states.dart';
 import '../home/home_feed.dart';
+import '../../ui/widgets/page_header.dart';
+import '../home/rows.dart' show HoverArt;
+import 'discovery.dart';
 import 'search_model.dart';
 
-/// Search: a glass field, recent searches, results grouped by type, and
-/// "Play this link" for pasted magnets and video URLs.
+/// Discovery: browse your sources' catalogs by type and genre, or search
+/// them (results grouped by type); a pasted magnet or video link plays.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -109,15 +111,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ref.invalidate(searchProvider);
       }
     });
-    final top = MediaQuery.paddingOf(context).top;
     return Scaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const PageHeader(title: 'Discovery'),
           Padding(
             padding: EdgeInsets.fromLTRB(
               KSpace.margin,
-              top + KSpace.x3,
+              PageHeader.gap,
               // (A wide window: a field, not a bar across it.)
               KSpace.margin + KLayout.rest(context, 720),
               KSpace.x3,
@@ -138,7 +140,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   Widget _body() {
     final q = _query;
-    if (q.isEmpty) return _Idle(onPick: _useRecent);
+    if (q.isEmpty) return _Browse(onPick: _useRecent);
     final link = parsePlayLink(q);
     if (link != null) return _LinkResult(link: link);
     return _Results(
@@ -167,130 +169,315 @@ class _SearchField extends StatelessWidget {
   final VoidCallback onClear;
 
   @override
-  Widget build(BuildContext context) => GlassGroup(
-    child: Glass(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 52),
-        child: Row(
-          children: [
-            const SizedBox(width: KSpace.x4),
-            const Icon(Icons.search_rounded, color: KColors.haze, size: 22),
-            const SizedBox(width: KSpace.x2),
-            Expanded(
-              child: TextField(
-                key: const ValueKey('search-field'),
-                controller: controller,
-                focusNode: focus,
-                onChanged: onChanged,
-                onSubmitted: onSubmitted,
-                style: KType.body,
-                cursorColor: KinoraTint.of(context),
-                keyboardAppearance: Brightness.dark,
-                textInputAction: TextInputAction.search,
-                autocorrect: false,
-                inputFormatters: [LengthLimitingTextInputFormatter(2048)],
-                decoration: InputDecoration.collapsed(
-                  hintText: 'Movies, shows or a link…',
-                  hintStyle: KType.body.copyWith(color: KColors.reel),
-                ),
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: KColors.panel,
+      border: Border.all(color: KColors.fieldEdge),
+      borderRadius: BorderRadius.circular(KRadius.button),
+    ),
+    child: ConstrainedBox(
+      constraints: BoxConstraints(minHeight: KLayout.isWide(context) ? 44 : 48),
+      child: Row(
+        children: [
+          const SizedBox(width: KSpace.x3),
+          const Icon(Icons.search_rounded, color: KColors.muted, size: 20),
+          const SizedBox(width: KSpace.x2),
+          Expanded(
+            child: TextField(
+              key: const ValueKey('search-field'),
+              controller: controller,
+              focusNode: focus,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+              style: KType.body,
+              cursorColor: KinoraTint.of(context),
+              keyboardAppearance: Brightness.dark,
+              textInputAction: TextInputAction.search,
+              autocorrect: false,
+              inputFormatters: [LengthLimitingTextInputFormatter(2048)],
+              decoration: InputDecoration.collapsed(
+                hintText: 'Search movies, shows or paste a link…',
+                hintStyle: KType.body.copyWith(color: KColors.muted),
               ),
             ),
-            ValueListenableBuilder(
-              valueListenable: controller,
-              builder: (_, value, _) => value.text.isEmpty
-                  ? const SizedBox(width: KSpace.x3)
-                  : Semantics(
-                      button: true,
-                      label: 'Clear search',
-                      excludeSemantics: true,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: onClear,
-                        child: const SizedBox.square(
-                          dimension: 48,
-                          child: Icon(
-                            Icons.cancel_rounded,
-                            color: KColors.haze,
-                            size: 20,
-                          ),
+          ),
+          ValueListenableBuilder(
+            valueListenable: controller,
+            builder: (_, value, _) => value.text.isEmpty
+                ? const SizedBox(width: KSpace.x3)
+                : Semantics(
+                    button: true,
+                    label: 'Clear search',
+                    excludeSemantics: true,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onClear,
+                      child: const SizedBox.square(
+                        dimension: 48,
+                        child: Icon(
+                          Icons.cancel_rounded,
+                          color: KColors.haze,
+                          size: 20,
                         ),
                       ),
                     ),
-            ),
-          ],
-        ),
+                  ),
+          ),
+        ],
       ),
     ),
   );
 }
 
-/// Idle Search: recent searches as capsules, then what's popular in your
-/// first catalog, to browse without typing.
-class _Idle extends ConsumerWidget {
-  const _Idle({required this.onPick});
+/// Idle Discovery: recent searches as capsules, then browsing: a type,
+/// a catalog, a genre, and the catalog's titles in a grid that loads more
+/// as you near its end.
+class _Browse extends ConsumerStatefulWidget {
+  const _Browse({required this.onPick});
 
   final ValueChanged<String> onPick;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Browse> createState() => _BrowseState();
+}
+
+class _BrowseState extends ConsumerState<_Browse> {
+  String? _type;
+  int _catalog = 0;
+  String? _genre;
+
+  @override
+  Widget build(BuildContext context) {
     final recents = ref.watch(recentSearchesProvider).value ?? const [];
-    final row = ref.watch(homeRowsProvider).value?.rows.firstOrNull;
-    final popular = row?.items.take(12) ?? const <MetaPreview>[];
-    if (recents.isEmpty && popular.isEmpty) {
-      return const EmptyState(
-        icon: Icons.search_rounded,
-        title: 'Find something to watch',
-        message:
-            'Search your sources by title. Paste a magnet link or a video '
-            'link to play it right away.',
-      );
-    }
-    final store = ref.read(searchHistoryProvider);
+    final sources = ref.watch(browseSourcesProvider);
+    final byType = sources.value;
     final capsuleHeight = math.max(
       48.0,
       MediaQuery.textScalerOf(context).scale(22) + 26,
     );
-    return CustomScrollView(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      slivers: [
-        // The same room under the search field as the results get.
-        const SliverToBoxAdapter(child: SizedBox(height: KSpace.x3)),
-        if (recents.isNotEmpty) ...[
-          const _Header('Recent searches'),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: capsuleHeight,
-              child: GlassGroup(
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: KSpace.margin,
-                  ),
-                  itemCount: recents.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: KSpace.x2),
-                  itemBuilder: (context, i) => _RecentCapsule(
-                    query: recents[i],
-                    onTap: () => onPick(recents[i]),
-                    onRemove: () => unawaited(store.remove(recents[i])),
-                  ),
+    const gap = SliverToBoxAdapter(child: SizedBox(height: KSpace.x3));
+    // Recent searches show at once; browsing follows when sources answer.
+    final recentSlivers = [
+      gap,
+      if (recents.isNotEmpty) ...[
+        const _Header('Recent searches'),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: capsuleHeight,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
+              itemCount: recents.length,
+              separatorBuilder: (_, _) => const SizedBox(width: KSpace.x2),
+              itemBuilder: (context, i) => _RecentCapsule(
+                query: recents[i],
+                onTap: () => widget.onPick(recents[i]),
+                onRemove: () => unawaited(
+                  ref.read(searchHistoryProvider).remove(recents[i]),
                 ),
               ),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: KSpace.section)),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: KSpace.section)),
+      ],
+    ];
+    if (byType == null || byType.isEmpty) {
+      return CustomScrollView(
+        slivers: [
+          ...recentSlivers,
+          if (byType == null && sources.hasError)
+            SliverToBoxAdapter(
+              child: ErrorState(
+                message: friendlyError(sources.error!),
+                onRetry: () => ref.invalidate(addonsProvider),
+              ),
+            )
+          else if (byType == null)
+            const _SkeletonSliver()
+          else
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: Icons.explore_outlined,
+                title: 'Nothing to browse yet',
+                message:
+                    'Add a source with catalogs, like Cinemeta, to browse '
+                    'movies and shows. Or search, or paste a magnet or video '
+                    'link to play it.',
+                actionLabel: 'Add a source',
+                onAction: () => context.go('/settings/sources'),
+              ),
+            ),
         ],
-        if (popular.isNotEmpty) ...[
-          // The source's own name for it ("Top anime"), not a guess.
-          _Header(row!.title),
-          _PosterGrid(
-            items: popular.toList(),
-            onOpen: (m) => openTitle(context, type: m.type, id: m.id),
+      );
+    }
+    final type = byType.containsKey(_type) ? _type! : byType.keys.first;
+    final list = byType[type]!;
+    final source = list[_catalog.clamp(0, list.length - 1)];
+    final genres = genresOf(source.catalog);
+    final genre = genres.options.contains(_genre)
+        ? _genre
+        : genres.required
+        ? genres.options.firstOrNull
+        : null;
+    final key = browseKey(source, genre);
+    final page = ref.watch(browseProvider(key));
+    String name(BrowseSource s) {
+      final n = s.catalog.name?.trim().isNotEmpty ?? false
+          ? s.catalog.name!.trim()
+          : s.catalog.id;
+      // The same name from two sources: say whose.
+      return list.where((o) => o.catalog.name == s.catalog.name).length > 1
+          ? '$n · ${s.addon.manifest.name}'
+          : n;
+    }
+
+    final items = page.value?.items ?? const <MetaPreview>[];
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        maybeLoadMore(ref, key, n.metrics);
+        return false;
+      },
+      child: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          ...recentSlivers,
+          if (byType.length > 1) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TypeSwitch(
+                    types: byType.keys.toList(),
+                    selected: type,
+                    onSelect: (t) => setState(() {
+                      _type = t;
+                      _catalog = 0;
+                      _genre = null;
+                    }),
+                  ),
+                ),
+              ),
+            ),
+            gap,
+          ],
+          if (list.length > 1) ...[
+            SliverToBoxAdapter(
+              child: ChipRow(
+                gutter: KSpace.margin,
+                children: [
+                  for (final (i, s) in list.indexed)
+                    ChoiceChipButton(
+                      label: name(s),
+                      selected: s == source,
+                      onTap: () => setState(() {
+                        _catalog = i;
+                        _genre = null;
+                      }),
+                    ),
+                ],
+              ),
+            ),
+            gap,
+          ],
+          if (genres.options.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: ChipRow(
+                gutter: KSpace.margin,
+                children: [
+                  if (!genres.required)
+                    ChoiceChipButton(
+                      label: 'All',
+                      selected: genre == null,
+                      onTap: () => setState(() => _genre = null),
+                    ),
+                  for (final g in genres.options)
+                    ChoiceChipButton(
+                      label: g,
+                      selected: g == genre,
+                      onTap: () => setState(() => _genre = g),
+                    ),
+                ],
+              ),
+            ),
+            gap,
+          ],
+          const SliverToBoxAdapter(child: SizedBox(height: KSpace.x2)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                KSpace.margin,
+                0,
+                KSpace.margin,
+                KSpace.x3,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Flexible(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        [name(source), ?genre].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: KType.h2.copyWith(color: KColors.title),
+                      ),
+                    ),
+                  ),
+                  if (items.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    Text(
+                      '${items.length}${page.value?.more ?? false ? '+' : ''} '
+                      'TITLES',
+                      style: KType.meta,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          switch (page) {
+            AsyncValue(value: final p?) when p.items.isEmpty =>
+              const SliverToBoxAdapter(
+                child: EmptyState(
+                  icon: Icons.explore_outlined,
+                  title: 'Nothing here',
+                  message: 'This catalog has no titles for that choice.',
+                ),
+              ),
+            AsyncValue(value: final p?) => _PosterGrid(
+              items: p.items,
+              onOpen: (m) => openTitle(context, type: m.type, id: m.id),
+              bottom: p.loadingMore ? KSpace.x4 : KSpace.section,
+            ),
+            AsyncError(:final error) => SliverToBoxAdapter(
+              child: ErrorState(
+                message: friendlyError(error),
+                onRetry: () => ref.invalidate(browseProvider(key)),
+              ),
+            ),
+            _ => const _SkeletonSliver(),
+          },
+          if (page.value?.loadingMore ?? false)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: KSpace.section),
+                child: Center(
+                  child: SizedBox.square(
+                    dimension: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: SizedBox(height: AppShell.bottomInset(context)),
           ),
         ],
-        SliverToBoxAdapter(
-          child: SizedBox(height: AppShell.bottomInset(context)),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -309,7 +496,10 @@ class _Header extends StatelessWidget {
       KSpace.x3,
     ),
     sliver: SliverToBoxAdapter(
-      child: Semantics(header: true, child: Text(text, style: KType.h2)),
+      child: Semantics(
+        header: true,
+        child: Text(text, style: KType.h2.copyWith(color: KColors.title)),
+      ),
     ),
   );
 }
@@ -555,26 +745,27 @@ class _ResultsState extends ConsumerState<_Results> {
   }
 }
 
-/// Columns and tile extent for a poster grid with two caption lines.
-({int columns, double width, double extent}) _gridMetrics(
+/// Columns and tile extent for a poster grid with two caption lines: a
+/// wide window fits tiles of at least 140 px; a phone shows three (more on
+/// a wide one).
+({int columns, double width, double extent, double gap}) _gridMetrics(
   BuildContext context,
   double crossAxisExtent,
 ) {
-  // A computer: as many columns as posters of Home's width fit.
-  final columns = isDesktop
-      ? ((crossAxisExtent - 2 * KSpace.margin + KSpace.x3) /
-                (PosterSize.widthOf(context) + KSpace.x3))
-            .floor()
-            .clamp(3, 12)
-      : ((crossAxisExtent - 2 * KSpace.margin) / 128).floor().clamp(3, 6);
-  final width =
-      (crossAxisExtent - 2 * KSpace.margin - (columns - 1) * KSpace.x3) /
-      columns;
-  final scaler = MediaQuery.textScalerOf(context);
+  final wide = KLayout.isWide(context);
+  final gap = wide ? 16.0 : 12.0;
+  final room = crossAxisExtent - 2 * KSpace.margin;
+  final columns = ((room + gap) / ((wide ? 140 : 108) + gap)).floor().clamp(
+    wide ? 2 : 3,
+    12,
+  );
+  final width = (room - (columns - 1) * gap) / columns;
+  final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
   return (
     columns: columns,
     width: width,
-    extent: width * 1.5 + 6 + scaler.scale(18) + scaler.scale(16) + 4,
+    gap: gap,
+    extent: width * 1.5 + 8 + scaler.scale(20) + 2 + scaler.scale(14) + 2,
   );
 }
 
@@ -598,42 +789,49 @@ class _PosterGrid extends StatelessWidget {
         sliver: SliverGrid.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: g.columns,
-            mainAxisSpacing: KSpace.x3,
-            crossAxisSpacing: KSpace.x3,
+            mainAxisSpacing: g.gap,
+            crossAxisSpacing: g.gap,
             mainAxisExtent: g.extent,
           ),
           itemCount: items.length,
           itemBuilder: (context, i) {
             final m = items[i];
-            return Pressable(
-              lift: true,
-              label: [m.name, ?m.releaseInfo].join(', '),
-              onTap: () => onOpen(m),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Artwork(
-                    url: m.poster,
-                    fallbackText: m.name,
-                    radius: KRadius.poster,
-                    aspectRatio: 2 / 3,
-                    memCacheWidth: decodeWidth(context, g.width),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    m.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textDirection: contentDir(m.name),
-                    style: KType.label.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  if (m.releaseInfo != null)
-                    Text(
-                      m.releaseInfo!,
-                      maxLines: 1,
-                      style: KType.tabular(KType.small),
+            return MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.3,
+              child: Pressable(
+                plain: true,
+                label: [m.name, ?m.releaseInfo].join(', '),
+                onTap: () => onOpen(m),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    HoverArt(
+                      child: Artwork(
+                        url: m.poster,
+                        fallbackText: m.name,
+                        radius: KRadius.poster,
+                        aspectRatio: 2 / 3,
+                        memCacheWidth: decodeWidth(context, g.width),
+                      ),
                     ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      m.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textDirection: contentDir(m.name),
+                      style: KType.title,
+                    ),
+                    if (m.releaseInfo != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        m.releaseInfo!.toUpperCase(),
+                        maxLines: 1,
+                        style: KType.meta,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             );
           },
@@ -648,37 +846,41 @@ class _GridSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'Searching',
-    child: CustomScrollView(
-      physics: const NeverScrollableScrollPhysics(),
+    label: 'Loading',
+    child: const CustomScrollView(
+      physics: NeverScrollableScrollPhysics(),
       slivers: [
-        SliverLayoutBuilder(
-          builder: (context, constraints) {
-            final g = _gridMetrics(context, constraints.crossAxisExtent);
-            return SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                KSpace.margin,
-                KSpace.x3,
-                KSpace.margin,
-                0,
-              ),
-              sliver: SliverGrid.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: g.columns,
-                  mainAxisSpacing: KSpace.x3,
-                  crossAxisSpacing: KSpace.x3,
-                  mainAxisExtent: g.extent,
-                ),
-                itemCount: g.columns * 2,
-                itemBuilder: (_, _) => Align(
-                  alignment: Alignment.topCenter,
-                  child: LoadingBlock(height: g.width * 1.5),
-                ),
-              ),
-            );
-          },
-        ),
+        SliverToBoxAdapter(child: SizedBox(height: KSpace.x3)),
+        _SkeletonSliver(),
       ],
     ),
+  );
+}
+
+/// Two rows of poster-shaped placeholders, the grid's own geometry.
+class _SkeletonSliver extends StatelessWidget {
+  const _SkeletonSliver();
+
+  @override
+  Widget build(BuildContext context) => SliverLayoutBuilder(
+    builder: (context, constraints) {
+      final g = _gridMetrics(context, constraints.crossAxisExtent);
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: KSpace.margin),
+        sliver: SliverGrid.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: g.columns,
+            mainAxisSpacing: g.gap,
+            crossAxisSpacing: g.gap,
+            mainAxisExtent: g.extent,
+          ),
+          itemCount: g.columns * 2,
+          itemBuilder: (_, _) => Align(
+            alignment: Alignment.topCenter,
+            child: LoadingBlock(height: g.width * 1.5),
+          ),
+        ),
+      );
+    },
   );
 }

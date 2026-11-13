@@ -115,9 +115,7 @@ void main() {
     expect(loads, 2);
   });
 
-  testScreen('long-press on Keep watching offers row actions', (
-    tester,
-  ) async {
+  testScreen('long-press on Keep watching offers row actions', (tester) async {
     final db = testDb();
     await seedLibrary(db);
     final nav = await pumpScreen(
