@@ -54,7 +54,7 @@ void main() {
       expect(back, findsOneWidget, reason: row);
       await tester.tap(back);
       await tester.pumpAndSettle();
-      expect(find.text('Watching'), findsOneWidget, reason: row);
+      expect(find.bySemanticsLabel('Watching'), findsOneWidget, reason: row);
     }
   });
 

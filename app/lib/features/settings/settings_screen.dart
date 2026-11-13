@@ -68,26 +68,19 @@ class SettingsScreen extends ConsumerWidget {
       back: false,
       children: [
         const SectionTitle('Account'),
-        ListenableBuilder(
-          listenable: trakt,
-          builder: (_, _) => NavRow(
-            label: 'Trakt',
-            value: !trakt.available
-                ? 'Not in this version'
-                : trakt.signedIn
-                ? 'Syncing as ${trakt.user}'
-                : 'Sign in to keep what you watch the same everywhere',
-            onTap: () => go('trakt'),
-          ),
-        ),
+        _TraktRow(trakt: trakt, onTap: () => go('trakt')),
         NavRow(
           label: 'Backup',
+
+          icon: Icons.settings_backup_restore_rounded,
           value: 'Move your sources and keys to another device',
           onTap: () => go('backup'),
         ),
         const SectionTitle('Watching'),
         NavRow(
           label: 'Sources',
+
+          icon: Icons.extension_outlined,
           value: addons == null
               ? null
               : addons.isEmpty
@@ -97,6 +90,8 @@ class SettingsScreen extends ConsumerWidget {
         ),
         NavRow(
           label: 'Languages and subtitles',
+
+          icon: Icons.translate_rounded,
           value: [
             switch (languageList(s.subtitleLanguages)) {
               final l? => 'Subtitles in $l',
@@ -109,11 +104,15 @@ class SettingsScreen extends ConsumerWidget {
         ),
         NavRow(
           label: 'Subtitle sites',
+
+          icon: Icons.subtitles_outlined,
           value: sites.isEmpty ? 'None on' : sites.join(', '),
           onTap: () => go('subtitle-sites'),
         ),
         NavRow(
           label: 'Playback',
+
+          icon: Icons.play_circle_outline_rounded,
           value: [
             'Up to ${resolutionLabel(s.maxResolution)}',
             if (s.dataSaver) 'data saver',
@@ -123,6 +122,8 @@ class SettingsScreen extends ConsumerWidget {
         SectionTitle(thisDeviceTitle),
         NavRow(
           label: 'Downloads',
+
+          icon: Icons.file_download_outlined,
           value: isDesktop
               ? switch (s.downloadsAtOnce) {
                   0 => 'All at once',
@@ -136,6 +137,8 @@ class SettingsScreen extends ConsumerWidget {
         ),
         NavRow(
           label: 'Network',
+
+          icon: Icons.wifi_rounded,
           value: s.vpnInterface.isNotEmpty
               ? 'Only through ${s.vpnInterface}'
               : s.uploadLimitKBps == 0 && s.downloadLimitKBps == 0
@@ -145,21 +148,49 @@ class SettingsScreen extends ConsumerWidget {
         ),
         NavRow(
           label: 'Storage',
+
+          icon: Icons.storage_rounded,
           value: 'See and clear what Kinora keeps',
           onTap: () => go('storage'),
         ),
         const SectionTitle('Help'),
         NavRow(
           label: 'Diagnostics',
+
+          icon: Icons.monitor_heart_outlined,
           value: 'App version and recent log',
           onTap: () => go('diagnostics'),
         ),
         NavRow(
           label: 'About Kinora',
+          icon: Icons.info_outline_rounded,
           value: 'Version $kinoraVersion',
           onTap: () => go('about'),
         ),
       ],
     );
   }
+}
+
+/// The Trakt row, kept current as the sign-in changes.
+class _TraktRow extends StatelessWidget implements SettingsRow {
+  const _TraktRow({required this.trakt, required this.onTap});
+
+  final TraktSync trakt;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: trakt,
+    builder: (_, _) => NavRow(
+      label: 'Trakt',
+      icon: Icons.sync_alt_rounded,
+      value: !trakt.available
+          ? 'Not in this version'
+          : trakt.signedIn
+          ? 'Syncing as ${trakt.user}'
+          : 'Sign in to keep what you watch the same everywhere',
+      onTap: onTap,
+    ),
+  );
 }

@@ -56,13 +56,80 @@ class SettingsPage extends StatelessWidget {
         ),
         if (intro != null) Note(intro!, top: PageHeader.gap),
         const SizedBox(height: KSpace.x2),
-        ...children,
+        ..._grouped(children),
       ],
     ),
   );
 }
 
 /// A group title inside a page.
+/// A row that sits in a settings panel (with the rows around it).
+abstract interface class SettingsRow implements Widget {}
+
+/// Consecutive setting rows share one panel card, divided by hairlines;
+/// everything else (titles, notes, fields) sits between the panels.
+List<Widget> _grouped(List<Widget> children) {
+  final out = <Widget>[];
+  var run = <Widget>[];
+  void flush() {
+    if (run.isEmpty) return;
+    out.add(_RowGroup(rows: run));
+    run = [];
+  }
+
+  for (final c in children) {
+    if (c is SettingsRow) {
+      run.add(c);
+    } else {
+      flush();
+      out.add(c);
+    }
+  }
+  flush();
+  return out;
+}
+
+class _RowGroup extends StatelessWidget {
+  const _RowGroup({required this.rows});
+
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      KSpace.margin,
+      KSpace.x2,
+      KSpace.margin,
+      KSpace.x2,
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(KRadius.panel),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: KColors.panel,
+          border: Border.all(color: KColors.edge),
+          borderRadius: BorderRadius.circular(KRadius.panel),
+        ),
+        child: Column(
+          children: [
+            for (final (i, r) in rows.indexed) ...[
+              if (i > 0)
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: KColors.divider,
+                ),
+              r,
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {super.key});
 
@@ -71,12 +138,19 @@ class SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(
-      KSpace.margin,
-      KSpace.section,
+      KSpace.margin + 4,
+      KSpace.x4,
       KSpace.margin,
       KSpace.x1,
     ),
-    child: Semantics(header: true, child: Text(text, style: KType.h2)),
+    child: Semantics(
+      header: true,
+      child: Text(
+        text.toUpperCase(),
+        semanticsLabel: text,
+        style: KType.eyebrow,
+      ),
+    ),
   );
 }
 
@@ -123,24 +197,25 @@ class _Labels extends StatelessWidget {
   );
 }
 
-const _rowPadding = EdgeInsets.symmetric(
-  horizontal: KSpace.margin,
-  vertical: KSpace.x3,
-);
+const _rowPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 10);
 
 /// A row that opens a sub-page; its current value sits under the label so
 /// long values and large text never collide.
-class NavRow extends StatelessWidget {
+class NavRow extends StatelessWidget implements SettingsRow {
   const NavRow({
     super.key,
     required this.label,
     required this.onTap,
     this.value,
+    this.icon,
   });
 
   final String label;
   final String? value;
   final VoidCallback onTap;
+
+  /// Shown in a small mono tile before the label.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) => Pressable(
@@ -152,6 +227,19 @@ class NavRow extends StatelessWidget {
         padding: _rowPadding,
         child: Row(
           children: [
+            if (icon != null) ...[
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: KColors.raised,
+                  border: Border.all(color: KColors.fieldEdge),
+                  borderRadius: BorderRadius.circular(KRadius.button),
+                ),
+                child: Icon(icon, size: 18, color: KColors.body),
+              ),
+              const SizedBox(width: 14),
+            ],
             Expanded(
               child: _Labels(label: label, detail: value),
             ),
@@ -165,7 +253,7 @@ class NavRow extends StatelessWidget {
 }
 
 /// A plain tappable row (an action, not a setting).
-class ActionRow extends StatelessWidget {
+class ActionRow extends StatelessWidget implements SettingsRow {
   const ActionRow({
     super.key,
     required this.icon,
@@ -208,7 +296,7 @@ class ActionRow extends StatelessWidget {
 }
 
 /// An on/off setting: the whole row toggles.
-class SwitchRow extends StatelessWidget {
+class SwitchRow extends StatelessWidget implements SettingsRow {
   const SwitchRow({
     super.key,
     required this.label,
@@ -251,7 +339,7 @@ class SwitchRow extends StatelessWidget {
 }
 
 /// One of several mutually exclusive choices (with a check when chosen).
-class ChoiceRow extends StatelessWidget {
+class ChoiceRow extends StatelessWidget implements SettingsRow {
   const ChoiceRow({
     super.key,
     required this.label,
@@ -439,9 +527,10 @@ class GlassField extends StatelessWidget {
         const SizedBox(height: KSpace.x2),
         GlassGroup(
           child: Glass(
+            radius: KRadius.button,
             tintStrength: 0.06,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 52),
+              constraints: const BoxConstraints(minHeight: 48),
               child: Row(
                 children: [
                   const SizedBox(width: KSpace.x4 + 2),
