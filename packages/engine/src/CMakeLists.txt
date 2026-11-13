@@ -63,17 +63,16 @@ target_compile_definitions(kinora_engine PRIVATE
   OPENSSL_NO_SSL2 OPENSSL_NO_SSL3 OPENSSL_NO_TLS1 OPENSSL_NO_TLS1_1 OPENSSL_NO_DTLS1)
 
 if(WIN32)
-  # Windows adds its own flags to libtorrent's (_WIN32_WINNT and such): take
-  # every define from its pkg-config file.
-  file(STRINGS "${KN_PREBUILT}/lib/pkgconfig/libtorrent-rasterbar.pc" KN_PC_CFLAGS
-       REGEX "^Cflags:")
-  string(REGEX MATCHALL "-D[^ \"]+" KN_PC_DEFINES "${KN_PC_CFLAGS}")
-  list(TRANSFORM KN_PC_DEFINES REPLACE "^-D" "")
-  message(STATUS "kinora_engine: libtorrent defines ${KN_PC_DEFINES}")
+  # libtorrent's public Windows defines (its CMakeLists, v2.1.2; vcpkg bakes
+  # the OpenSSL and ABI ones into config.hpp), and the Windows version it
+  # targets: Boost.Asio's types depend on it.
   target_compile_definitions(kinora_engine PRIVATE
-    ${KN_PC_DEFINES} WIN32_LEAN_AND_MEAN NOMINMAX BOOST_ALL_NO_LIB
+    _WIN32_WINNT=0x0A00 BOOST_ASIO_ENABLE_CANCELIO WIN32_LEAN_AND_MEAN NOMINMAX
+    BOOST_ALL_NO_LIB _SCL_SECURE_NO_DEPRECATE _CRT_SECURE_NO_DEPRECATE
+    _SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING
     $<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=0>)
-  target_compile_options(kinora_engine PRIVATE /EHsc /GR /O2 /utf-8 /bigobj)
+  target_compile_options(kinora_engine PRIVATE
+    /EHsc /GR /O2 /utf-8 /bigobj /permissive- /Zc:__cplusplus)
   file(GLOB KN_LIBS "${KN_PREBUILT}/lib/*.lib")
   target_link_libraries(kinora_engine PRIVATE
     ${KN_LIBS} ws2_32 mswsock iphlpapi crypt32 bcrypt dbghelp advapi32 user32)
