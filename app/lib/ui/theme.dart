@@ -62,6 +62,7 @@ ThemeData kinoraTheme() {
       builders: {
         TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
       },
     ),
     sliderTheme: SliderThemeData(

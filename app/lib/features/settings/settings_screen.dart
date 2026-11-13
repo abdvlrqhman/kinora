@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/desktop.dart';
 import '../../app/providers.dart';
+import '../../app/router.dart' show pageRoute;
 import '../../services/trakt.dart';
 import '../../services/sources.dart';
 import '../../services/subtitles_service.dart';
@@ -20,23 +21,21 @@ import 'widgets/settings_ui.dart';
 
 /// Sub-pages of Settings, under `/settings`.
 final List<RouteBase> settingsRoutes = [
-  GoRoute(path: 'sources', builder: (_, _) => const SourcesPage()),
-  GoRoute(
-    path: 'languages',
-    builder: (_, _) => const LanguagesPage(),
-    routes: [
-      GoRoute(path: 'style', builder: (_, _) => const SubtitleStylePage()),
-    ],
+  pageRoute('sources', (_) => const SourcesPage()),
+  pageRoute(
+    'languages',
+    (_) => const LanguagesPage(),
+    routes: [pageRoute('style', (_) => const SubtitleStylePage())],
   ),
-  GoRoute(path: 'subtitle-sites', builder: (_, _) => const SubtitleSitesPage()),
-  GoRoute(path: 'trakt', builder: (_, _) => const TraktPage()),
-  GoRoute(path: 'backup', builder: (_, _) => const BackupPage()),
-  GoRoute(path: 'playback', builder: (_, _) => const PlaybackPage()),
-  GoRoute(path: 'downloads', builder: (_, _) => const DownloadSettingsPage()),
-  GoRoute(path: 'network', builder: (_, _) => const NetworkPage()),
-  GoRoute(path: 'storage', builder: (_, _) => const StoragePage()),
-  GoRoute(path: 'diagnostics', builder: (_, _) => const DiagnosticsPage()),
-  GoRoute(path: 'about', builder: (_, _) => const AboutPage()),
+  pageRoute('subtitle-sites', (_) => const SubtitleSitesPage()),
+  pageRoute('trakt', (_) => const TraktPage()),
+  pageRoute('backup', (_) => const BackupPage()),
+  pageRoute('playback', (_) => const PlaybackPage()),
+  pageRoute('downloads', (_) => const DownloadSettingsPage()),
+  pageRoute('network', (_) => const NetworkPage()),
+  pageRoute('storage', (_) => const StoragePage()),
+  pageRoute('diagnostics', (_) => const DiagnosticsPage()),
+  pageRoute('about', (_) => const AboutPage()),
 ];
 
 /// "3 sources, all on", "3 sources, 2 on", "1 source, off".

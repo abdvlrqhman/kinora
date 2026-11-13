@@ -100,10 +100,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      GoRoute(
-        path: '/title/:type/:id',
+      pageRoute(
+        '/title/:type/:id',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (_, state) => TitleScreen(
+        (state) => TitleScreen(
           type: state.pathParameters['type']!,
           id: state.pathParameters['id']!,
         ),
@@ -141,6 +141,26 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(router.dispose);
   return router;
 });
+
+/// A route whose page moves the platform's way (iPhone: it slides in, and a
+/// swipe from the left edge goes back). go_router would build pages with no
+/// transition at all: it looks for material_ui's MaterialApp, not Flutter's.
+GoRoute pageRoute(
+  String path,
+  Widget Function(GoRouterState state) page, {
+  GlobalKey<NavigatorState>? parentNavigatorKey,
+  List<RouteBase> routes = const [],
+}) => GoRoute(
+  path: path,
+  parentNavigatorKey: parentNavigatorKey,
+  routes: routes,
+  pageBuilder: (_, state) => MaterialPage<void>(
+    key: state.pageKey,
+    name: state.name ?? state.path,
+    restorationId: state.pageKey.value,
+    child: page(state),
+  ),
+);
 
 /// Opens a title page.
 void openTitle(
