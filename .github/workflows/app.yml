@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['**.md', 'docs/**', '.github/ISSUE_TEMPLATE/**', 'tools/glass_probe/**', '.github/workflows/glass.yml']
+    paths-ignore: ['**.md', 'docs/**', '.github/ISSUE_TEMPLATE/**']
   pull_request:
   workflow_dispatch:
 
@@ -141,7 +141,6 @@ jobs:
           # (Output kept in e2e.log: the player screenshots come out of it.)
           script: |
             bash -o pipefail -c 'cd app && flutter test integration_test/app_test.dart -d emulator-5554 --reporter expanded 2>&1 | tee ../e2e.log'
-            cd app && (timeout 600 flutter test integration_test/glass_test.dart -d emulator-5554 --reporter expanded || echo "::warning::Real liquid glass did not render on the emulator (see log)")
       - name: Player screenshots from the run
         if: always()
         run: python3 .github/scripts/e2e_shots.py e2e.log e2e-shots

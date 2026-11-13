@@ -13,7 +13,6 @@ import '../../core/log.dart';
 import '../../services/sources.dart';
 import '../../services/subtitles_service.dart';
 import '../../ui/glass.dart';
-import '../../ui/glass_mode.dart';
 import '../../ui/tokens.dart';
 import '../updates/update_prompt.dart';
 import 'widgets/settings_ui.dart';
@@ -88,7 +87,6 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
       'Kinora $kinoraVersion',
       'Engine ${ref.read(engineVersionProvider) ?? 'not available'}',
       'System ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
-      'Glass: $glassReason',
       'Sources: ${[for (final a in addons) '${a.name}${a.enabled ? '' : ' (off)'}'].join(', ')}',
       'Settings: ${jsonEncode(settings)}',
       '',
@@ -118,30 +116,6 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
       children: [
         const _Fact('App version', kinoraVersion),
         _Fact('Engine version', engine ?? 'Not available on this device'),
-        _Fact('Glass', glassReason),
-        if (glassFailed)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              KSpace.margin,
-              KSpace.x2,
-              KSpace.margin,
-              0,
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: GlassGroup(
-                child: GlassButton(
-                  label: 'Try liquid glass again',
-                  onPressed: () async {
-                    await retryGlass(ref.read(databaseProvider));
-                    if (context.mounted) {
-                      showNote(context, 'Liquid glass returns next launch.');
-                    }
-                  },
-                ),
-              ),
-            ),
-          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             KSpace.margin,

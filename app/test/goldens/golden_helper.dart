@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 /// Loads every font in the app's FontManifest (BigShoulders, Figtree and
 /// MaterialIcons) under its pubspec family name, so goldens show real type.
@@ -29,11 +28,6 @@ String art(String name) =>
 /// iPhone-sized safe areas (status bar, home indicator) at 3x.
 void phoneInsets(WidgetTester tester) =>
     tester.view.padding = const FakeViewPadding(top: 141, bottom: 102);
-
-/// Loads glass shaders for real (outside fake async), before the screen
-/// mounts.
-Future<void> warmUp(WidgetTester tester) =>
-    tester.runAsync(LiquidGlass.precache);
 
 /// Lets every image on screen load and decode for real, then settles.
 /// Loads start inside the test's fake-async zone, so their callbacks only

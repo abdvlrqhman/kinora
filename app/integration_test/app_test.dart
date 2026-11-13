@@ -35,7 +35,6 @@ import 'package:kinora/services/play_request.dart';
 import 'package:kinora/services/playback.dart';
 import 'package:kinora/services/resolver.dart';
 import 'package:kinora/services/sources.dart';
-import 'package:kinora/ui/glass_mode.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -112,11 +111,6 @@ void main() {
     await paths.ensure();
     final db = AppDatabase.forExecutor(NativeDatabase.memory());
     addTearDown(db.close);
-    // The same check as a real launch: emulators draw with OpenGL ES, so
-    // this must choose frosted glass (real glass would stall the frames).
-    await decideGlass(db);
-    // ignore: avoid_print
-    print('E2E glass: $glassReason');
     final container = ProviderContainer(
       overrides: [
         ...appOverrides(

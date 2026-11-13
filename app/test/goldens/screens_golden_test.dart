@@ -95,7 +95,6 @@ void main() {
   Future<Nav> pumpTitle(WidgetTester tester) async {
     final db = testDb();
     await seedSeries(db);
-    await warmUp(tester);
     final nav = await pumpScreen(
       tester,
       const TitleScreen(type: 'series', id: 'tt200'),
@@ -210,8 +209,6 @@ void main() {
         background: art('neon_backdrop'),
       ),
     ]);
-
-    await warmUp(tester);
     await tester.pumpWidget(
       ProviderScope(
         retry: (_, _) => null,
@@ -405,7 +402,6 @@ void main() {
       ..devicePixelRatio = 3;
     final db = testDb();
     await seedSeries(db);
-    await warmUp(tester);
     await pumpScreen(
       tester,
       const TitleScreen(type: 'series', id: 'tt200'),
@@ -550,7 +546,6 @@ void main() {
         year: '2018',
       ),
     ];
-    await warmUp(tester);
     await pumpScreen(
       tester,
       const SearchScreen(),

@@ -30,7 +30,6 @@ dependencies:
     path: ../packages/release_parser
   ranking:
     path: ../packages/ranking
-  liquid_glass_renderer: 1.0.0-dev.2
   media_kit: ^1.2.6
   media_kit_libs_video: ^1.0.7
   media_kit_video: ^2.0.1
