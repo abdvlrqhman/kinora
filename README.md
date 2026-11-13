@@ -126,7 +126,8 @@ Kinora has no accounts, no analytics and no ads. It only connects to:
 
 - the sources and subtitle sites you add;
 - TMDB, if you add a key;
-- Trakt, if you sign in;
+- Trakt, if you sign in: what you play, your progress and your watchlist
+  sync with your Trakt account, and signing out of Kinora revokes its access;
 - the torrent swarm, plus a public tracker list it refreshes daily;
 - GitHub, once per launch, to check for a new version (you can turn this
   off).
@@ -261,3 +262,6 @@ Type: [Unbounded](https://fonts.google.com/specimen/Unbounded),
 SIL Open Font License.
 
 Powered by [Spacie](https://spacie.net).
+
+Kinora uses [Trakt](https://trakt.tv) but is not endorsed or certified by
+Trakt.
