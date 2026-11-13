@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show kBackMouseButton;
 import 'package:flutter/material.dart';
@@ -34,14 +35,34 @@ Future<void> keepPhoneUpright() {
   );
 }
 
+/// The window's first size and smallest size on a screen of [screen]
+/// (logical pixels): 1280 × 800 and 960 × 640, shrunk to fit a small or
+/// scaled-up screen with room for the taskbar (a 1366 × 768 laptop at
+/// 125 % is 1093 × 614).
+({Size size, Size minimum}) windowSizes(Size screen) {
+  if (screen.isEmpty) {
+    return (size: const Size(1280, 800), minimum: const Size(960, 640));
+  }
+  final fit = Size(screen.width * 0.92, screen.height * 0.85);
+  Size within(Size s) =>
+      Size(math.min(s.width, fit.width), math.min(s.height, fit.height));
+  return (
+    size: within(const Size(1280, 800)),
+    minimum: within(const Size(960, 640)),
+  );
+}
+
 /// Opens the window without the system frame, sized for watching.
 Future<void> initDesktopWindow() async {
   await windowManager.ensureInitialized();
+  final display =
+      WidgetsBinding.instance.platformDispatcher.views.first.display;
+  final sizes = windowSizes(display.size / display.devicePixelRatio);
   await windowManager.waitUntilReadyToShow(
-    const WindowOptions(
+    WindowOptions(
       title: 'Kinora',
-      size: Size(1280, 800),
-      minimumSize: Size(960, 640),
+      size: sizes.size,
+      minimumSize: sizes.minimum,
       center: true,
       backgroundColor: KColors.blackout,
       titleBarStyle: TitleBarStyle.hidden,

@@ -312,12 +312,14 @@ class _WideNavState extends ConsumerState<WideNav> {
   void initState() {
     super.initState();
     _router.routeInformationProvider.addListener(_changed);
+    _router.routerDelegate.addListener(_stackChanged);
     windowFullScreen.addListener(_changed);
   }
 
   @override
   void dispose() {
     _router.routeInformationProvider.removeListener(_changed);
+    _router.routerDelegate.removeListener(_stackChanged);
     windowFullScreen.removeListener(_changed);
     super.dispose();
   }
@@ -326,7 +328,17 @@ class _WideNavState extends ConsumerState<WideNav> {
     if (mounted) setState(() {});
   }
 
-  String get _path => _router.routeInformationProvider.value.uri.path;
+  // The delegate can announce its pages mid-build: update right after.
+  void _stackChanged() => scheduleMicrotask(_changed);
+
+  /// Where the router really is: the address before a redirect (the first
+  /// launch goes to onboarding) would draw the sidebar around it.
+  String get _path {
+    // (The top page's own address: a pushed title, not the tab under it.)
+    return _router.routerDelegate.currentConfiguration.isEmpty
+        ? _router.routeInformationProvider.value.uri.path
+        : _router.state.uri.path;
+  }
 
   int get _tab => switch (_path) {
     final p when p.startsWith('/search') => 1,
