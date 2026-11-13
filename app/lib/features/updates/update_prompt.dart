@@ -146,8 +146,8 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
             Platform.isIOS
                 ? 'You have $kinoraVersion. SideStore opens to install it.'
                 : Platform.isWindows
-                ? 'You have $kinoraVersion. Your browser downloads it: close '
-                      'Kinora, then unzip it over this one.'
+                ? 'You have $kinoraVersion. Your browser downloads the '
+                      'installer: open it, and it updates Kinora.'
                 : 'You have $kinoraVersion.',
             style: KType.body.copyWith(color: KColors.haze),
           ),

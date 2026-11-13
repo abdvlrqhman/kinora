@@ -280,13 +280,28 @@ jobs:
           done
           ls dist/Kinora
           cd dist && 7z a -tzip -bd Kinora-windows-x64.zip Kinora >/dev/null && ls -la
-      # Starts the real build: it must stay up and show its window (a
-      # missing DLL, a crash or a window that never appears fails here, not
-      # on someone's PC). The screenshot is the first launch as people see it.
-      - name: Launch smoke test
+      # The installer people download (the zip stays, for a portable copy).
+      - name: Windows installer
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist/Kinora/Kinora.exe -PassThru
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version: ([0-9.]+)').Matches[0].Groups[1].Value
+          & $iscc /Q "/DAppVersion=$version" windows/installer/kinora.iss
+          if ($LASTEXITCODE -ne 0) { Write-Error "The installer didn't build"; exit 1 }
+          Get-Item dist/Kinora-Setup-x64.exe | Format-List Name, Length
+      # Installs it as a person would, then starts the installed Kinora: it
+      # must stay up and show its window (a missing DLL, a crash or a window
+      # that never appears fails here, not on someone's PC). The screenshot is
+      # the first launch as people see it. Then uninstalling must remove it.
+      - name: Install, launch and uninstall
+        shell: pwsh
+        run: |
+          Start-Process -FilePath dist/Kinora-Setup-x64.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          $dir = "$env:LOCALAPPDATA\Programs\Kinora"
+          if (-not (Test-Path "$dir\Kinora.exe")) { Write-Error "The installer didn't install Kinora.exe"; exit 1 }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Kinora.lnk")) { Write-Error "No Start menu entry"; exit 1 }
+          $p = Start-Process -FilePath "$dir\Kinora.exe" -PassThru
           Start-Sleep -Seconds 25
           $p.Refresh()
           if ($p.HasExited) { Write-Error "Kinora.exe exited at launch"; exit 1 }
@@ -297,6 +312,12 @@ jobs:
           [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $bmp.Save("$PWD/dist/first-launch.png")
           Stop-Process -Id $p.Id -Force
+          Start-Sleep -Seconds 2
+          Start-Process -FilePath "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          # (The uninstaller hands over to a copy of itself and returns early.)
+          for ($i = 0; $i -lt 30 -and (Test-Path "$dir\Kinora.exe"); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path "$dir\Kinora.exe") { Write-Error "Uninstalling left Kinora.exe behind"; exit 1 }
+          Write-Output 'Installed, launched and uninstalled'
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -307,7 +328,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: kinora-windows
-          path: app/dist/Kinora-windows-x64.zip
+          path: |
+            app/dist/Kinora-Setup-x64.exe
+            app/dist/Kinora-windows-x64.zip
           if-no-files-found: error
 
   e2e-windows:
@@ -332,7 +355,9 @@ jobs:
       - name: Run the end-to-end test on Windows
         run: |
           set -o pipefail
-          cd app && flutter test integration_test/app_test.dart -d windows --reporter expanded 2>&1 | tee ../e2e.log
+          # (Real-screen shots of full screen land with the player's.)
+          cd app && flutter test integration_test/app_test.dart -d windows --reporter expanded \
+            --dart-define=KINORA_OS_SHOTS="$GITHUB_WORKSPACE/e2e-shots" 2>&1 | tee ../e2e.log
       - name: Player screenshots from the run
         if: always()
         run: python .github/scripts/e2e_shots.py e2e.log e2e-shots

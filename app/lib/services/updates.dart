@@ -39,6 +39,8 @@ final class KinoraRelease {
 
   Uri? get ipa => assets['Kinora.ipa'];
 
+  Uri? get windowsSetup => assets['Kinora-Setup-x64.exe'];
+
   Uri? get windowsZip => assets['Kinora-windows-x64.zip'];
 
   /// Parses GitHub's latest-release response.
@@ -171,10 +173,10 @@ Future<bool> installAndroid(
   }
 }
 
-/// Windows: the browser downloads the new version's zip (or opens the
-/// release page when this release has none).
+/// Windows: the browser downloads the new version's installer (older
+/// releases: the zip; none: the release page).
 Future<void> installWindows(KinoraRelease release) => launchUrl(
-  release.windowsZip ?? release.page,
+  release.windowsSetup ?? release.windowsZip ?? release.page,
   mode: LaunchMode.externalApplication,
 );
 

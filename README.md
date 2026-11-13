@@ -14,7 +14,7 @@
   &nbsp;&nbsp;&nbsp;
   <a href="https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-arm64-v8a-release.apk"><b>Download for Android</b></a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-windows-x64.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-Setup-x64.exe"><b>Download for Windows</b></a>
 </p>
 
 Kinora plays movies and shows from torrents and debrid services in one player.
@@ -89,13 +89,16 @@ refreshes them. If Kinora stops opening, open SideStore and refresh it.
 
 **Windows 10 or 11 (64-bit)**
 
-1. Download [`Kinora-windows-x64.zip`](https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-windows-x64.zip)
-   and unzip it anywhere, for example in your Documents.
-2. Open `Kinora.exe` in the `Kinora` folder. The app isn't code-signed, so
-   Windows may say it protected your PC: choose **More info**, then **Run
-   anyway**.
-3. When Kinora offers an update, it downloads the new zip: close Kinora and
-   unzip it over the old folder. Your library and settings stay.
+1. Download [`Kinora-Setup-x64.exe`](https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-Setup-x64.exe)
+   and open it. Kinora isn't code-signed, so Windows may say it protected
+   your PC: choose **More info**, then **Run anyway**.
+2. It installs for you alone (no administrator needed), with Kinora in the
+   Start menu. Remove it from **Settings › Apps** like any other app.
+3. When Kinora offers an update, open the installer it downloads: it updates
+   Kinora in place. Your library and settings stay, also if you uninstall.
+
+Prefer no installer? [`Kinora-windows-x64.zip`](https://github.com/abdvlrqhman/kinora/releases/latest/download/Kinora-windows-x64.zip)
+is the same app: unzip it anywhere and open `Kinora.exe`.
 
 <p align="center">
   <img src="docs/desktop.png" alt="Kinora on Windows: the sidebar, featured titles and Keep watching." width="100%">
@@ -192,7 +195,7 @@ second.
 
 Everything builds in GitHub Actions, so you don't need a Mac, a Windows PC
 or a local toolchain. Fork the repo, and the `app` workflow builds the APKs,
-the IPA and the Windows zip, and runs every test, including the end-to-end
+the IPA and the Windows installer and zip, and runs every test, including the end-to-end
 tests on an Android emulator, an iPhone simulator and Windows.
 
 To work locally you need [Flutter 3.47.7](https://docs.flutter.dev/install).
@@ -216,7 +219,7 @@ gh run download <run-id> -n libtorrent-arm64-ios     -D packages/engine/ios/preb
 
 | Workflow | What it does |
 |---|---|
-| `app` | Analyzes and tests the app and every package. Builds the Android APKs, the unsigned iPhone IPA and the Windows zip (and starts it once), and runs the end-to-end test on an Android emulator, an iPhone simulator and Windows. Tagging `vX.Y.Z` publishes a release. |
+| `app` | Analyzes and tests the app and every package. Builds the Android APKs, the unsigned iPhone IPA and the Windows installer and zip (installs, starts and uninstalls it once), and runs the end-to-end test on an Android emulator, an iPhone simulator and Windows. Tagging `vX.Y.Z` publishes a release. |
 | `engine` | Builds libtorrent 2.1 with OpenSSL and Boost for Android, iPhone (and its simulator), Linux and Windows, then runs a native end-to-end test of the engine on Linux and Windows. |
 
 ## Repository

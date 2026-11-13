@@ -16,6 +16,8 @@ Map<String, Object?> _release(String tag) => {
       'Kinora-arm64-v8a-release.apk',
       'Kinora-armeabi-v7a-release.apk',
       'Kinora.ipa',
+      'Kinora-Setup-x64.exe',
+      'Kinora-windows-x64.zip',
     ])
       {
         'name': name,
@@ -45,6 +47,9 @@ void main() {
       endsWith('armeabi-v7a-release.apk'),
     );
     expect(r.ipa.toString(), endsWith('Kinora.ipa'));
+    // Windows updates with the installer; the zip stays for portable copies.
+    expect(r.windowsSetup.toString(), endsWith('Kinora-Setup-x64.exe'));
+    expect(r.windowsZip.toString(), endsWith('Kinora-windows-x64.zip'));
     expect(
       KinoraRelease.fromJson({..._release('v1.0.0'), 'draft': true}),
       isNull,
