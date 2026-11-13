@@ -3,20 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../services/trakt.dart';
-import '../trakt/trakt_ui.dart';
 import '../../app/providers.dart';
 import '../../services/cast_service.dart';
 import '../../services/sources.dart';
 import '../../services/subtitles_service.dart';
+import '../../services/trakt.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
 import '../cast/cast_picker.dart';
+import '../settings/backup_page.dart';
 import '../settings/languages.dart';
 import '../settings/sources.dart';
 import '../settings/subtitle_sites.dart';
 import '../settings/widgets/settings_ui.dart';
+import '../trakt/trakt_ui.dart';
 
 /// First run: welcome, languages, sources, instant playback (debrid),
 /// subtitle sites, your TV, done. Every step after the welcome can be
@@ -88,6 +89,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 'and they bring catalogs, streams and '
                                 'subtitles.',
                             children: [
+                              _RestoreRow(),
                               AddAddonField(),
                               SectionTitle('Start with these'),
                               SuggestedAddons(),
@@ -475,4 +477,17 @@ class _Done extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Onboarding's way in for people who already set Kinora up elsewhere.
+class _RestoreRow extends StatelessWidget {
+  const _RestoreRow();
+
+  @override
+  Widget build(BuildContext context) => ActionRow(
+    icon: Icons.settings_backup_restore_rounded,
+    label: 'Moving from another device?',
+    detail: 'Restore your sources and keys from a backup code.',
+    onTap: () => unawaited(showRestoreSheet(context)),
+  );
 }

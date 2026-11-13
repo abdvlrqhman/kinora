@@ -9,6 +9,7 @@ import '../../services/subtitles_service.dart';
 import 'help_pages.dart';
 import 'languages.dart';
 import 'preference_pages.dart';
+import 'backup_page.dart';
 import 'trakt_page.dart';
 import 'sources.dart';
 import 'storage_page.dart';
@@ -28,6 +29,7 @@ final List<RouteBase> settingsRoutes = [
   ),
   GoRoute(path: 'subtitle-sites', builder: (_, _) => const SubtitleSitesPage()),
   GoRoute(path: 'trakt', builder: (_, _) => const TraktPage()),
+  GoRoute(path: 'backup', builder: (_, _) => const BackupPage()),
   GoRoute(path: 'playback', builder: (_, _) => const PlaybackPage()),
   GoRoute(path: 'downloads', builder: (_, _) => const DownloadSettingsPage()),
   GoRoute(path: 'network', builder: (_, _) => const NetworkPage()),
@@ -76,6 +78,11 @@ class SettingsScreen extends ConsumerWidget {
                 : 'Sign in to keep what you watch the same everywhere',
             onTap: () => go('trakt'),
           ),
+        ),
+        NavRow(
+          label: 'Backup',
+          value: 'Move your sources and keys to another device',
+          onTap: () => go('backup'),
         ),
         const SectionTitle('Watching'),
         NavRow(

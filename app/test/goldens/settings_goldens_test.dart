@@ -115,6 +115,30 @@ void main() {
     );
   });
 
+  kitTest('backup', (tester) async {
+    await phone(tester);
+    await pumpKit(tester, location: '/settings/backup');
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('backup.png'),
+    );
+  });
+
+  kitTest('onboarding: add your sources', (tester) async {
+    await phone(tester);
+    await pumpKit(tester, location: '/onboarding');
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(find.byKey(const ValueKey('onboarding-next')));
+      await tester.pumpAndSettle();
+    }
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('onboarding_sources.png'),
+    );
+  });
+
   kitTest('subtitle style', (tester) async {
     await phone(tester);
     await pumpKit(
