@@ -140,6 +140,7 @@ final class BackgroundKeeper {
     if (!Platform.isIOS) return;
     _ios.setMethodCallHandler((call) async {
       if (call.method == 'open') open(call.arguments as String);
+      if (call.method == 'log') Log.i('background', call.arguments as String);
     });
     unawaited(
       _iosCall<String>('takeOpen').then((what) {

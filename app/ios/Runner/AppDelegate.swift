@@ -138,6 +138,7 @@ final class KinoraBackground {
       case "askNotifications":
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
           DispatchQueue.main.async { result(granted) }
+          self.logSettings("asked about notifications: \(granted ? "allowed" : "not allowed")")
         }
       case "takeOpen":
         result(self.pendingOpen)
@@ -158,6 +159,24 @@ final class KinoraBackground {
     shownAt = Date()
     shownTitle = s.title
     notify(id: Self.statusId, title: s.title, text: s.text, open: s.open, quiet: true)
+    if now { logSettings("status shown in the background: \(s.title)") }
+  }
+
+  /// Into Kinora's diagnostics: what iPhone lets its notices do.
+  private func logSettings(_ what: String) {
+    UNUserNotificationCenter.current().getNotificationSettings { [weak self] n in
+      let allowed = ["not asked", "denied", "allowed", "provisional", "ephemeral"]
+      let on = ["n/a", "off", "on"]
+      func word(_ list: [String], _ raw: Int) -> String { raw < list.count ? list[raw] : "\(raw)" }
+      self?.log("\(what); notifications \(word(allowed, n.authorizationStatus.rawValue)), "
+        + "lock screen \(word(on, n.lockScreenSetting.rawValue)), "
+        + "list \(word(on, n.notificationCenterSetting.rawValue)), "
+        + "banners \(word(on, n.alertSetting.rawValue))")
+    }
+  }
+
+  private func log(_ message: String) {
+    DispatchQueue.main.async { [weak self] in self?.channel?.invokeMethod("log", arguments: message) }
   }
 
   private func hideStatus() {
@@ -177,8 +196,8 @@ final class KinoraBackground {
     content.relevanceScore = quiet ? 0.3 : 0.6
     UNUserNotificationCenter.current().add(
       UNNotificationRequest(identifier: id, content: content, trigger: nil)
-    ) { error in
-      if let error = error { NSLog("Kinora: notice failed: \(error)") }
+    ) { [weak self] error in
+      if let error = error { self?.log("notice failed: \(error.localizedDescription)") }
     }
   }
 

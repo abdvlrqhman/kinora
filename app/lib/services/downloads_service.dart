@@ -1026,6 +1026,31 @@ final class DownloadsService implements DownloadActions {
           case TaskStatus.canceled:
         }
     }
+    await _linkStatus();
+  }
+
+  /// The status of link (debrid) downloads, when no torrent is downloading
+  /// (the torrent tick shows its own then).
+  Future<void> _linkStatus() async {
+    final rows = await (_db.select(
+      _db.downloads,
+    )..where((t) => t.state.equals('downloading'))).get();
+    if (rows.any((r) => r.kind == 'torrent')) return;
+    final links = rows.where((r) => r.kind == 'http').toList();
+    if (links.isEmpty) return _refreshKeepAlive();
+    final total = links.fold(0, (sum, r) => sum + r.totalBytes);
+    final done = links.fold(0, (sum, r) => sum + r.doneBytes);
+    await BackgroundKeeper.instance.hold(
+      'downloads',
+      title: links.length == 1
+          ? 'Downloading ${_label(links.first)}'
+          : 'Downloading ${links.length} videos',
+      text: total > 0
+          ? '${(done * 100 / total).toStringAsFixed(0)}%  '
+                '${Fmt.bytes(done)} of ${Fmt.bytes(total)}'
+          : 'Starting',
+      progress: total > 0 ? done / total : null,
+    );
   }
 
   // ------------------------------------------------------------- network --
@@ -1114,9 +1139,9 @@ final class DownloadsService implements DownloadActions {
   });
 
   Future<void> _refreshKeepAlive() async {
-    final rows = await (_db.select(
-      _db.downloads,
-    )..where((t) => t.kind.equals('torrent'))).get();
+    // Links (debrid) too: they'd go on without Kinora, but its status
+    // notice (iPhone) only updates while Kinora runs.
+    final rows = await _db.select(_db.downloads).get();
     final active = rows.where((r) => r.state == 'downloading').length;
     // Rows waiting for Wi-Fi keep the app alive too, or nothing would resume
     // them when Wi-Fi returns while Kinora is in the background.
