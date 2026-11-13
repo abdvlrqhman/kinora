@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../core/log.dart';
 import '../ui/tokens.dart';
 import 'router.dart';
 import 'shell.dart' show focusSearch;
@@ -31,15 +32,18 @@ Future<void> keepPhoneUpright() async {
         WidgetsBinding.instance.platformDispatcher.views.first.display;
     final shortest = display.size.shortestSide / display.devicePixelRatio;
     // Unknown (no display yet): leave rotation as it is.
-    if (!shortest.isFinite || shortest <= 0) return;
+    if (!shortest.isFinite || shortest <= 0) {
+      Log.i('app', 'rotation: screen size not known yet');
+      return;
+    }
+    final phone = !isDesktop && shortest < 600;
+    Log.i('app', 'rotation: ${phone ? 'phone, upright' : 'free'}');
     await SystemChrome.setPreferredOrientations(
-      !isDesktop && shortest < 600
-          ? const [DeviceOrientation.portraitUp]
-          : const [],
+      phone ? const [DeviceOrientation.portraitUp] : const [],
     );
   } on Object catch (e) {
     // Rotation is a nicety: it never stops the app from starting.
-    debugPrint('keepPhoneUpright: $e');
+    Log.w('app', 'rotation: $e');
   }
 }
 

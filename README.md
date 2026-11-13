@@ -54,6 +54,8 @@ everywhere.
 - **Trakt, if you like.** Sign in with a code at trakt.tv (Kinora never sees
   your password): what you watched, where you stopped and your watchlist
   stay the same on every device, and in apps like Stremio and Kodi.
+  (Trakt is still reviewing Kinora for sign-in by everyone; until it
+  approves, sign-in works only for invited accounts.)
 - **Backup.** Move your sources and keys to another device as a code locked
   with a passphrase you choose. Kinora keeps no copy anywhere.
 - **On your computer too.** A Windows app in its own window, with a sidebar,

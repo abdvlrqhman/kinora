@@ -438,6 +438,19 @@ void main() {
     );
     addTearDown(downloads.close);
     container.read(routerProvider).pop();
+    if (!isDesktop) {
+      // Out of the player, a phone turns back upright.
+      await pumpUntil(
+        tester,
+        () {
+          final size = tester.view.physicalSize;
+          return size.height > size.width;
+        },
+        timeout: const Duration(seconds: 20),
+        reason: 'upright again after the player',
+        state: () => '${tester.view.physicalSize}',
+      );
+    }
     await pumpUntil(
       tester,
       () =>
