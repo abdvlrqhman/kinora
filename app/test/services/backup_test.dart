@@ -45,6 +45,24 @@ void main() {
     );
   });
 
+  test('a code cut short says so, not "wrong passphrase"', () async {
+    final code = await BackupCode.seal(
+      {'sources': List.filled(40, 'https://example.com/manifest.json')},
+      'correct horse',
+      iterations: 1000,
+    );
+    final cut = code.substring(0, code.length - 40);
+    String said(Object? e) => (e! as BackupException).message;
+    await expectLater(
+      BackupCode.open(cut, 'correct horse'),
+      throwsA(predicate((e) => said(e).contains('incomplete'))),
+    );
+    await expectLater(
+      BackupCode.open(cut, 'wrong horse'),
+      throwsA(predicate((e) => said(e).contains('Wrong passphrase'))),
+    );
+  });
+
   test('sources and keys move to another device', () async {
     Future<(ProviderContainer, AppDatabase, FakeSecureStorage)> device() async {
       final db = testDb();

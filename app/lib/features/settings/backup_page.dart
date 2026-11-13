@@ -278,6 +278,8 @@ class _RestoreState extends ConsumerState<RestoreBackupPanel> {
         label: 'Backup code',
         hint: '${BackupCode.prefix}…',
         paste: true,
+        // A code with a few sources runs past any usual field limit.
+        maxLength: null,
         fieldKey: const ValueKey('restore-code'),
       ),
       GlassField(

@@ -487,6 +487,7 @@ class GlassField extends StatelessWidget {
     this.keyboardType,
     this.inputFormatters,
     this.fieldKey,
+    this.maxLength = 2048,
   });
 
   final TextEditingController controller;
@@ -499,6 +500,9 @@ class GlassField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final Key? fieldKey;
+
+  /// Longer pastes are cut here (null: no limit, as for a backup code).
+  final int? maxLength;
 
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -546,7 +550,8 @@ class GlassField extends StatelessWidget {
                         onChanged: onChanged,
                         keyboardType: keyboardType,
                         inputFormatters: [
-                          LengthLimitingTextInputFormatter(2048),
+                          if (maxLength != null)
+                            LengthLimitingTextInputFormatter(maxLength),
                           ...?inputFormatters,
                         ],
                         style: KType.body,

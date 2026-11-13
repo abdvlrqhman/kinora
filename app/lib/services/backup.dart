@@ -94,8 +94,21 @@ abstract final class BackupCode {
           secretKey: key,
         );
       } on SecretBoxAuthenticationError {
-        throw const BackupException(
-          'Wrong passphrase, or the code was changed.',
+        // The right passphrase still opens the first bytes (gzip's header):
+        // then the code was cut short in copying, not mistyped.
+        final head = await AesCtr.with256bits(macAlgorithm: MacAlgorithm.empty)
+            .decrypt(
+              SecretBox(
+                bytes.sublist(33, 36),
+                nonce: [...bytes.sublist(21, 33), 0, 0, 0, 2],
+                mac: Mac.empty,
+              ),
+              secretKey: key,
+            );
+        throw BackupException(
+          head[0] == 0x1f && head[1] == 0x8b && head[2] == 0x08
+              ? 'The code is incomplete. Copy all of it again.'
+              : 'Wrong passphrase, or the code was changed.',
         );
       }
       return jsonDecode(utf8.decode(gzip.decode(plain)))
