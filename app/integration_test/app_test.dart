@@ -41,15 +41,31 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'support/fake_world.dart';
 
 /// The real screen (Windows), as the person sees it: how many colours its
-/// middle shows (a window that didn't redraw is one flat grey) and how
-/// bright its bottom strip is (where the taskbar sits). Saved into
-/// KINORA_OS_SHOTS for the run's artifacts.
-Future<({int colors, int bottom, String size})> osScreen(String name) async {
+/// middle shows (a window that didn't redraw is one flat grey), how bright
+/// its bottom strip is (where the taskbar sits), and the window in front:
+/// its process and its edges. Saved into KINORA_OS_SHOTS for the run's
+/// artifacts.
+Future<({int colors, int bottom, String size, int front, String rect})>
+osScreen(String name) async {
   const dir = String.fromEnvironment('KINORA_OS_SHOTS');
   final path = '${dir.isEmpty ? Directory.systemTemp.path : dir}/os-$name.png';
   final script =
       r'''
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class W {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p);
+  [StructLayout(LayoutKind.Sequential)] public struct R { public int L, T, Rt, B; }
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);
+}
+"@
+$h = [W]::GetForegroundWindow()
+$front = 0
+[void][W]::GetWindowThreadProcessId($h, [ref]$front)
+$r = New-Object W+R
+[void][W]::GetWindowRect($h, [ref]$r)
 $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
 [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
@@ -63,7 +79,7 @@ $sum = 0
 for ($i = 0; $i -lt 64; $i++) {
   $c = $bmp.GetPixel([int](($i + 0.5) * $b.Width / 64), $b.Height - 10)
   $sum += ($c.R + $c.G + $c.B) / 3 }
-"$($seen.Count) $([int]($sum / 64)) $($b.Width)x$($b.Height)"
+"$($seen.Count) $([int]($sum / 64)) $($b.Width)x$($b.Height) $front $($r.L),$($r.T),$($r.Rt),$($r.B)"
 '''
           .replaceAll('PATH', path);
   final r = await Process.run('powershell', [
@@ -73,10 +89,16 @@ for ($i = 0; $i -lt 64; $i++) {
     script,
   ]);
   final out = (r.stdout as String).trim().split(RegExp(r'\s+'));
-  if (r.exitCode != 0 || out.length < 3) {
-    throw StateError('screenshot failed: ${r.stderr}');
+  if (r.exitCode != 0 || out.length < 5) {
+    throw StateError('screenshot failed: ${r.stdout} ${r.stderr}');
   }
-  return (colors: int.parse(out[0]), bottom: int.parse(out[1]), size: out[2]);
+  return (
+    colors: int.parse(out[0]),
+    bottom: int.parse(out[1]),
+    size: out[2],
+    front: int.parse(out[3]),
+    rect: out[4],
+  );
 }
 
 Future<void> pumpUntil(
@@ -329,13 +351,20 @@ void main() {
       await mouse.moveTo(screen.center + const Offset(12, 12));
       await tester.pump(const Duration(milliseconds: 600));
       // Full screen from its button fills the display with the picture, as
-      // seen on the real screen; Esc brings the window back.
+      // seen on the real screen; Esc brings the window back. (The test
+      // starts the app without main(), which sets up and shows the window:
+      // the same here.)
+      await initDesktopWindow();
+      await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.bySemanticsLabel('Full screen (F)'));
       await tester.pump(const Duration(seconds: 2));
       expect(windowFullScreen.value, isTrue);
       final full = await osScreen('player-full-screen');
       // ignore: avoid_print
       print('E2E full screen on the real screen: $full');
+      final [w, h] = full.size.split('x');
+      expect(full.front, pid, reason: 'Kinora is the window in front');
+      expect(full.rect, '0,0,$w,$h', reason: 'it covers the whole screen');
       expect(full.colors, greaterThan(10), reason: 'it draws the player');
       expect(full.bottom, lessThan(150), reason: 'the taskbar steps aside');
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -344,7 +373,8 @@ void main() {
       final back = await osScreen('player-windowed');
       // ignore: avoid_print
       print('E2E back in the window on the real screen: $back');
-      expect(back.colors, greaterThan(10), reason: 'the window draws again');
+      expect(back.front, pid, reason: 'Kinora stays in front');
+      expect(back.rect, isNot('0,0,$w,$h'), reason: 'back in its window');
       await mouse.removePointer();
     }
     for (final round in [
