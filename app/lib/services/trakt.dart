@@ -343,7 +343,7 @@ final class TraktSync extends ChangeNotifier {
       if (status == 420) {
         note = 'Your Trakt list is full (free accounts keep 250 titles).';
       } else if (status >= 400 && status != 409 && status != 422) {
-        Log.w('trakt', '${op['k']} refused: $status');
+        Log.w('trakt', '${op['k']} ${op['v'] ?? op['m']} refused: $status');
       }
       q.removeAt(0);
       await _setKv(_queueKey, jsonEncode(q));
