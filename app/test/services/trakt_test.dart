@@ -240,8 +240,9 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     trakt.calls.clear();
     await c.read(traktSyncProvider).syncNow();
-    expect(trakt.calls.where((k) => k == 'POST /scrobble/pause'), hasLength(1));
-    final body = trakt.bodies['POST /scrobble/pause']! as Map<String, Object?>;
+    // A pause goes as a stop under 80 % (Trakt saves it as a pause).
+    expect(trakt.calls.where((k) => k == 'POST /scrobble/stop'), hasLength(1));
+    final body = trakt.bodies['POST /scrobble/stop']! as Map<String, Object?>;
     expect(body['progress'], 50.0);
     expect(jsonEncode(body['episode']), contains('"trakt":42'));
   });

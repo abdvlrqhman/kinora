@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
@@ -373,10 +374,13 @@ final class TraktSync extends ChangeNotifier {
             },
           };
         }
+        // Trakt saves a stop under 80 % as a pause; /scrobble/pause only
+        // pauses a session /scrobble/start opened (else 404).
+        final p = (op['p']! as num).toDouble();
         return (await _call(
           'POST',
-          '/scrobble/$k',
-          body: {...item, 'progress': op['p']},
+          '/scrobble/stop',
+          body: {...item, 'progress': k == 'pause' ? math.min(p, 79.9) : p},
         )).$1;
       case 'unwatch':
         return (await _call(
