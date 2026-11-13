@@ -522,6 +522,9 @@ void main() {
       state: () {
         final p = PlayerController.debugLast;
         return 'new: ${p != c} ${p?.phase} "${p?.status}" ${p?.error} '
+            'stage: ${p?.debugStage} '
+            'player screens: ${find.byType(PlayerScreen).evaluate().length} '
+            'at ${container.read(routerProvider).state.uri} '
             'source: ${p?.source?.kind} ${p?.source?.uri} '
             'mpv: playing ${p?.player.state.playing} '
             '${p?.player.state.position}/${p?.player.state.duration} '

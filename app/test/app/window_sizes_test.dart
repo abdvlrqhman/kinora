@@ -19,5 +19,9 @@ void main() {
 
   test('an unknown screen keeps the defaults', () {
     expect(windowSizes(Size.zero).size, const Size(1280, 800));
+    expect(
+      windowSizes(const Size(double.nan, double.nan)).size,
+      const Size(1280, 800),
+    );
   });
 }

@@ -25,14 +25,22 @@ const double kTitleBarHeight = 40;
 
 /// Outside the player a phone stays upright, as streaming apps do (its
 /// pages are laid out for it); tablets and computers turn freely.
-Future<void> keepPhoneUpright() {
-  final display =
-      WidgetsBinding.instance.platformDispatcher.views.first.display;
-  final phone =
-      !isDesktop && display.size.shortestSide / display.devicePixelRatio < 600;
-  return SystemChrome.setPreferredOrientations(
-    phone ? const [DeviceOrientation.portraitUp] : const [],
-  );
+Future<void> keepPhoneUpright() async {
+  try {
+    final display =
+        WidgetsBinding.instance.platformDispatcher.views.first.display;
+    final shortest = display.size.shortestSide / display.devicePixelRatio;
+    // Unknown (no display yet): leave rotation as it is.
+    if (!shortest.isFinite || shortest <= 0) return;
+    await SystemChrome.setPreferredOrientations(
+      !isDesktop && shortest < 600
+          ? const [DeviceOrientation.portraitUp]
+          : const [],
+    );
+  } on Object catch (e) {
+    // Rotation is a nicety: it never stops the app from starting.
+    debugPrint('keepPhoneUpright: $e');
+  }
 }
 
 /// The window's first size and smallest size on a screen of [screen]
@@ -40,7 +48,7 @@ Future<void> keepPhoneUpright() {
 /// scaled-up screen with room for the taskbar (a 1366 × 768 laptop at
 /// 125 % is 1093 × 614).
 ({Size size, Size minimum}) windowSizes(Size screen) {
-  if (screen.isEmpty) {
+  if (screen.isEmpty || !screen.isFinite) {
     return (size: const Size(1280, 800), minimum: const Size(960, 640));
   }
   final fit = Size(screen.width * 0.92, screen.height * 0.85);
@@ -55,9 +63,15 @@ Future<void> keepPhoneUpright() {
 /// Opens the window without the system frame, sized for watching.
 Future<void> initDesktopWindow() async {
   await windowManager.ensureInitialized();
-  final display =
-      WidgetsBinding.instance.platformDispatcher.views.first.display;
-  final sizes = windowSizes(display.size / display.devicePixelRatio);
+  var screen = Size.zero;
+  try {
+    final display =
+        WidgetsBinding.instance.platformDispatcher.views.first.display;
+    screen = display.size / display.devicePixelRatio;
+  } on Object catch (e) {
+    debugPrint('display unknown: $e');
+  }
+  final sizes = windowSizes(screen);
   await windowManager.waitUntilReadyToShow(
     WindowOptions(
       title: 'Kinora',

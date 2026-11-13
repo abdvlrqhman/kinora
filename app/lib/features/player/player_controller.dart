@@ -302,9 +302,16 @@ class PlayerController extends ChangeNotifier {
   DateTime _progressAt = DateTime.now();
   int _bytesSeen = -1;
 
+  /// Where the last start is, for a test whose start hangs.
+  @visibleForTesting
+  String get debugStage =>
+      '$_stage (load $_generation${_disposed ? ', disposed' : ''})';
+  String _stage = 'new';
+
   Future<void> _load(PlayRequest req, {String? note}) async {
     prepareNote = note;
     final gen = ++_generation;
+    _stage = 'finding a saved file';
     _cancelPrepare?.complete();
     _cancelPrepare = Completer<void>();
     if (req.localFile == null) {
@@ -315,6 +322,7 @@ class PlayerController extends ChangeNotifier {
       if (local != null) req = req.copyWith(localFile: local);
     }
     if (gen != _generation || _disposed) return;
+    _stage = 'configuring';
     _request = req;
     phase = PlayerPhase.preparing;
     status = req.localFile != null ? 'Opening' : 'Finding the best version';
@@ -334,6 +342,7 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
     unawaited(_loadMeta());
     await _configureMpv();
+    _stage = 'preparing';
     try {
       final runtime = _runtimeMinutes();
       final src = await _ref
@@ -365,13 +374,17 @@ class PlayerController extends ChangeNotifier {
         return;
       }
       source = src;
+      _stage = 'reading where you stopped';
       final start = req.startAt ?? await _savedPosition(req.videoId);
+      _stage = 'opening in the player';
       status = 'Buffering';
       notifyListeners();
       await player.open(
         Media(src.uri.toString(), httpHeaders: src.headers, start: start),
       );
+      _stage = 'opened';
       if (gen != _generation || _disposed) return;
+      _stage = 'playing';
       phase = PlayerPhase.playing;
       // A slow version that is still arriving gets its chance (a big first
       // piece can take a minute); one that stalls, or takes minutes, gives
