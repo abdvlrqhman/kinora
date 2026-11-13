@@ -98,7 +98,10 @@ final windowFullScreen = ValueNotifier<bool>(false);
 /// Full screen (the player): no title bar, the whole display.
 Future<void> setFullScreen(bool on) async {
   if (!isDesktop || windowFullScreen.value == on) return;
-  await windowManager.setFullScreen(on);
+  // Kinora's runner does it (windows/runner/flutter_window.cpp):
+  // window_manager's left a grey window under the hidden title bar.
+  await const MethodChannel('kinora/window')
+      .invokeMethod<void>('setFullScreen', on);
   windowFullScreen.value = on;
 }
 

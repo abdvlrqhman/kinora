@@ -3,6 +3,7 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
@@ -28,6 +29,14 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // Full screen for the player ("kinora/window"), done here: window_manager's
+  // left the view unsized with Kinora's hidden title bar (a grey window).
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> window_channel_;
+  void SetFullScreen(bool on);
+  bool full_screen_ = false;
+  LONG_PTR style_before_full_screen_ = 0;
+  WINDOWPLACEMENT placement_before_full_screen_{sizeof(WINDOWPLACEMENT)};
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

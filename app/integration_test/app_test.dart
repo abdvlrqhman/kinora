@@ -40,6 +40,45 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import 'support/fake_world.dart';
 
+/// The real screen (Windows), as the person sees it: how many colours its
+/// middle shows (a window that didn't redraw is one flat grey) and how
+/// bright its bottom strip is (where the taskbar sits). Saved into
+/// KINORA_OS_SHOTS for the run's artifacts.
+Future<({int colors, int bottom, String size})> osScreen(String name) async {
+  const dir = String.fromEnvironment('KINORA_OS_SHOTS');
+  final path = '${dir.isEmpty ? Directory.systemTemp.path : dir}/os-$name.png';
+  final script =
+      r'''
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+[System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+New-Item -ItemType Directory -Force -Path (Split-Path 'PATH') | Out-Null
+$bmp.Save('PATH')
+$seen = @{}
+for ($i = 0; $i -lt 48; $i++) { for ($j = 0; $j -lt 24; $j++) {
+  $c = $bmp.GetPixel([int](($i + 0.5) * $b.Width / 48), [int]($b.Height * (0.1 + 0.8 * ($j + 0.5) / 24)))
+  $seen[$c.ToArgb()] = 1 } }
+$sum = 0
+for ($i = 0; $i -lt 64; $i++) {
+  $c = $bmp.GetPixel([int](($i + 0.5) * $b.Width / 64), $b.Height - 10)
+  $sum += ($c.R + $c.G + $c.B) / 3 }
+"$($seen.Count) $([int]($sum / 64)) $($b.Width)x$($b.Height)"
+'''
+          .replaceAll('PATH', path);
+  final r = await Process.run('powershell', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    script,
+  ]);
+  final out = (r.stdout as String).trim().split(RegExp(r'\s+'));
+  if (r.exitCode != 0 || out.length < 3) {
+    throw StateError('screenshot failed: ${r.stderr}');
+  }
+  return (colors: int.parse(out[0]), bottom: int.parse(out[1]), size: out[2]);
+}
+
 Future<void> pumpUntil(
   WidgetTester tester,
   bool Function() done, {
@@ -289,6 +328,23 @@ void main() {
       // The pointer brings the controls back.
       await mouse.moveTo(screen.center + const Offset(12, 12));
       await tester.pump(const Duration(milliseconds: 600));
+      // Full screen from its button fills the display with the picture, as
+      // seen on the real screen; Esc brings the window back.
+      await tester.tap(find.bySemanticsLabel('Full screen (F)'));
+      await tester.pump(const Duration(seconds: 2));
+      expect(windowFullScreen.value, isTrue);
+      final full = await osScreen('player-full-screen');
+      // ignore: avoid_print
+      print('E2E full screen on the real screen: $full');
+      expect(full.colors, greaterThan(10), reason: 'it draws the player');
+      expect(full.bottom, lessThan(150), reason: 'the taskbar steps aside');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(seconds: 2));
+      expect(windowFullScreen.value, isFalse);
+      final back = await osScreen('player-windowed');
+      // ignore: avoid_print
+      print('E2E back in the window on the real screen: $back');
+      expect(back.colors, greaterThan(10), reason: 'the window draws again');
       await mouse.removePointer();
     }
     for (final round in [

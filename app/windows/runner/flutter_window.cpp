@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
@@ -27,6 +29,21 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  window_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "kinora/window",
+      &flutter::StandardMethodCodec::GetInstance());
+  window_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        const auto* on = std::get_if<bool>(call.arguments());
+        if (call.method_name() != "setFullScreen" || on == nullptr) {
+          result->NotImplemented();
+          return;
+        }
+        SetFullScreen(*on);
+        result->Success();
+      });
+
   // Kinora shows the window itself (window_manager's waitUntilReadyToShow),
   // once its own title bar replaced the system one.
 
@@ -38,7 +55,36 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+// The usual Win32 full screen: no frame or caption (so the taskbar steps
+// aside), the whole monitor, then back to where the window was. The resize
+// reaches the Flutter view through WM_SIZE like any other.
+void FlutterWindow::SetFullScreen(bool on) {
+  HWND hwnd = GetHandle();
+  if (hwnd == nullptr || on == full_screen_) return;
+  full_screen_ = on;
+  if (on) {
+    style_before_full_screen_ = ::GetWindowLongPtr(hwnd, GWL_STYLE);
+    placement_before_full_screen_.length = sizeof(WINDOWPLACEMENT);
+    ::GetWindowPlacement(hwnd, &placement_before_full_screen_);
+    MONITORINFO monitor{sizeof(MONITORINFO)};
+    ::GetMonitorInfo(::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor);
+    // (Not "maximized" either: its frame insets would leave a border.)
+    ::SetWindowLongPtr(hwnd, GWL_STYLE,
+                       style_before_full_screen_ & ~(WS_OVERLAPPEDWINDOW | WS_MAXIMIZE));
+    const RECT& r = monitor.rcMonitor;
+    ::SetWindowPos(hwnd, HWND_TOP, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                   SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  } else {
+    ::SetWindowLongPtr(hwnd, GWL_STYLE, style_before_full_screen_);
+    ::SetWindowPlacement(hwnd, &placement_before_full_screen_);
+    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER |
+                       SWP_FRAMECHANGED);
+  }
+}
+
 void FlutterWindow::OnDestroy() {
+  window_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
