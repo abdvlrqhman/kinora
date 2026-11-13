@@ -15,6 +15,8 @@ import '../../core/format.dart';
 import '../../services/downloads.dart';
 import '../../services/play_request.dart';
 import '../../ui/layout.dart';
+import '../../ui/tint.dart';
+import '../../ui/glass.dart';
 import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
@@ -380,41 +382,48 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       () => const PageHeader(title: 'Downloads'),
       () => _Summary(used: used, free: free),
     ];
-    Widget row(DownloadRow r) => _EpisodeRow(
-      row: r,
-      rate: _rate(r),
-      onTap: () => _tap(r),
-      onMenu: () => unawaited(_menu(r)),
-      onToggle: () => _waiting(r)
-          ? unawaited(showWifiWaitSheet(context, ref, r))
-          : unawaited(_toggle(r)),
+    Widget row(DownloadRow r) => _Card(
+      indent: true,
+      child: _EpisodeRow(
+        row: r,
+        rate: _rate(r),
+        onTap: () => _tap(r),
+        onMenu: () => unawaited(_menu(r)),
+        onToggle: () => _waiting(r)
+            ? unawaited(showWifiWaitSheet(context, ref, r))
+            : unawaited(_toggle(r)),
+      ),
     );
     for (final g in groups) {
       final first = g.first;
       if (!g.isShow) {
         items.add(
-          () => _MovieRow(
-            row: first,
-            rate: _rate(first),
-            onTap: () => _tap(first),
-            onMenu: () => unawaited(_menu(first)),
-            onToggle: () => _waiting(first)
-                ? unawaited(showWifiWaitSheet(context, ref, first))
-                : unawaited(_toggle(first)),
+          () => _Card(
+            child: _MovieRow(
+              row: first,
+              rate: _rate(first),
+              onTap: () => _tap(first),
+              onMenu: () => unawaited(_menu(first)),
+              onToggle: () => _waiting(first)
+                  ? unawaited(showWifiWaitSheet(context, ref, first))
+                  : unawaited(_toggle(first)),
+            ),
           ),
         );
         continue;
       }
       final open = _open.contains(first.mediaId);
       items.add(
-        () => _ShowHeader(
-          group: g,
-          open: open,
-          onToggleOpen: () => setState(() {
-            if (!_open.remove(first.mediaId)) _open.add(first.mediaId);
-          }),
-          onDeleteShow: () =>
-              unawaited(_delete(g.rows, 'all of ${first.title}')),
+        () => _Card(
+          child: _ShowHeader(
+            group: g,
+            open: open,
+            onToggleOpen: () => setState(() {
+              if (!_open.remove(first.mediaId)) _open.add(first.mediaId);
+            }),
+            onDeleteShow: () =>
+                unawaited(_delete(g.rows, 'all of ${first.title}')),
+          ),
         ),
       );
       if (!open) continue;
@@ -454,56 +463,96 @@ class _Summary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final soft = KType.tabular(KType.label.copyWith(color: KColors.haze));
-    final strong = KType.tabular(
-      KType.label.copyWith(fontWeight: FontWeight.w700),
-    );
-    return Semantics(
-      label: [
-        'Downloads use ${Fmt.bytes(used)}',
-        if (free != null) '${Fmt.bytes(free!)} free on $thisDevice',
-      ].join('. '),
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          KSpace.margin,
-          KSpace.x2,
-          KSpace.margin,
-          KSpace.x3,
+    final accent = KinoraTint.of(context);
+    final total = used + (free ?? 0);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        KSpace.margin,
+        KSpace.x2,
+        KSpace.margin,
+        KSpace.x4,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(KSpace.x4),
+        decoration: BoxDecoration(
+          color: KColors.panel,
+          border: Border.all(color: KColors.edge),
+          borderRadius: BorderRadius.circular(KRadius.panel),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Wrap(
-              spacing: KSpace.x4,
+            Row(
               children: [
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: Fmt.bytes(used), style: strong),
-                      TextSpan(text: ' used by Kinora', style: soft),
-                    ],
+                Expanded(
+                  child: Text(
+                    'ON ${thisDevice.toUpperCase()}',
+                    style: KType.eyebrow,
                   ),
                 ),
-                if (free != null)
+                GlassButton(
+                  label: 'Download settings',
+                  icon: Icons.tune_rounded,
+                  compact: true,
+                  onPressed: () => context.go('/settings/downloads'),
+                ),
+              ],
+            ),
+            const SizedBox(height: KSpace.x3),
+            if (free != null && total > 0) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: used / total,
+                  minHeight: 4,
+                  color: accent,
+                  backgroundColor: KColors.fieldEdge,
+                ),
+              ),
+              const SizedBox(height: KSpace.x3),
+            ],
+            Semantics(
+              label: [
+                'Downloads use ${Fmt.bytes(used)}',
+                if (free != null) '${Fmt.bytes(free!)} free on $thisDevice',
+              ].join('. '),
+              excludeSemantics: true,
+              child: Wrap(
+                spacing: KSpace.x4,
+                runSpacing: KSpace.x1,
+                children: [
                   Text.rich(
                     TextSpan(
                       children: [
-                        TextSpan(text: Fmt.bytes(free!), style: strong),
-                        TextSpan(text: ' free', style: soft),
+                        TextSpan(
+                          text: '${Fmt.bytes(used)} ',
+                          style: KType.numeric.copyWith(color: accent),
+                        ),
+                        TextSpan(
+                          text: 'used by Kinora',
+                          style: KType.label.copyWith(color: KColors.body),
+                        ),
                       ],
                     ),
                   ),
-              ],
-            ),
-            if (free != null && used + free! > 0) ...[
-              const SizedBox(height: KSpace.x2),
-              ProgressLine(
-                fraction: used / (used + free!),
-                height: 4,
-                trackAlpha: 0.16,
+                  if (free != null)
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${Fmt.bytes(free!)} ',
+                            style: KType.numeric.copyWith(color: KColors.lamp),
+                          ),
+                          TextSpan(
+                            text: 'free',
+                            style: KType.label.copyWith(color: KColors.body),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -635,12 +684,7 @@ class _MovieRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(
-      KSpace.margin,
-      KSpace.x2,
-      KSpace.x2,
-      KSpace.x2,
-    ),
+    padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
     child: Row(
       children: [
         Expanded(
@@ -707,12 +751,7 @@ class _EpisodeRow extends StatelessWidget {
     final label = _episodeLabel(row);
     final name = row.episodeTitle;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        KSpace.margin,
-        KSpace.x2,
-        KSpace.x2,
-        KSpace.x2,
-      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
       child: Row(
         children: [
           Expanded(
@@ -823,12 +862,7 @@ class _ShowHeader extends StatelessWidget {
         const CustomSemanticsAction(label: 'Delete show'): onDeleteShow,
       },
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          KSpace.margin,
-          KSpace.x2,
-          KSpace.x2,
-          KSpace.x2,
-        ),
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
         child: Row(
           children: [
             SizedBox(
@@ -948,4 +982,30 @@ class _SeasonHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A download as a panel card; an episode sits indented under its show.
+class _Card extends StatelessWidget {
+  const _Card({required this.child, this.indent = false});
+
+  final Widget child;
+  final bool indent;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsetsDirectional.fromSTEB(
+      KSpace.margin + (indent ? 24 : 0),
+      4,
+      KSpace.margin,
+      4,
+    ),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: KColors.panel,
+        border: Border.all(color: KColors.edge),
+        borderRadius: BorderRadius.circular(KRadius.panel),
+      ),
+      child: child,
+    ),
+  );
 }
