@@ -94,6 +94,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
       // (A computer's screen and speakers aren't the player's to change.)
       unawaited(_readLevels());
+    } else {
+      // Autofocus can lose to the route's own focus as the page opens.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _takeKeys();
+      });
     }
     _scheduleHide();
     _pipSub = Pip.instance.changes.listen((v) {
@@ -164,6 +169,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _levelHide?.cancel();
     _flashTimer?.cancel();
     _seekReset?.cancel();
+    _keyFocus.dispose();
     _cast.removeListener(_onChange);
     unawaited(_pipSub?.cancel());
     unawaited(Pip.instance.setAllowed(allowed: false));
@@ -226,6 +232,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _controls = true;
     });
     _scheduleHide();
+    _takeKeys();
   }
 
   // -------------------------------------------------------------- gestures --
@@ -362,9 +369,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Volume before M muted it.
   double? _unmuted;
 
+  /// Holds the keys. Focus inside it reaches [_keys]; a closed panel or
+  /// sheet drops focus to the route, above it, so the keys went dead.
+  final _keyFocus = FocusNode(debugLabel: 'player keys');
+
+  /// Takes the keys back unless a panel or a control inside has them.
+  void _takeKeys() {
+    if (isDesktop && _panel == _Panel.none && !_keyFocus.hasFocus) {
+      _keyFocus.requestFocus();
+    }
+  }
+
   void _desktopShow() {
     if (!_controls) setState(() => _controls = true);
     _scheduleHide();
+    _takeKeys();
   }
 
   void _togglePlay() {
@@ -635,6 +654,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return CallbackShortcuts(
       bindings: _keys,
       child: Focus(
+        focusNode: _keyFocus,
         autofocus: true,
         child: MouseRegion(
           cursor: _controls || c.phase != PlayerPhase.playing
@@ -1053,7 +1073,10 @@ class _FlashChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
+    container: true,
     liveRegion: true,
+    label: text,
+    excludeSemantics: true,
     child: Glass(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Text(
@@ -1133,9 +1156,16 @@ class _FlashLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-    child: Glass(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Text(text, style: KType.tabular(KType.title)),
+    // Its own node, so a screen reader says "Volume 60%" as it changes.
+    child: Semantics(
+      container: true,
+      liveRegion: true,
+      label: text,
+      excludeSemantics: true,
+      child: Glass(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Text(text, style: KType.tabular(KType.title)),
+      ),
     ),
   );
 }

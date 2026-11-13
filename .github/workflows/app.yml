@@ -273,16 +273,37 @@ jobs:
             --dart-define=TRAKT_CLIENT_ID=${{ vars.TRAKT_CLIENT_ID }}
           mkdir -p dist
           cp -R build/windows/x64/runner/Release dist/Kinora
+          # The Visual C++ runtime, next to Kinora.exe: a PC without it
+          # (no other app installed it) would refuse to start Kinora.
+          for f in msvcp140.dll vcruntime140.dll vcruntime140_1.dll; do
+            cp "/c/Windows/System32/$f" dist/Kinora/
+          done
+          ls dist/Kinora
           cd dist && 7z a -tzip -bd Kinora-windows-x64.zip Kinora >/dev/null && ls -la
-      # Starts the real build and checks it stays up (a missing DLL or a
-      # crash at launch fails here, not on someone's PC).
+      # Starts the real build: it must stay up and show its window (a
+      # missing DLL, a crash or a window that never appears fails here, not
+      # on someone's PC). The screenshot is the first launch as people see it.
       - name: Launch smoke test
+        shell: pwsh
         run: |
-          ./dist/Kinora/Kinora.exe &
-          pid=$!
-          sleep 20
-          kill -0 "$pid" || { echo "::error::Kinora.exe exited at launch"; exit 1; }
-          taskkill //F //IM Kinora.exe || true
+          $p = Start-Process -FilePath dist/Kinora/Kinora.exe -PassThru
+          Start-Sleep -Seconds 25
+          $p.Refresh()
+          if ($p.HasExited) { Write-Error "Kinora.exe exited at launch"; exit 1 }
+          if ($p.MainWindowHandle -eq 0) { Write-Error "Kinora.exe shows no window"; exit 1 }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$PWD/dist/first-launch.png")
+          Stop-Process -Id $p.Id -Force
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-first-launch
+          path: app/dist/first-launch.png
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v7
         with:
           name: kinora-windows

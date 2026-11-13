@@ -148,8 +148,8 @@ class _FeedState extends ConsumerState<_Feed> {
         // A phone: the wordmark over the hero (the sidebar has it otherwise).
         if (!AppShell.onRail(context))
           Positioned(
-            top: pad.top + KSpace.x2,
-            left: 16,
+            top: pad.top + KSpace.x1,
+            left: KSpace.margin,
             child: const _Wordmark(),
           ),
         // (Beside the side rail they're at its foot.)
@@ -271,8 +271,9 @@ class _Wordmark extends StatelessWidget {
   const _Wordmark();
 
   @override
+  // As tall as the buttons beside it, so their centres line up.
   Widget build(BuildContext context) => const SizedBox(
-    height: 44,
+    height: 48,
     child: Align(
       alignment: Alignment.centerLeft,
       child: KinoraWordmark(capHeight: 13),

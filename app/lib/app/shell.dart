@@ -441,7 +441,7 @@ class _Sidebar extends ConsumerWidget {
     const wordmark = Padding(
       padding: EdgeInsets.only(left: 12),
       child: SizedBox(
-        height: 34,
+        height: WideNav.barHeight,
         child: Align(
           alignment: Alignment.centerLeft,
           child: KinoraWordmark(capHeight: 15),
@@ -459,7 +459,7 @@ class _Sidebar extends ConsumerWidget {
           explicitChildNodes: true,
           label: 'Tabs',
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 22, 14, 18),
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -467,7 +467,7 @@ class _Sidebar extends ConsumerWidget {
                   const DragToMoveArea(child: wordmark)
                 else
                   wordmark,
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
                 item(AppTab.home),
                 const SizedBox(height: 2),
                 item(AppTab.search),

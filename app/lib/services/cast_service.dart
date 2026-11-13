@@ -642,6 +642,8 @@ Future<String?> lanAddress() async {
   } on Object {
     // Not available here: look at the interfaces.
   }
+  // (A phone without Wi-Fi is on mobile data: no address the TV can reach.)
+  if (!isDesktop) return null;
   try {
     final interfaces = await NetworkInterface.list(
       type: InternetAddressType.IPv4,

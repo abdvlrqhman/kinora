@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../app/desktop.dart';
+
 /// Layout for wide windows (Kinora on a computer).
 abstract final class KLayout {
   /// From this width the tabs move to a side rail (a phone held sideways
@@ -14,9 +16,13 @@ abstract final class KLayout {
   /// Dialogs (sheets on a phone) stay this wide at most.
   static const double sheet = 560;
 
-  /// A computer's layout: beside the sidebar, or a window this wide.
-  static bool isWide(BuildContext context) =>
-      RailScope.of(context) || MediaQuery.sizeOf(context).width >= wide;
+  /// A computer's layout: beside the sidebar, or a window this wide on a
+  /// computer or a tablet (a phone held sideways keeps its own layout).
+  static bool isWide(BuildContext context) {
+    if (RailScope.of(context)) return true;
+    final size = MediaQuery.sizeOf(context);
+    return size.width >= wide && (isDesktop || size.shortestSide >= 600);
+  }
 
   /// Right padding that keeps a column at most [max] wide, starting at the
   /// same left edge as every other page.
