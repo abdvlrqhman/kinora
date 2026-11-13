@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
 
-const _deep = Color(0xFF9A6DFF);
+const _deep = Color(0xFF84CC16);
 
 /// The Kinora mark: a K whose stem is the lamp and whose arms are one
 /// chevron of light leaving it through a narrow gap (the lens). Drawn on a
@@ -30,7 +30,7 @@ class KinoraMark extends CustomPainter {
     if (lamp > 0) {
       canvas.drawRect(
         const Rect.fromLTRB(_stemLeft, _top, _stemLeft + _stemWidth, _bottom),
-        Paint()..color = KColors.lamp.withValues(alpha: lamp.clamp(0, 1)),
+        Paint()..color = KColors.title.withValues(alpha: lamp.clamp(0, 1)),
       );
     }
     if (light <= 0) return;
@@ -62,9 +62,8 @@ class KinoraMark extends CustomPainter {
           ..shader = ui.Gradient.radial(
             const Offset(_apex, _mid),
             _reach + _arm + 40,
-            // Around the app's violet: a lighter highlight at the lens, a
-            // little deeper at the tips (was much bluer than the accent).
-            const [Color(0xFFE2D2FF), KColors.marquee, _deep],
+            // The app's lime: pale at the lens, deeper at the tips.
+            const [Color(0xFFF2FDD8), KColors.marquee, _deep],
             const [0, 0.45, 1],
           ),
       )

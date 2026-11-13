@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#17141B</color>
+    <color name="ic_launcher_background">#0A0A09</color>
     <!-- Launch screen: the app's background, so there is no white flash. -->
-    <color name="kinora_seat">#17141B</color>
+    <color name="kinora_seat">#000000</color>
 </resources>

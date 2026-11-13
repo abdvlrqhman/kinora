@@ -10,7 +10,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/ui/widgets/brand.dart';
 
-const _seat = Color(0xFF17141B);
+const _seat = Color(0xFF0A0A09);
 
 class KinoraIcon extends StatelessWidget {
   const KinoraIcon({super.key, this.foregroundOnly = false});
