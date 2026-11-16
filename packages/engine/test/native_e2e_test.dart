@@ -123,11 +123,15 @@ void main() {
       );
       addTearDown(leecher.dispose);
       final dl = '${root.path}/dl-big';
+      // Paused until the player below asks for 16 MiB: otherwise the first
+      // requests, made before it asks, fetch the file's start whatever the
+      // order is, and how much of it depends on timing.
       final ih = leecher.add(
-        AddTorrent.magnet(
-          bigTorrent.magnet(bigName),
+        AddTorrent.torrentFile(
+          bigTorrent.bytes,
           savePath: dl,
           peers: ['127.0.0.1:${seeder.listenPort}'],
+          paused: true,
         ),
       );
       await leecher.waitForFiles(ih, timeout: const Duration(seconds: 60));
@@ -140,6 +144,9 @@ void main() {
       final req = await client.getUrl(stream.uri());
       req.headers.set(HttpHeaders.rangeHeader, 'bytes=${16 * mib}-');
       final res = await req.close();
+      // (The answer's head comes just before the window is set.)
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      leecher.resume(ih);
       final first = Completer<void>();
       late final StreamSubscription<List<int>> reading;
       reading = res.listen((_) {
