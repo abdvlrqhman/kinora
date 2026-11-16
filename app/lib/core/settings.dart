@@ -111,6 +111,7 @@ final class AppSettings {
     this.vpnInterface = '',
     this.enabledSubtitleProviders = const [freeOpenSubtitlesId],
     this.lastCastDevice,
+    this.tvRefused = const {},
   });
 
   factory AppSettings.fromJson(Map<String, Object?> j) => AppSettings(
@@ -145,6 +146,11 @@ final class AppSettings {
       if (j['freeOpenSubtitlesOffered'] != true) freeOpenSubtitlesId,
     ],
     lastCastDevice: j['lastCastDevice'] as Map<String, Object?>?,
+    tvRefused: {
+      for (final MapEntry(:key, :value)
+          in (j['tvRefused'] as Map<String, Object?>? ?? const {}).entries)
+        key: _strings(value),
+    },
   );
 
   static List<String> _strings(Object? v, {List<String> fallback = const []}) =>
@@ -200,6 +206,10 @@ final class AppSettings {
   final List<String> enabledSubtitleProviders;
   final Map<String, Object?>? lastCastDevice;
 
+  /// What each TV (by its UDN) wouldn't play, learnt when a cast didn't
+  /// start: "hevc10", "hevc", "av1", "vp9", "h264-10", or an audio codec.
+  final Map<String, List<String>> tvRefused;
+
   /// The user's first subtitle language, if any.
   String? get primaryLanguage =>
       subtitleLanguages.isEmpty ? null : subtitleLanguages.first;
@@ -230,6 +240,7 @@ final class AppSettings {
     'enabledSubtitleProviders': enabledSubtitleProviders,
     'freeOpenSubtitlesOffered': true,
     'lastCastDevice': lastCastDevice,
+    'tvRefused': tvRefused,
   };
 
   AppSettings copyWith({
@@ -257,6 +268,7 @@ final class AppSettings {
     String? vpnInterface,
     List<String>? enabledSubtitleProviders,
     Map<String, Object?>? lastCastDevice,
+    Map<String, List<String>>? tvRefused,
   }) => AppSettings(
     onboarded: onboarded ?? this.onboarded,
     subtitleLanguages: subtitleLanguages ?? this.subtitleLanguages,
@@ -284,5 +296,6 @@ final class AppSettings {
     enabledSubtitleProviders:
         enabledSubtitleProviders ?? this.enabledSubtitleProviders,
     lastCastDevice: lastCastDevice ?? this.lastCastDevice,
+    tvRefused: tvRefused ?? this.tvRefused,
   );
 }

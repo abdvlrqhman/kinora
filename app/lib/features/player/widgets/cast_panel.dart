@@ -48,6 +48,7 @@ class CastPanel extends ConsumerWidget {
       length: c.player.state.duration,
       subtitlePath: sub?.path,
       subtitleLanguage: sub?.language,
+      facts: c.facts,
     );
     // The player shows why (cast.message); the phone picks up again.
     if (!ok && !cast.isCasting) await c.player.play();
@@ -66,7 +67,7 @@ class CastPanel extends ConsumerWidget {
           onPick: (d) => unawaited(_castTo(ref, d)),
           notes: (d) {
             if (source == null) return const [];
-            final check = cast.check(d, source);
+            final check = cast.check(d, source, facts: controller.facts);
             return [
               for (final p in check.problems) (text: p, problem: true),
               if (check.isPlayable)
@@ -75,7 +76,11 @@ class CastPanel extends ConsumerWidget {
           },
           trailing: [
             if (source != null &&
-                cast.devices.any((d) => !cast.check(d, source).isPlayable))
+                cast.devices.any(
+                  (d) => !cast
+                      .check(d, source, facts: controller.facts)
+                      .isPlayable,
+                ))
               Padding(
                 padding: const EdgeInsets.all(KSpace.margin),
                 child: GlassButton(

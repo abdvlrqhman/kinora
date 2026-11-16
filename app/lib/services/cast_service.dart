@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path/path.dart' as p;
+import 'package:ranking/ranking.dart' show DeviceCaps;
 import 'package:release_parser/release_parser.dart' as rp;
 import 'package:subtitles/subtitles.dart';
 
@@ -72,9 +73,7 @@ final class CastService extends ChangeNotifier {
   /// Chooses where videos play. Re-ranks versions for that screen.
   void selectTarget(DlnaDevice? d) {
     target = d;
-    _ref
-        .read(castTargetCapsProvider.notifier)
-        .set(d == null ? null : (d.isSamsung ? samsungFullHdCaps : null));
+    _ref.read(castTargetCapsProvider.notifier).set(_capsFor(d));
     _ref.invalidate(resolveProvider);
     if (d != null) {
       unawaited(
@@ -193,8 +192,10 @@ final class CastService extends ChangeNotifier {
 
   // -------------------------------------------------------------- checks --
 
-  /// Whether the TV can decode the version that's playing.
-  CastCheck check(DlnaDevice d, PlaybackSource source) {
+  /// What [source] holds: what the player found in the file ([facts], once
+  /// it plays here), else what its name says. (A downloaded episode's file
+  /// name often says nothing, "[Judas] Gleipnir - S01E08.mkv".)
+  MediaTraits _traits(PlaybackSource source, MediaFacts? facts) {
     final name = source.release?.releaseName ?? source.fileName ?? '';
     final r = rp.parseRelease(name);
     final ext = p
@@ -211,16 +212,28 @@ final class CastService extends ChangeNotifier {
         'webm' => CastContainer.webm,
         _ => null,
       },
-      videoCodec: switch (r.videoCodec) {
-        rp.VideoCodec.h264 => VideoCodec.h264,
-        rp.VideoCodec.h265 => VideoCodec.hevc,
-        rp.VideoCodec.av1 => VideoCodec.av1,
-        rp.VideoCodec.vp9 => VideoCodec.vp9,
-        rp.VideoCodec.xvid => VideoCodec.mpeg4,
-        rp.VideoCodec.mpeg2 => VideoCodec.mpeg2,
-        _ => null,
+      videoCodec: switch (facts?.video) {
+        'hevc' => VideoCodec.hevc,
+        'h264' => VideoCodec.h264,
+        'av1' => VideoCodec.av1,
+        'vp9' => VideoCodec.vp9,
+        'mpeg4' => VideoCodec.mpeg4,
+        'mpeg2video' => VideoCodec.mpeg2,
+        _ => switch (r.videoCodec) {
+          rp.VideoCodec.h264 => VideoCodec.h264,
+          rp.VideoCodec.h265 => VideoCodec.hevc,
+          rp.VideoCodec.av1 => VideoCodec.av1,
+          rp.VideoCodec.vp9 => VideoCodec.vp9,
+          rp.VideoCodec.xvid => VideoCodec.mpeg4,
+          rp.VideoCodec.mpeg2 => VideoCodec.mpeg2,
+          _ => null,
+        },
       },
-      videoBitDepth: r.isTenBit ? 10 : (r.bitDepth ?? 8),
+      videoBitDepth: facts?.video != null
+          ? (facts!.tenBit ? 10 : 8)
+          : r.isTenBit
+          ? 10
+          : (r.bitDepth ?? 8),
       height: r.resolution == rp.Resolution.unknown ? null : r.resolution.lines,
       hdr: {
         for (final h in r.hdr)
@@ -231,24 +244,129 @@ final class CastService extends ChangeNotifier {
             rp.HdrFormat.hlg => HdrFormat.hlg,
           },
       },
-      audioCodec: switch (r.audioCodecs.firstOrNull) {
-        rp.AudioCodec.aac => AudioCodec.aac,
-        rp.AudioCodec.ac3 => AudioCodec.ac3,
-        rp.AudioCodec.eac3 => AudioCodec.eac3,
-        rp.AudioCodec.dts ||
-        rp.AudioCodec.dtsHd ||
-        rp.AudioCodec.dtsX => AudioCodec.dts,
-        rp.AudioCodec.trueHd => AudioCodec.truehd,
-        rp.AudioCodec.flac => AudioCodec.flac,
-        rp.AudioCodec.opus => AudioCodec.opus,
-        rp.AudioCodec.mp3 => AudioCodec.mp3,
-        _ => null,
+      audioCodec: switch (facts?.audio) {
+        'aac' => AudioCodec.aac,
+        'ac3' => AudioCodec.ac3,
+        'eac3' => AudioCodec.eac3,
+        'mp3' => AudioCodec.mp3,
+        'flac' => AudioCodec.flac,
+        'opus' => AudioCodec.opus,
+        'truehd' => AudioCodec.truehd,
+        'dts' => AudioCodec.dts,
+        _ => switch (r.audioCodecs.firstOrNull) {
+          rp.AudioCodec.aac => AudioCodec.aac,
+          rp.AudioCodec.ac3 => AudioCodec.ac3,
+          rp.AudioCodec.eac3 => AudioCodec.eac3,
+          rp.AudioCodec.dts ||
+          rp.AudioCodec.dtsHd ||
+          rp.AudioCodec.dtsX => AudioCodec.dts,
+          rp.AudioCodec.trueHd => AudioCodec.truehd,
+          rp.AudioCodec.flac => AudioCodec.flac,
+          rp.AudioCodec.opus => AudioCodec.opus,
+          rp.AudioCodec.mp3 => AudioCodec.mp3,
+          _ => null,
+        },
       },
     );
+    return traits;
+  }
+
+  /// Whether the TV can decode the version that's playing, including what
+  /// this TV wouldn't play before.
+  CastCheck check(DlnaDevice d, PlaybackSource source, {MediaFacts? facts}) {
+    final traits = _traits(source, facts);
     final profile = d.isSamsung
         ? CastProfile.samsungFullHdTizen
         : CastProfile.genericDlna;
-    return profile.canPlay(traits);
+    final base = profile.canPlay(traits);
+    final refused = _refusals(d);
+    final before = [
+      for (final c in culprits(traits))
+        if (refused.contains(c) || (c == 'hevc10' && refused.contains('hevc')))
+          '${d.friendlyName} didn’t play ${formatName(c)} before.',
+    ];
+    return before.isEmpty
+        ? base
+        : CastCheck(
+            problems: [...base.problems, ...before],
+            warnings: base.warnings,
+          );
+  }
+
+  List<String> _refusals(DlnaDevice d) =>
+      _ref.read(settingsProvider).tvRefused[d.udn] ?? const [];
+
+  /// What in [t] a TV may not decode, the likeliest first: an unusual video
+  /// format, then a rarer audio codec.
+  @visibleForTesting
+  static List<String> culprits(MediaTraits t) => [
+    if (t.videoCodec == VideoCodec.hevc)
+      (t.videoBitDepth ?? 8) >= 10 ? 'hevc10' : 'hevc',
+    if (t.videoCodec == VideoCodec.av1) 'av1',
+    if (t.videoCodec == VideoCodec.vp9) 'vp9',
+    if (t.videoCodec == VideoCodec.h264 && (t.videoBitDepth ?? 8) >= 10)
+      'h264-10',
+    if (t.audioCodec case final a?
+        when const {
+          AudioCodec.flac,
+          AudioCodec.opus,
+          AudioCodec.truehd,
+          AudioCodec.dts,
+        }.contains(a))
+      a.name,
+  ];
+
+  /// "10-bit HEVC (x265) video", for a culprit.
+  static String formatName(String culprit) => switch (culprit) {
+    'hevc10' => '10-bit HEVC (x265) video',
+    'hevc' => 'HEVC (x265) video',
+    'av1' => 'AV1 video',
+    'vp9' => 'VP9 video',
+    'h264-10' => '10-bit H.264 video',
+    'flac' => 'FLAC audio',
+    'opus' => 'Opus audio',
+    'truehd' => 'TrueHD audio',
+    'dts' => 'DTS audio',
+    _ => culprit,
+  };
+
+  /// What versions should suit [d] (re-ranks them for it): a Samsung's,
+  /// less what it wouldn't play before.
+  DeviceCaps? _capsFor(DlnaDevice? d) {
+    if (d == null || !d.isSamsung) return null;
+    final r = _refusals(d);
+    if (r.isEmpty) return samsungFullHdCaps;
+    final c = samsungFullHdCaps;
+    return DeviceCaps(
+      h265: c.h265 && !r.contains('hevc'),
+      h265TenBit: c.h265TenBit && !r.contains('hevc') && !r.contains('hevc10'),
+      av1: c.av1 && !r.contains('av1'),
+      dolbyVision: c.dolbyVision,
+      hdr10: c.hdr10,
+      maxResolution: c.maxResolution,
+      audio: c.audio,
+      containers: c.containers,
+    );
+  }
+
+  /// The TV wouldn't play it: remembers the likeliest culprit for that TV,
+  /// so it's said before the next cast and versions it plays come first.
+  /// Null when nothing stands out (a plain H.264 file failed otherwise).
+  String? _rememberRefusal() {
+    final a = _last;
+    if (a == null) return null;
+    final c = culprits(_traits(a.source, a.facts)).firstOrNull;
+    if (c == null) return null;
+    final mine = {..._refusals(a.d), c}.toList();
+    Log.i('cast', '${a.d.friendlyName} wouldn’t play $c: remembered');
+    unawaited(
+      _ref
+          .read(settingsProvider.notifier)
+          .update(
+            (s) => s.copyWith(tvRefused: {...s.tvRefused, a.d.udn: mine}),
+          ),
+    );
+    return c;
   }
 
   // ------------------------------------------------------------- casting --
@@ -264,6 +382,7 @@ final class CastService extends ChangeNotifier {
     Duration? length,
     String? subtitlePath,
     String? subtitleLanguage,
+    MediaFacts? facts,
   }) {
     _reloads = 0;
     _last = (
@@ -273,6 +392,7 @@ final class CastService extends ChangeNotifier {
       length: length,
       subtitlePath: subtitlePath,
       subtitleLanguage: subtitleLanguage,
+      facts: facts,
     );
     return _start(startAt);
   }
@@ -292,9 +412,7 @@ final class CastService extends ChangeNotifier {
     notifyListeners();
     if (previous != null) await _stopQuietly(previous);
     if (gen != _castGen) return false;
-    _ref
-        .read(castTargetCapsProvider.notifier)
-        .set(d.isSamsung ? samsungFullHdCaps : null);
+    _ref.read(castTargetCapsProvider.notifier).set(_capsFor(d));
     try {
       final lan = await lanAddress();
       if (lan == null && a.source.kind != PlaybackKind.direct) {
@@ -488,6 +606,9 @@ final class CastService extends ChangeNotifier {
       unawaited(_start(position));
       return;
     }
+    // (Never starting is the TV turning the file down; an error later on
+    // may be the network.)
+    final culprit = end == CastEnd.neverStarted ? _rememberRefusal() : null;
     _teardown(CastPhase.stopped);
     // Stopped from the TV's remote, or the TV went away: the next episodes
     // play on the phone until a TV is chosen again.
@@ -499,6 +620,8 @@ final class CastService extends ChangeNotifier {
       CastEnd.stoppedOnTv => '$name stopped the video. It continues here.',
       CastEnd.tvError =>
         '$name couldn’t keep playing this video. It continues here; cast again to try once more.',
+      CastEnd.neverStarted when culprit != null =>
+        '$name can’t play ${formatName(culprit)}. Choose a version it can play.',
       CastEnd.neverStarted =>
         '$name couldn’t start this video. Try again, or choose another version.',
       CastEnd.lost =>
@@ -580,9 +703,7 @@ final class CastService extends ChangeNotifier {
     phase = to;
     reconnecting = false;
     final t = target;
-    _ref
-        .read(castTargetCapsProvider.notifier)
-        .set(t == null ? null : (t.isSamsung ? samsungFullHdCaps : null));
+    _ref.read(castTargetCapsProvider.notifier).set(_capsFor(t));
     return r;
   }
 
@@ -619,7 +740,12 @@ typedef _CastArgs = ({
   Duration? length,
   String? subtitlePath,
   String? subtitleLanguage,
+  MediaFacts? facts,
 });
+
+/// What the player found in the file it plays: mpv's codec names ("hevc",
+/// "h264"; "aac", "flac"), and whether the picture is 10-bit or more.
+typedef MediaFacts = ({String? video, bool tenBit, String? audio});
 
 final class _CastFailure implements Exception {
   const _CastFailure(this.message);

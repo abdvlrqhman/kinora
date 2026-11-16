@@ -268,6 +268,10 @@ class PlayerController extends ChangeNotifier {
   SubtitleFix subtitleFix = SubtitleFix.none;
   PlaybackSource? source;
 
+  /// What the file really holds, once the player has opened it: what a TV
+  /// must decode (a file name often doesn't say).
+  MediaFacts? facts;
+
   /// The version being started (shown while preparing).
   ResolvedRelease? starting;
   MetaDetail? meta;
@@ -518,6 +522,7 @@ class PlayerController extends ChangeNotifier {
       length: player.state.duration,
       subtitlePath: sub?.path,
       subtitleLanguage: sub?.language,
+      facts: facts,
     );
     // The TV can't be reached: carry on here (it says why).
     if (!ok && !cast.isCasting && gen == _generation && !_disposed) {
@@ -893,7 +898,41 @@ class PlayerController extends ChangeNotifier {
 
   // --------------------------------------------------------------- tracks --
 
+  /// A 10- or 12-bit picture format ("yuv420p10le", "p010"; not "nv12").
+  @visibleForTesting
+  static final tenBitPixels = RegExp(r'p01[026]|p1[026](le|be)?$');
+
+  /// Reads the video and audio formats from mpv (its own codec names).
+  Future<void> _readFacts() async {
+    final p = player.platform;
+    if (p is! NativePlayer) return;
+    Future<String?> read(String name) async {
+      try {
+        final v = (await p.getProperty(name)).trim();
+        return v.isEmpty ? null : v.toLowerCase();
+      } on Object {
+        return null;
+      }
+    }
+
+    final video = await read('current-tracks/video/codec');
+    // "Main 10", "High 10" (in the file), else the decoded picture's format
+    // ("yuv420p10", "p010").
+    final profile = await read('current-tracks/video/codec-profile');
+    final pixels =
+        await read('video-params/hw-pixelformat') ??
+        await read('video-params/pixelformat');
+    facts = (
+      video: video,
+      tenBit:
+          (profile?.contains('10') ?? false) ||
+          tenBitPixels.hasMatch(pixels ?? ''),
+      audio: await read('current-tracks/audio/codec'),
+    );
+  }
+
   Future<void> _onTracks() async {
+    unawaited(_readFacts());
     final tracks = player.state.tracks;
     final embedded = [
       for (final t in tracks.subtitle)
