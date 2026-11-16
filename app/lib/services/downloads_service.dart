@@ -834,8 +834,17 @@ final class DownloadsService implements DownloadActions {
     );
   }
 
+  /// When the last tick ran: a long gap means Kinora was frozen.
+  DateTime? _lastTick;
+
   Future<void> _tick() async {
     if (!_alive) return;
+    final now = DateTime.now();
+    final away = _lastTick == null ? Duration.zero : now.difference(_lastTick!);
+    _lastTick = now;
+    if (away > const Duration(minutes: 1)) {
+      _engines.reopenSockets('downloads were frozen for ${away.inMinutes} min');
+    }
     final rows =
         await (_db.select(_db.downloads)..where(
               (t) => t.kind.equals('torrent') & t.state.equals('downloading'),
@@ -844,6 +853,7 @@ final class DownloadsService implements DownloadActions {
     if (rows.isEmpty) {
       _poll?.cancel();
       _poll = null;
+      _lastTick = null; // (stopped on purpose, not frozen)
       await _refreshKeepAlive();
       return;
     }

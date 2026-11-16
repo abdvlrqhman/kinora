@@ -1467,6 +1467,16 @@ int32_t kn_session_listen_port(kn_session* s) {
   }
 }
 
+int32_t kn_session_reopen_sockets(kn_session* s) {
+  if (s == nullptr || !s->ses) return -1;
+  try {
+    s->ses->reopen_network_sockets();
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
 char* kn_add(kn_session* s, const uint8_t* params, int32_t params_len) {
   try {
     lt::error_code ec;

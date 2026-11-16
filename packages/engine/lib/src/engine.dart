@@ -213,6 +213,10 @@ final class KinoraEngine {
   /// BitTorrent listen port (0 until listening).
   int get listenPort => _b.listenPort(_s);
 
+  /// Opens the network sockets again. iOS closes the sockets of an app it
+  /// suspended: after that, trackers and peers fail until this runs.
+  void reopenSockets() => _b.reopenSockets(_s);
+
   /// HTTP server port (starts the server).
   int get serverPort {
     final port = _b.serverPort(_s);

@@ -29,6 +29,7 @@ import 'package:kinora/core/settings.dart';
 import 'package:kinora/features/player/player_controller.dart';
 import 'package:kinora/features/player/player_screen.dart';
 import 'package:kinora/main.dart';
+import 'package:kinora/services/background.dart';
 import 'package:kinora/services/cast_service.dart';
 import 'package:kinora/services/downloads.dart';
 import 'package:kinora/services/engine_service.dart';
@@ -643,6 +644,15 @@ void main() {
         .firstWhere((d) => d.videoId == third.videoId);
     expect(saved.filePath, startsWith(paths.downloads.path));
     expect(File(saved.filePath!).readAsBytesSync(), world.videoBytes);
+    // iPhone: a download keeps Kinora alive with silent audio while a video
+    // plays; closing the player must leave that audio playing.
+    if (Platform.isIOS) {
+      await BackgroundKeeper.instance.hold(
+        'e2e',
+        title: 'Downloading',
+        text: 'test',
+      );
+    }
     unawaited(container.read(routerProvider).push('/player', extra: third));
     await pumpUntil(
       tester,
@@ -670,6 +680,19 @@ void main() {
       reason: 'plays from the downloaded file',
     );
     container.read(routerProvider).pop();
+    if (Platform.isIOS) {
+      await tester.pump(const Duration(seconds: 2));
+      final audio = await const MethodChannel('kinora/background')
+          .invokeMapMethod<String, Object?>('audioCheck');
+      // ignore: avoid_print
+      print('E2E background audio after the player closed: $audio');
+      expect(
+        audio?['playing'],
+        isTrue,
+        reason: 'the silent audio plays again after the player',
+      );
+      await BackgroundKeeper.instance.drop('e2e');
+    }
 
     // A season pack: three episodes of one torrent, downloaded at the same
     // moment, as when Download is tapped on each in quick succession.

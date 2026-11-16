@@ -251,6 +251,9 @@ void main() {
       expect(files.single.size, data.length);
       expect(files.single.isVideo, isTrue);
 
+      // As after iOS froze the app: the sockets open again and the
+      // download and stream below go on.
+      leecher.reopenSockets();
       final stream = leecher.openStream(ih, 0, bitrate: 2 << 20);
       expect(stream.path, endsWith(name));
       final uri = stream.uri();

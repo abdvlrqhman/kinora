@@ -135,6 +135,9 @@ final class EngineBindings {
       listenPort = lib.lookupFunction<_SesIntN, _SesIntD>(
         'kn_session_listen_port',
       ),
+      reopenSockets = lib.lookupFunction<_SesIntN, _SesIntD>(
+        'kn_session_reopen_sockets',
+      ),
       add = lib.lookupFunction<_SesBytesStrN, _SesBytesStrD>('kn_add'),
       remove = lib.lookupFunction<_RemoveN, _RemoveD>('kn_remove'),
       pause = lib.lookupFunction<_SesStrIntN, _SesStrIntD>('kn_pause'),
@@ -195,6 +198,7 @@ final class EngineBindings {
   final _SesBytesIntD sessionApply;
   final _SesIntD sessionSaveState;
   final _SesIntD listenPort;
+  final _SesIntD reopenSockets;
   final _SesBytesStrD add;
   final _RemoveD remove;
   final _SesStrIntD pause;

@@ -109,7 +109,10 @@ final class KinoraBackground {
     UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [Self.statusId])
     let app = NotificationCenter.default
     _ = app.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil,
-                        queue: .main) { [weak self] _ in self?.showStatus(now: true) }
+                        queue: .main) { [weak self] _ in
+      self?.reassertAudio()
+      self?.showStatus(now: true)
+    }
     _ = app.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil,
                         queue: .main) { [weak self] _ in self?.hideStatus() }
     channel.setMethodCallHandler { [weak self] call, result in
@@ -117,7 +120,12 @@ final class KinoraBackground {
       let args = call.arguments as? [String: Any] ?? [:]
       switch call.method {
       case "start", "update":
-        if call.method == "start" { self.startAudio() }
+        if call.method == "start" {
+          self.audioRunning ? self.reassertAudio() : self.startAudio()
+        } else if UIApplication.shared.applicationState == .background,
+                  Date().timeIntervalSince(self.audioCheckedAt) >= 15 {
+          self.reassertAudio()
+        }
         self.status = (args["title"] as? String ?? "", args["text"] as? String ?? "",
                        args["open"] as? String)
         self.showStatus()
@@ -140,6 +148,11 @@ final class KinoraBackground {
           DispatchQueue.main.async { result(granted) }
           self.logSettings("asked about notifications: \(granted ? "allowed" : "not allowed")")
         }
+      case "audioCheck":
+        // (Tests: was the silence still playing, and is it now.)
+        let was = self.audioRunning && self.engine.isRunning && self.node.isPlaying
+        self.reassertAudio()
+        result(["wasPlaying": was, "playing": self.audioRunning && self.engine.isRunning && self.node.isPlaying])
       case "takeOpen":
         result(self.pendingOpen)
         self.pendingOpen = nil
@@ -212,6 +225,29 @@ final class KinoraBackground {
 
   // MARK: silent audio
 
+  /// When reassertAudio last looked.
+  private var audioCheckedAt = Date.distantPast
+
+  /// Makes sure the silence still plays. Closing the player (mpv) ends the
+  /// app's one audio session, which silenced this as well, and iOS then
+  /// suspended Kinora half a minute into the background: downloads stopped.
+  private func reassertAudio() {
+    guard audioRunning else { return }
+    audioCheckedAt = Date()
+    do {
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+      try session.setActive(true)
+    } catch {
+      log("background audio session: \(error.localizedDescription)")
+    }
+    if !engine.isRunning || !node.isPlaying {
+      log("background audio had stopped: starting it again")
+      stopAudio()
+      startAudio()
+    }
+  }
+
   private func startAudio() {
     guard !audioRunning else { return }
     do {
@@ -229,7 +265,7 @@ final class KinoraBackground {
       audioRunning = true
       observe()
     } catch {
-      NSLog("Kinora: background audio failed: \(error)")
+      log("background audio failed: \(error.localizedDescription)")
     }
   }
 
@@ -250,9 +286,16 @@ final class KinoraBackground {
       guard let self = self, self.audioRunning,
             let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
             AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
-      try? AVAudioSession.sharedInstance().setActive(true)
-      if !self.engine.isRunning { try? self.engine.start() }
-      self.node.play()
+      self.reassertAudio()
+    })
+    observers.append(NotificationCenter.default.addObserver(
+      forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      // iOS restarted its audio daemon: everything audio is new.
+      guard let self = self, self.audioRunning else { return }
+      self.log("audio services were reset: starting the background audio again")
+      self.stopAudio()
+      self.startAudio()
     })
     observers.append(NotificationCenter.default.addObserver(
       forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main

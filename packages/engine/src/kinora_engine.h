@@ -43,6 +43,9 @@ KN_API int32_t kn_session_apply(kn_session* s, const uint8_t* config,
 KN_API int32_t kn_session_save_state(kn_session* s);
 // BitTorrent listen port (0 if not listening yet).
 KN_API int32_t kn_session_listen_port(kn_session* s);
+// Opens the session's network sockets again (iOS closes a suspended app's
+// sockets: after it, trackers and peers fail until this). Returns 0.
+KN_API int32_t kn_session_reopen_sockets(kn_session* s);
 
 // Torrents -----------------------------------------------------------------
 // params: bencoded dict (magnet | torrent | resume, save_path, trackers…).

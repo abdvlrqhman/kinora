@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:kinora_engine/kinora_engine.dart';
@@ -294,6 +295,15 @@ final class EngineService {
     e.saveState();
   }
 
+  /// Opens the network sockets again after Kinora was frozen: iOS closes a
+  /// suspended app's sockets, and trackers and peers fail until then.
+  void reopenSockets(String why) {
+    final e = _engine;
+    if (e == null) return;
+    Log.i('engine', 'network reopened: $why');
+    e.reopenSockets();
+  }
+
   void dispose() {
     unawaited(_logSub?.cancel());
     _engine?.dispose();
@@ -316,7 +326,16 @@ final engineServiceProvider = Provider<EngineService>((ref) {
     ref.watch(trackerListProvider),
   );
   ref.listen(settingsProvider, (_, next) => service.updateSettings(next));
-  ref.onDispose(service.dispose);
+  // (iPhone: back in front after a while away, the sockets may be gone.)
+  final front = Platform.isIOS
+      ? AppLifecycleListener(
+          onResume: () => service.reopenSockets('back in front'),
+        )
+      : null;
+  ref.onDispose(() {
+    front?.dispose();
+    service.dispose();
+  });
   return service;
 });
 
