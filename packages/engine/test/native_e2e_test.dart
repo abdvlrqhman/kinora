@@ -143,7 +143,15 @@ void main() {
         peers: [peer],
       ),
     );
-    await _until(() => stale.status(ih)?.state == TorrentState.seeding);
+    // Loaded (Linux trusts the saved state and seeds; Windows notices the
+    // short file itself and downloads): either way the rest must follow.
+    await _until(
+      () => const {
+        TorrentState.seeding,
+        TorrentState.downloading,
+        TorrentState.finished,
+      }.contains(stale.status(ih)?.state),
+    );
     return (stale, ih, file, failures);
   }
 

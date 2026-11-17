@@ -149,4 +149,5 @@ jobs:
         working-directory: packages/engine
         run: |
           flutter pub get
-          flutter test --reporter expanded
+          # One file at a time: their torrent sessions would compete.
+          flutter test --reporter expanded --concurrency=1
