@@ -413,6 +413,10 @@ struct Torrent {
   std::string status_json;
   // Bumped when a connection drops its deadlines, so the others re-assert.
   std::uint32_t window_epoch = 0;
+  // Re-checks after its saved state didn't match the files (see
+  // recheck_stale), and when the last one started.
+  int rechecks = 0;
+  steady::time_point recheck_at{};
 };
 
 struct Route {
@@ -477,6 +481,44 @@ void push_event(kn_session* s, std::string json) {
 void push_log(kn_session* s, const std::string& message) {
   std::lock_guard<std::mutex> lk(s->mu);
   push_event(s, "{\"type\":\"log\",\"message\":" + json_escape(message) + "}");
+}
+
+// A torrent's saved state (resume data) said pieces were on disk, but a file
+// is shorter or gone: deleted after watching, or a cleared cache. libtorrent
+// stops the torrent there ("file too short"), and every later episode of the
+// same torrent failed too. Instead: check what's really on disk and fetch
+// the rest (twice at most; the second alert of the same error is the same
+// re-check). True when handled.
+bool recheck_stale(kn_session* s, const lt::torrent_handle& h, const lt::error_code& ec) {
+  bool stale = ec == lt::errors::file_too_short || ec == lt::errors::mismatching_file_size ||
+               ec == boost::system::errc::no_such_file_or_directory;
+  if (!stale) return false;
+  std::lock_guard<std::mutex> lk(s->mu);
+  auto it = s->by_handle.find(h);
+  if (it == s->by_handle.end()) return false;
+  auto t = s->torrents.find(it->second);
+  if (t == s->torrents.end()) return false;
+  auto now = steady::now();
+  if (t->second.rechecks > 0 && now - t->second.recheck_at < 10s) return true;
+  if (t->second.rechecks >= 2) return false;
+  ++t->second.rechecks;
+  t->second.recheck_at = now;
+  try {
+    h.clear_error();
+    h.force_recheck();
+    h.resume();
+    // Complete torrents drop the seeds they knew: ask for peers now, not
+    // at the next announce (up to half an hour away).
+    h.force_reannounce();
+    h.force_dht_announce();
+  } catch (...) {
+    return false;
+  }
+  push_event(s, "{\"type\":\"log\",\"message\":" +
+                    json_escape(it->second.substr(0, 6) + ": the files didn't match its saved state (" +
+                                ec.message() + "); checking them again") +
+                    "}");
+  return true;
 }
 
 // Fills piece info + have bitfield. Caller holds s->mu.
@@ -605,6 +647,7 @@ void handle_alert(kn_session* s, lt::alert* a) {
     return;
   }
   if (auto* e = lt::alert_cast<lt::torrent_error_alert>(a)) {
+    if (recheck_stale(s, e->handle, e->error)) return;
     std::lock_guard<std::mutex> lk(s->mu);
     auto it = s->by_handle.find(e->handle);
     std::string ih = it == s->by_handle.end() ? "" : it->second;
@@ -614,6 +657,7 @@ void handle_alert(kn_session* s, lt::alert* a) {
     return;
   }
   if (auto* fe = lt::alert_cast<lt::file_error_alert>(a)) {
+    if (recheck_stale(s, fe->handle, fe->error)) return;
     std::lock_guard<std::mutex> lk(s->mu);
     auto it = s->by_handle.find(fe->handle);
     std::string ih = it == s->by_handle.end() ? "" : it->second;
@@ -1045,6 +1089,27 @@ bool wait_piece(kn_session* s, Route& r, Window& w, int piece, int fd) {
   }
 }
 
+// A stream read found the file ending before `piece`, which the saved state
+// said was here (the file was cut short or deleted since): re-check the
+// torrent and count the piece missing until it comes in again.
+bool stale_piece(kn_session* s, const Route& r, int piece) {
+  lt::torrent_handle h;
+  {
+    std::lock_guard<std::mutex> lk(s->mu);
+    auto it = s->torrents.find(r.ih);
+    if (it == s->torrents.end()) return false;
+    h = it->second.handle;
+  }
+  if (!recheck_stale(s, h, lt::errors::file_too_short)) return false;
+  std::lock_guard<std::mutex> lk(s->mu);
+  auto it = s->torrents.find(r.ih);
+  if (it != s->torrents.end() && piece >= 0 &&
+      piece < static_cast<int>(it->second.have.size())) {
+    it->second.have[static_cast<std::size_t>(piece)] = 0;
+  }
+  return true;
+}
+
 std::map<std::string, std::string> headers_of(kn_session* s, const Route& r) {
   std::lock_guard<std::mutex> lk(s->mu);
   return r.headers;
@@ -1122,6 +1187,15 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
           std::min<std::int64_t>(static_cast<std::int64_t>(buf.size()), chunk_end - pos));
       std::int64_t n = file_read(file_fd, buf.data(), want, pos);
       if (n < 0 && interrupted()) continue;
+      if (n == 0 && stale_piece(s, *r, piece)) {
+        // The file ends before a piece it was said to hold: re-checking;
+        // wait for the piece to come in again.
+        if (!wait_piece(s, *r, w, piece, fd)) {
+          ok = false;
+          break;
+        }
+        continue;
+      }
       if (n <= 0) {
         ok = false;
         break;

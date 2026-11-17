@@ -914,7 +914,7 @@ final class DownloadsService implements DownloadActions {
           r.id,
           RegExp('space|ENOSPC', caseSensitive: false).hasMatch(e.message)
               ? 'Your device is out of space. Free some up, then try again.'
-              : 'Saving failed. Check free space, then try again.',
+              : 'Saving failed. Try again; if it fails again, delete it and download it again.',
         );
       }
     }

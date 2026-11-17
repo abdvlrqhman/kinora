@@ -80,6 +80,145 @@ void main() {
 
   tearDownAll(() => root.delete(recursive: true));
 
+  /// A torrent downloaded in full, its state saved, then half its file
+  /// gone (as when a watched episode was deleted), loaded again from that
+  /// saved state: it believes it has every piece. Returns the session, the
+  /// file, and failures it reports.
+  Future<(KinoraEngine, String, File, List<EngineEvent>)> staleCopy(
+    String tag,
+  ) async {
+    final seeder = KinoraEngine.start(
+      EngineConfig(
+        testMode: true,
+        resumeDir: (await Directory('${root.path}/rs-seed-$tag').create()).path,
+        statePath: '${root.path}/seed-$tag.state',
+      ),
+    );
+    addTearDown(seeder.dispose);
+    seeder.add(
+      AddTorrent.torrentFile(
+        torrent.bytes,
+        savePath: '${root.path}/seed',
+        seedMode: true,
+      ),
+    );
+    await _until(() => seeder.listenPort > 0);
+    final peer = '127.0.0.1:${seeder.listenPort}';
+    final resumeDir = await Directory('${root.path}/rs-$tag').create();
+    final dl = '${root.path}/dl-$tag';
+    final file = File('$dl/$name');
+    final config = EngineConfig(
+      testMode: true,
+      resumeDir: resumeDir.path,
+      statePath: '${root.path}/$tag.state',
+    );
+    final first = KinoraEngine.start(config);
+    final ih = first.add(
+      AddTorrent.torrentFile(torrent.bytes, savePath: dl, peers: [peer]),
+    );
+    await _until(
+      () => (first.fileProgress(ih)?.first ?? 0) == data.length,
+      timeout: const Duration(seconds: 90),
+    );
+    first.saveResume(ih);
+    final saved = File('${resumeDir.path}/$ih.fastresume');
+    await _until(saved.existsSync);
+    first.dispose();
+    file.openSync(mode: FileMode.append)
+      ..truncateSync(data.length ~/ 2)
+      ..closeSync();
+
+    final stale = KinoraEngine.start(config);
+    addTearDown(stale.dispose);
+    final failures = <EngineEvent>[];
+    final sub = stale.events.listen((e) {
+      if (e is TorrentFailed || e is TorrentFileError) failures.add(e);
+    });
+    addTearDown(sub.cancel);
+    stale.add(
+      AddTorrent.torrentFile(
+        torrent.bytes,
+        savePath: dl,
+        resumePath: saved.path,
+        peers: [peer],
+      ),
+    );
+    await _until(() => stale.status(ih)?.state == TorrentState.seeding);
+    return (stale, ih, file, failures);
+  }
+
+  test(
+    'playing a file cut short since its state was saved fetches it again',
+    () async {
+      final (stale, ih, file, failures) = await staleCopy('play');
+      // The player reads the half that's gone.
+      final stream = stale.openStream(ih, 0, bitrate: 2 << 20);
+      final from = data.length - 100000;
+      final (code, _, body) = await _get(
+        stream.uri(),
+        range: 'bytes=$from-${data.length - 1}',
+      );
+      expect(code, 206);
+      expect(body, data.sublist(from), reason: 'the missing part came in');
+      expect(failures, isEmpty, reason: 'it re-checked instead of failing');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    skip: _lib == null ? 'KINORA_ENGINE_LIB not set' : false,
+  );
+
+  test(
+    'sharing a file cut short since its state was saved fetches it again',
+    () async {
+      final (stale, ih, file, failures) = await staleCopy('share');
+      // Another peer asks the stale copy for the half that's gone.
+      final other = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory('${root.path}/rs-other').create()).path,
+          statePath: '${root.path}/other.state',
+        ),
+      );
+      addTearDown(other.dispose);
+      other.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: '${root.path}/dl-other',
+          peers: ['127.0.0.1:${stale.listenPort}'],
+        ),
+      );
+      // Its re-check makes it a downloader again, and a complete torrent
+      // drops the seeds it knew: a seed turning up (a tracker's job out
+      // there) brings the rest.
+      await _until(() => stale.status(ih)?.state != TorrentState.seeding);
+      final seed2 = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory('${root.path}/rs-seed2b').create()).path,
+          statePath: '${root.path}/seed2b.state',
+        ),
+      );
+      addTearDown(seed2.dispose);
+      seed2.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: '${root.path}/seed',
+          seedMode: true,
+          peers: ['127.0.0.1:${stale.listenPort}'],
+        ),
+      );
+      await _until(
+        () =>
+            file.lengthSync() == data.length &&
+            (other.fileProgress(ih)?.first ?? 0) == data.length,
+        timeout: const Duration(seconds: 90),
+      );
+      expect(file.readAsBytesSync(), data);
+      expect(failures, isEmpty, reason: 'it re-checked instead of failing');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    skip: _lib == null ? 'KINORA_ENGINE_LIB not set' : false,
+  );
+
   test(
     'a stream that starts mid-file buffers ahead of it, not from the start',
     () async {
