@@ -4,13 +4,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stremio/stremio.dart';
 
 import '../../app/router.dart';
 import '../../core/db/database.dart';
 import '../../core/format.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
+import '../../services/ratings.dart';
 import '../../services/sources.dart';
+import '../../services/suggestions.dart';
 import '../../ui/layout.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
@@ -480,13 +483,42 @@ class CatalogRowView extends StatelessWidget {
   final CatalogRow row;
 
   @override
+  Widget build(BuildContext context) =>
+      PosterRow(title: row.title, items: row.items);
+}
+
+/// Trakt's picks for the viewer, without titles they marked Not for me.
+/// Nothing when not signed in to Trakt.
+class ForYouRow extends ConsumerWidget {
+  const ForYouRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tastes = ref.watch(tastesProvider).value ?? const {};
+    final items = [
+      for (final m in ref.watch(forYouProvider).value ?? const <MetaPreview>[])
+        if (tastes[m.id] != Taste.notForMe) m,
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return PosterRow(title: 'For you', items: items);
+  }
+}
+
+/// Titles as a poster row.
+class PosterRow extends StatelessWidget {
+  const PosterRow({super.key, required this.title, required this.items});
+
+  final String title;
+  final List<MetaPreview> items;
+
+  @override
   Widget build(BuildContext context) => RowSection(
-    title: row.title,
+    title: title,
     height: PosterCard.heightOf(context),
     itemWidth: HomeSizes.poster(context),
-    itemCount: row.items.length,
+    itemCount: items.length,
     itemBuilder: (context, i) {
-      final m = row.items[i];
+      final m = items[i];
       return PosterCard(
         name: m.name,
         poster: m.poster,

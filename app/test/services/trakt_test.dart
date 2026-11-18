@@ -365,6 +365,39 @@ void main() {
     }
   });
 
+  test('Trakt titles become posters by IMDb id, wrapped or not', () {
+    final picks = TraktSync.picks([
+      {
+        'title': 'Narcos',
+        'year': 2015,
+        'ids': {'imdb': 'tt2707408'},
+      },
+      {
+        'show': {
+          'title': 'Ozark',
+          'ids': {'imdb': 'tt5071412'},
+        },
+      },
+      {
+        'title': 'No IMDb id',
+        'ids': {'trakt': 1},
+      },
+    ], 'series');
+    expect(picks.map((p) => p.id), ['tt2707408', 'tt5071412']);
+    expect(picks.first.releaseInfo, '2015');
+    expect(
+      picks.first.poster,
+      'https://images.metahub.space/poster/medium/tt2707408/img',
+    );
+  });
+
+  test('suggestions are for signed-in viewers only', () async {
+    final sync = c.read(traktSyncProvider);
+    expect(await sync.related('tt100', 'movie'), isEmpty);
+    expect(await sync.recommendations(), isEmpty);
+    expect(trakt.calls, isEmpty);
+  });
+
   test('not signed in: nothing is queued or sent', () async {
     await c
         .read(progressRepositoryProvider)

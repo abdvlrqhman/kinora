@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:stremio/stremio.dart';
 
 import '../app/providers.dart';
 import '../core/db/database.dart';
@@ -799,6 +800,59 @@ final class TraktSync extends ChangeNotifier {
     });
     unawaited(_fillArtwork(added.take(40).toList()));
   }
+
+  // ------------------------------------------------------ suggestions --
+
+  /// Titles like [imdb] (Trakt's related list). Signed in only: Kinora
+  /// talks to Trakt for people who chose it.
+  Future<List<MetaPreview>> related(String imdb, String type) async {
+    if (!signedIn || !imdb.startsWith('tt')) return const [];
+    final movie = type == 'movie';
+    final (status, body) = await _call(
+      'GET',
+      '/${movie ? 'movies' : 'shows'}/$imdb/related?limit=20',
+    );
+    return status == 200 ? picks(body, movie ? 'movie' : 'series') : const [];
+  }
+
+  /// Trakt's picks for the viewer, from what they watched and rated:
+  /// movies and shows taking turns. Signed in only.
+  Future<List<MetaPreview>> recommendations() async {
+    if (!signedIn) return const [];
+    final [movies, shows] = await Future.wait([
+      for (final t in ['movies', 'shows'])
+        _call(
+          'GET',
+          '/recommendations/$t?ignore_collected=true&ignore_watchlisted=true&limit=20',
+        ),
+    ]);
+    final m = movies.$1 == 200 ? picks(movies.$2, 'movie') : <MetaPreview>[];
+    final sh = shows.$1 == 200 ? picks(shows.$2, 'series') : <MetaPreview>[];
+    return [
+      for (var i = 0; i < math.max(m.length, sh.length); i++) ...[
+        if (i < sh.length) sh[i],
+        if (i < m.length) m[i],
+      ],
+    ];
+  }
+
+  /// Trakt movies or shows as posters (artwork from the IMDb id).
+  @visibleForTesting
+  static List<MetaPreview> picks(Object? body, String type) => [
+    if (body is List)
+      for (final item in body.whereType<Map<String, Object?>>())
+        if ((item['movie'] ?? item['show'] ?? item)
+            case final Map<String, Object?> m)
+          if ((m['ids'] as Map<String, Object?>?)?['imdb']
+              case final String imdb when imdb.startsWith('tt'))
+            MetaPreview(
+              id: imdb,
+              type: type,
+              name: m['title'] as String? ?? '',
+              poster: 'https://images.metahub.space/poster/medium/$imdb/img',
+              releaseInfo: (m['year'] as num?)?.toString(),
+            ),
+  ];
 
   /// Whole-show and movie ratings (season and episode ratings are left
   /// on Trakt: Kinora rates titles only).

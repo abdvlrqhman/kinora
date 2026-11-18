@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stremio/stremio.dart';
 
 import '../../app/providers.dart';
 import '../../app/router.dart';
@@ -10,6 +11,8 @@ import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../home/rows.dart';
 import '../settings/widgets/settings_ui.dart';
+import '../../services/ratings.dart';
+import '../../services/suggestions.dart';
 import '../../services/tmdb.dart';
 
 /// The cast with their photos (from TMDB).
@@ -82,6 +85,29 @@ class CastRow extends StatelessWidget {
       );
     },
   );
+}
+
+/// "More like this": TMDB's when there's a TMDB key, else Trakt's related
+/// titles when signed in (without ones marked Not for me), else nothing.
+class MoreLikeThis extends ConsumerWidget {
+  const MoreLikeThis({super.key, required this.meta, required this.similar});
+
+  final MetaPreview meta;
+  final List<TmdbSimilar> similar;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (similar.isNotEmpty) return SimilarRow(titles: similar);
+    final tastes = ref.watch(tastesProvider).value ?? const {};
+    final items = [
+      for (final m
+          in ref.watch(relatedProvider((id: meta.id, type: meta.type))).value ??
+              const <MetaPreview>[])
+        if (tastes[m.id] != Taste.notForMe) m,
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return PosterRow(title: 'More like this', items: items);
+  }
 }
 
 /// "More like this": TMDB's recommendations as posters. Opening one looks

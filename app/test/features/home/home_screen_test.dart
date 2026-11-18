@@ -4,6 +4,8 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stremio/stremio.dart';
+import 'package:kinora/services/suggestions.dart';
 import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/features/home/home_feed.dart';
@@ -113,6 +115,62 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(loads, 2);
+  });
+
+  testScreen('For you: Trakt\'s picks, without ones marked Not for me', (
+    tester,
+  ) async {
+    final db = testDb();
+    await db
+        .into(db.keyValues)
+        .insert(
+          KeyValuesCompanion.insert(
+            key: 'rating:tt902',
+            value: '{"t":"movie","r":2}',
+          ),
+        );
+    final nav = await pumpScreen(
+      tester,
+      const HomeScreen(),
+      db: db,
+      size: const Size(390, 2400),
+      overrides: [
+        ...withSource(),
+        homeRowsProvider.overrideWith((ref) => Stream.value(HomeRows(rows))),
+        metaProvider.overrideWith((ref, key) async => throw StateError('off')),
+        forYouProvider.overrideWith(
+          (ref) async => const [
+            MetaPreview(id: 'tt901', type: 'series', name: 'Salt Roads'),
+            MetaPreview(id: 'tt902', type: 'movie', name: 'Paper Moons'),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('For you'), findsOneWidget);
+    expect(find.bySemanticsLabel('Salt Roads'), findsOneWidget);
+    expect(find.bySemanticsLabel('Paper Moons'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('Salt Roads'));
+    await tester.pumpAndSettle();
+    expect(nav.locations.last, '/title/series/tt901');
+  });
+
+  testScreen('no For you row without picks (not signed in to Trakt)', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      const HomeScreen(),
+      db: testDb(),
+      size: const Size(390, 2400),
+      overrides: [
+        ...withSource(),
+        homeRowsProvider.overrideWith((ref) => Stream.value(HomeRows(rows))),
+        metaProvider.overrideWith((ref, key) async => throw StateError('off')),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('For you'), findsNothing);
   });
 
   testScreen('long-press on Keep watching offers row actions', (tester) async {

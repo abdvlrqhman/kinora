@@ -355,9 +355,10 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
               if (!t.isSeries)
                 SliverToBoxAdapter(
                   child: _Grow(
-                    child: (extra?.similar.isNotEmpty ?? false)
-                        ? SimilarRow(titles: extra!.similar)
-                        : null,
+                    child: MoreLikeThis(
+                      meta: meta,
+                      similar: extra?.similar ?? const [],
+                    ),
                   ),
                 ),
               if (t.isSeries) ...[
@@ -428,9 +429,10 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
               if (t.isSeries)
                 SliverToBoxAdapter(
                   child: _Grow(
-                    child: (extra?.similar.isNotEmpty ?? false)
-                        ? SimilarRow(titles: extra!.similar)
-                        : null,
+                    child: MoreLikeThis(
+                      meta: meta,
+                      similar: extra?.similar ?? const [],
+                    ),
                   ),
                 ),
               SliverToBoxAdapter(

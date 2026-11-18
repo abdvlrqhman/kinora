@@ -153,6 +153,7 @@ class _FeedState extends ConsumerState<_Feed> {
                 if (catalogs.isNotEmpty)
                   SliverToBoxAdapter(child: TrendingRow(row: catalogs.first)),
                 const SliverToBoxAdapter(child: MyListRow()),
+                const SliverToBoxAdapter(child: ForYouRow()),
                 ..._rows(rows),
                 SliverToBoxAdapter(
                   child: SizedBox(height: AppShell.bottomInset(context)),
