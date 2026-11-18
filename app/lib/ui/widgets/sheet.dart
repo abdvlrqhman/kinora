@@ -178,6 +178,7 @@ class SheetAction extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.color = KColors.lamp,
+    this.selected = false,
   });
 
   final IconData icon;
@@ -185,9 +186,13 @@ class SheetAction extends StatelessWidget {
   final VoidCallback onTap;
   final Color color;
 
+  /// The current choice: checked and in the accent.
+  final bool selected;
+
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
+    selected: selected,
     label: label,
     excludeSemantics: true,
     child: InkWell(
@@ -201,11 +206,21 @@ class SheetAction extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 22),
+              Icon(
+                icon,
+                color: selected ? KinoraTint.of(context) : color,
+                size: 22,
+              ),
               const SizedBox(width: KSpace.x4),
               Expanded(
                 child: Text(label, style: KType.title.copyWith(color: color)),
               ),
+              if (selected)
+                Icon(
+                  Icons.check_rounded,
+                  color: KinoraTint.of(context),
+                  size: 22,
+                ),
             ],
           ),
         ),

@@ -12,12 +12,14 @@ import '../../core/format.dart';
 import '../../services/downloads.dart';
 import '../../services/library.dart';
 import '../../services/play_request.dart';
+import '../../services/ratings.dart';
 import '../../services/resolver.dart';
 import '../downloads/download_prompts.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/layout.dart';
 import '../../ui/tokens.dart';
+import '../../ui/widgets/sheet.dart';
 
 /// Adds or removes a title from My list (+ / ✓).
 class MyListButton extends ConsumerWidget {
@@ -115,6 +117,98 @@ class MyListAction extends ConsumerWidget {
       label: 'My list',
       semanticLabel: inList ? 'In My list. Remove' : 'Add to My list',
       onPressed: () => unawaited(_toggle(ref, meta)),
+    );
+  }
+}
+
+/// Rates the whole show or movie: Not for me, I like it, Love it.
+class RateAction extends ConsumerWidget {
+  const RateAction({super.key, required this.meta});
+
+  final MetaPreview meta;
+
+  static IconData iconOf(Taste? t) => switch (t) {
+    null => Icons.thumb_up_off_alt_rounded,
+    Taste.notForMe => Icons.thumb_down_rounded,
+    Taste.like => Icons.thumb_up_rounded,
+    Taste.love => Icons.favorite_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final taste = ref.watch(tasteProvider(meta.id));
+    return ActionTile(
+      icon: iconOf(taste),
+      label: taste?.label ?? 'Rate',
+      semanticLabel: taste == null
+          ? 'Rate ${meta.name}'
+          : 'Rated ${taste.label}. Change your rating',
+      color: taste == null ? KColors.lamp : KinoraTint.of(context),
+      onPressed: () => unawaited(
+        showGlassSheet<void>(
+          context,
+          builder: (sheet) => _RateSheet(meta: meta, taste: taste),
+        ),
+      ),
+    );
+  }
+}
+
+class _RateSheet extends ConsumerWidget {
+  const _RateSheet({required this.meta, required this.taste});
+
+  final MetaPreview meta;
+  final Taste? taste;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void pick(Taste? t) {
+      Navigator.of(context).pop();
+      unawaited(ref.read(ratingsProvider).rate(meta.id, meta.type, t));
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              KSpace.margin,
+              KSpace.x2,
+              KSpace.margin,
+              KSpace.x2,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(meta.name, style: KType.h2),
+                Text(
+                  meta.type == 'movie'
+                      ? 'Rate the movie'
+                      : 'Rate the whole show',
+                  style: KType.label.copyWith(color: KColors.haze),
+                ),
+              ],
+            ),
+          ),
+          for (final t in Taste.values.reversed)
+            SheetAction(
+              icon: RateAction.iconOf(t),
+              label: t.label,
+              selected: t == taste,
+              onTap: () => pick(t == taste ? null : t),
+            ),
+          if (taste != null)
+            SheetAction(
+              icon: Icons.remove_circle_outline_rounded,
+              label: 'Remove rating',
+              color: KColors.cut,
+              onTap: () => pick(null),
+            ),
+          const SizedBox(height: KSpace.x2),
+        ],
+      ),
     );
   }
 }

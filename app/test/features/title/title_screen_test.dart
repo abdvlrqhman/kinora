@@ -90,6 +90,34 @@ void main() {
       expect(nav.played.last.startAt, const Duration(minutes: 10));
     });
 
+    testScreen('rates the whole movie, and changes or removes it', (
+      tester,
+    ) async {
+      final db = testDb();
+      await pumpTitle(tester, db, isMovie: true);
+      await tester.tap(find.bySemanticsLabel('Rate The Long Light'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rate the movie'), findsOneWidget);
+      await tester.tap(find.text('Love it'));
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsLabel('Rated Love it. Change your rating'),
+        findsOneWidget,
+      );
+      final rows = await db.select(db.keyValues).get();
+      expect(rows.single.key, 'rating:tt100');
+      expect(rows.single.value, '{"t":"movie","r":10}');
+
+      await tester.tap(
+        find.bySemanticsLabel('Rated Love it. Change your rating'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove rating'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Rate The Long Light'), findsOneWidget);
+      expect(await db.select(db.keyValues).get(), isEmpty);
+    });
+
     testScreen('says calmly when no version is found', (tester) async {
       await pumpTitle(
         tester,

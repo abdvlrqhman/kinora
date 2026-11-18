@@ -8,6 +8,7 @@ import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/secure_keys.dart';
 import 'package:kinora/services/library.dart';
+import 'package:kinora/services/ratings.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:kinora/services/trakt.dart';
 
@@ -25,6 +26,7 @@ final class FakeTrakt {
   var watchedShows = <Object?>[];
   var playback = <Object?>[];
   var watchlistShows = <Object?>[];
+  var ratedShows = <Object?>[];
   var activities = 'v1';
 
   late final client = MockClient((r) async {
@@ -63,7 +65,7 @@ final class FakeTrakt {
       'GET /sync/last_activities' => json({
         'episodes': {'watched_at': activities, 'paused_at': activities},
         'movies': {'watched_at': 'm', 'paused_at': 'm', 'watchlisted_at': 'm'},
-        'shows': {'watchlisted_at': activities},
+        'shows': {'watchlisted_at': activities, 'rated_at': activities},
         'watchlist': {'updated_at': activities},
       }),
       'GET /sync/watched/shows' => json(watchedShows),
@@ -71,6 +73,8 @@ final class FakeTrakt {
       'GET /sync/playback' => json(playback),
       'GET /sync/watchlist/movies' => json([]),
       'GET /sync/watchlist/shows' => json(watchlistShows),
+      'GET /sync/ratings/movies' => json([]),
+      'GET /sync/ratings/shows' => json(ratedShows),
       'GET /shows/tt200/seasons/1/episodes/2' => json({
         'ids': {'trakt': 42},
       }),
@@ -307,6 +311,58 @@ void main() {
       jsonEncode(trakt.bodies['POST /sync/watchlist']),
       contains('"movies":[{"ids":{"imdb":"tt100"}}]'),
     );
+  });
+
+  test('ratings: Trakt\'s come in and are never sent back; '
+      'ratings made here go out', () async {
+    trakt.ratedShows = [
+      {
+        'rating': 9,
+        'show': {
+          'title': 'North Wind',
+          'ids': {'imdb': 'tt201'},
+        },
+      },
+    ];
+    await signIn();
+    final ratings = c.read(ratingsProvider);
+    expect((await ratings.all())['tt201'], (type: 'series', rating: 9));
+    expect(trakt.calls, isNot(contains('POST /sync/ratings')));
+    // Removed on another device.
+    trakt
+      ..ratedShows = []
+      ..activities = 'v2';
+    await c.read(traktSyncProvider).syncNow();
+    expect(await ratings.all(), isEmpty);
+
+    await ratings.rate('tt100', 'movie', Taste.like);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await c.read(traktSyncProvider).syncNow();
+    expect(
+      jsonEncode(trakt.bodies['POST /sync/ratings']),
+      contains('"movies":[{"rating":7,"ids":{"imdb":"tt100"}}]'),
+    );
+    await ratings.rate('tt100', 'movie', null);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await c.read(traktSyncProvider).syncNow();
+    expect(
+      jsonEncode(trakt.bodies['POST /sync/ratings/remove']),
+      contains('"movies":[{"ids":{"imdb":"tt100"}}]'),
+    );
+  });
+
+  test('a Trakt rating as a taste: 1–5 not for me, 6–8 like, 9–10 love', () {
+    expect(
+      [for (var r = 1; r <= 10; r++) Taste.fromTrakt(r)],
+      [
+        ...List.filled(5, Taste.notForMe),
+        ...List.filled(3, Taste.like),
+        ...List.filled(2, Taste.love),
+      ],
+    );
+    for (final t in Taste.values) {
+      expect(Taste.fromTrakt(t.trakt), t);
+    }
   });
 
   test('not signed in: nothing is queued or sent', () async {

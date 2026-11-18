@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import '../app/providers.dart';
 import '../core/db/database.dart';
 import '../core/log.dart';
+import 'ratings.dart';
 import 'sources.dart';
 
 /// Kinora's Trakt app, set at build time. Device sign-in needs only this
@@ -306,14 +307,29 @@ final class TraktSync extends ChangeNotifier {
     );
   }
 
+  /// The viewer rated a whole show or movie here ([rating] 1–10, null
+  /// removes it). Ratings that came from Trakt are never sent back.
+  void rated(String mediaId, String type, int? rating) {
+    if (!signedIn || !mediaId.startsWith('tt')) return;
+    unawaited(
+      _enqueue({
+        'k': rating == null ? 'unrate' : 'rate',
+        'm': mediaId,
+        't': type == 'movie' ? 'movie' : 'show',
+        'r': rating,
+      }, soon: true),
+    );
+  }
+
   /// Queues [op], replacing a queued one about the same video or title.
   Future<void> _enqueue(Map<String, Object?> op, {required bool soon}) =>
       _serial(() async {
         final q = await _queue();
-        String key(Map<String, Object?> o) =>
-            (o['k']! as String).startsWith('list')
-            ? 'm${o['m']}'
-            : 'v${o['v']}';
+        String key(Map<String, Object?> o) => switch (o['k']! as String) {
+          'list+' || 'list-' => 'm${o['m']}',
+          'rate' || 'unrate' => 'r${o['m']}',
+          _ => 'v${o['v']}',
+        };
         q.removeWhere((o) => key(o) == key(op));
         q.add(op);
         await _setKv(_queueKey, jsonEncode(q));
@@ -395,6 +411,19 @@ final class TraktSync extends ChangeNotifier {
                   ],
                 }
               : _showEpisodes(imdb, [(op['s']! as int, op['e']! as int, null)]),
+        )).$1;
+      case 'rate' || 'unrate':
+        return (await _call(
+          'POST',
+          k == 'rate' ? '/sync/ratings' : '/sync/ratings/remove',
+          body: {
+            movie ? 'movies' : 'shows': [
+              {
+                'rating': ?op['r'],
+                'ids': {'imdb': imdb},
+              },
+            ],
+          },
         )).$1;
       case 'list+' || 'list-':
         return (await _call(
@@ -488,6 +517,9 @@ final class TraktSync extends ChangeNotifier {
           changed('shows', 'watchlisted_at')) {
         await _pullWatchlist(merge: first);
       }
+      if (changed('movies', 'rated_at') || changed('shows', 'rated_at')) {
+        await _pullRatings(merge: first);
+      }
       await _setKv(_activitiesKey, jsonEncode(now));
       brought = (watched: _watched, resume: _resume, listed: _listed);
       lastSync = DateTime.now();
@@ -551,6 +583,31 @@ final class TraktSync extends ChangeNotifier {
               {
                 'ids': {'imdb': i.mediaId},
               },
+          ],
+        },
+      );
+    }
+    final rated = (await _ref.read(ratingsProvider).all()).entries.where(
+      (e) => e.key.startsWith('tt'),
+    );
+    if (rated.isNotEmpty) {
+      Map<String, Object?> item(
+        MapEntry<String, ({String type, int rating})> e,
+      ) => {
+        'rating': e.value.rating,
+        'ids': {'imdb': e.key},
+      };
+      await _call(
+        'POST',
+        '/sync/ratings',
+        body: {
+          'movies': [
+            for (final e in rated.where((e) => e.value.type == 'movie'))
+              item(e),
+          ],
+          'shows': [
+            for (final e in rated.where((e) => e.value.type != 'movie'))
+              item(e),
           ],
         },
       );
@@ -741,6 +798,40 @@ final class TraktSync extends ChangeNotifier {
       }
     });
     unawaited(_fillArtwork(added.take(40).toList()));
+  }
+
+  /// Whole-show and movie ratings (season and episode ratings are left
+  /// on Trakt: Kinora rates titles only).
+  Future<void> _pullRatings({required bool merge}) async {
+    final theirs = <String, ({String type, int rating})>{};
+    for (final type in ['movies', 'shows']) {
+      final (status, body) = await _call('GET', '/sync/ratings/$type');
+      if (status != 200) return; // half the ratings would remove the rest
+      for (final item
+          in (body! as List<Object?>).cast<Map<String, Object?>>()) {
+        final media =
+            (item[type == 'movies' ? 'movie' : 'show']
+                as Map<String, Object?>?) ??
+            const {};
+        final imdb =
+            (media['ids'] as Map<String, Object?>?)?['imdb'] as String?;
+        final rating = (item['rating'] as num?)?.toInt();
+        if (imdb == null || rating == null) continue;
+        theirs[imdb] = (
+          type: type == 'movies' ? 'movie' : 'series',
+          rating: rating,
+        );
+      }
+    }
+    // A rating made here and not sent yet (rate limit) stays as it is.
+    final pending = {
+      for (final o in await _queue())
+        if ((o['k']! as String).endsWith('rate')) o['m']! as String,
+    };
+    theirs.removeWhere((id, _) => pending.contains(id));
+    await _ref
+        .read(ratingsProvider)
+        .fromTrakt(theirs, merge: merge, keep: pending);
   }
 
   /// Posters for titles that came from Trakt (best effort).

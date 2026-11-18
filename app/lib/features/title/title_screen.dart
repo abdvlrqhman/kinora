@@ -222,6 +222,7 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                                         )
                                       : DownloadAction(request: primary),
                                   MyListAction(meta: meta),
+                                  RateAction(meta: meta),
                                   if (meta.trailerYouTubeIds.isNotEmpty)
                                     ActionTile(
                                       icon: Icons.movie_creation_outlined,
