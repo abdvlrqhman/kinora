@@ -107,7 +107,9 @@ final class Notices {
             >();
         final now = await ios?.checkPermissions();
         if (now != null && !now.isEnabled) {
-          await ios?.requestPermissions(provisional: true);
+          // Provisional never prompts. (With alert too: plugin 22 sends
+          // nothing when provisional is asked for alone.)
+          await ios?.requestPermissions(alert: true, provisional: true);
         }
       } else if (Platform.isAndroid) {
         final android = _plugin

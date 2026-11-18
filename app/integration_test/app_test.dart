@@ -770,7 +770,7 @@ void main() {
           .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin
           >()
-          ?.requestPermissions(provisional: true);
+          ?.requestPermissions(alert: true, provisional: true);
       await container.read(noticesProvider).plan();
       final pending = await FlutterLocalNotificationsPlugin()
           .pendingNotificationRequests();
