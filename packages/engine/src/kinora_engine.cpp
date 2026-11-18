@@ -355,6 +355,28 @@ std::string mime_for(const std::string& path) {
   return it == table.end() ? std::string("application/octet-stream") : it->second;
 }
 
+// Where an iPhone app's folder ends ("…/Data/Application/<36-char id>"),
+// or npos for paths that aren't in one.
+std::size_t container_end(const std::string& p) {
+  for (const char* marker : {"/Data/Application/", "\\Data\\Application\\"}) {
+    std::size_t i = p.find(marker);
+    if (i == std::string::npos) continue;
+    std::size_t end = i + std::strlen(marker) + 36;
+    return end <= p.size() ? end : std::string::npos;
+  }
+  return std::string::npos;
+}
+
+// iOS gives the app's folder a new path after an update, files and all: a
+// path saved before points at the old one, which the app may no longer
+// touch ("Operation not permitted"). Returns [saved] in [now]'s folder.
+std::string follow_container(const std::string& saved, const std::string& now) {
+  std::size_t a = container_end(saved), b = container_end(now);
+  if (a == std::string::npos || b == std::string::npos) return saved;
+  if (a == b && saved.compare(0, a, now, 0, b) == 0) return saved;
+  return now.substr(0, b) + saved.substr(a);
+}
+
 bool read_file(const std::string& path, std::vector<char>& out) {
   std::ifstream in(KN_PATH(path), std::ios::binary);
   if (!in) return false;
@@ -1568,6 +1590,8 @@ char* kn_add(kn_session* s, const uint8_t* params, int32_t params_len) {
       lt::error_code rec;
       atp = lt::read_resume_data(buf, rec);
       have_params = !rec;
+      // The resume file sits in today's app folder; its save path may not.
+      if (have_params) atp.save_path = follow_container(atp.save_path, resume);
     }
     if (!have_params) {
       lt::bdecode_node torrent = p.dict_find_string("torrent");

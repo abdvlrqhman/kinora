@@ -106,10 +106,9 @@ final class EngineService {
         savePath:
             savePath ??
             (forDownload ? _paths.downloads.path : _paths.streams.path),
+        // (A resume file from before an iOS update names the old app
+        // folder: the engine follows it to today's.)
         resumePath: resume.existsSync() ? resume.path : null,
-        // iOS moved the app folder since the resume file was written: the
-        // save path in it is gone, this one is where the files are now.
-        forceSavePath: _paths.moved,
         name: name,
         // Nothing downloads until an owner claims its file (see [claim]).
         filePriorities: existed ? null : List.filled(1024, 0),

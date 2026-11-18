@@ -315,6 +315,84 @@ void main() {
   );
 
   test(
+    'after an iOS update the torrent follows its files to the moved folder',
+    () async {
+      // iOS keeps the files but gives the app's folder a new id; the
+      // resume file still names the old one.
+      String app(String id) => '${root.path}/move/Data/Application/$id';
+      final before = app('11111111-1111-1111-1111-111111111111');
+      final after = app('22222222-2222-2222-2222-222222222222');
+      final seeder = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory(
+            '${root.path}/rs-seed-move',
+          ).create()).path,
+          statePath: '${root.path}/seed-move.state',
+        ),
+      );
+      addTearDown(seeder.dispose);
+      seeder.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: '${root.path}/seed',
+          seedMode: true,
+        ),
+      );
+      await _until(() => seeder.listenPort > 0);
+      final first = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory('$before/rs').create(recursive: true))
+              .path,
+          statePath: '$before/engine.state',
+        ),
+      );
+      final ih = first.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: '$before/dl',
+          peers: ['127.0.0.1:${seeder.listenPort}'],
+        ),
+      );
+      await _until(
+        () => (first.fileProgress(ih)?.first ?? 0) == data.length,
+        timeout: const Duration(seconds: 90),
+      );
+      first.saveResume(ih);
+      await _until(File('$before/rs/$ih.fastresume').existsSync);
+      first.dispose();
+      await Directory(before).rename(after);
+
+      final moved = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: '$after/rs',
+          statePath: '$after/engine.state',
+        ),
+      );
+      addTearDown(moved.dispose);
+      moved.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: '$after/streams',
+          resumePath: '$after/rs/$ih.fastresume',
+        ),
+      );
+      expect(moved.status(ih)?.savePath, '$after/dl');
+      final stream = moved.openStream(ih, 0, bitrate: 2 << 20);
+      final (code, _, body) = await _get(
+        stream.uri(),
+        range: 'bytes=0-${data.length - 1}',
+      );
+      expect(code, 206);
+      expect(body, data, reason: 'played from the moved files');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    skip: _lib == null ? 'KINORA_ENGINE_LIB not set' : false,
+  );
+
+  test(
     'a stream that starts mid-file buffers ahead of it, not from the start',
     () async {
       // Resuming at 16 MiB of 64 MiB: after the deadline window (24 MiB)

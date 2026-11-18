@@ -554,8 +554,9 @@ final class DownloadsService implements DownloadActions {
 
   /// After an iOS update the files are where they were, under a new
   /// folder path: saved paths follow, so downloads keep playing offline.
+  /// Every launch, not only the first after an update: a torrent added
+  /// with its old path could write that path back into a row.
   Future<void> _rebaseMovedPaths() async {
-    if (!_paths.moved) return;
     String? moved(String? path) {
       if (path == null ||
           FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound) {
