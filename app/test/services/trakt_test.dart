@@ -351,6 +351,33 @@ void main() {
     );
   });
 
+  test('signed in before ratings existed: they come in once, merged', () async {
+    await signIn();
+    // An older Kinora: synced, but never asked for ratings.
+    await (db.delete(
+      db.keyValues,
+    )..where((t) => t.key.equals('trakt.ratings'))).go();
+    await c.read(ratingsProvider).rate('tt100', 'movie', Taste.like);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    trakt.ratedShows = [
+      {
+        'rating': 10,
+        'show': {
+          'ids': {'imdb': 'tt201'},
+        },
+      },
+    ];
+    trakt.calls.clear();
+    await c.read(traktSyncProvider).syncNow(); // rated_at unchanged
+    expect(trakt.calls, contains('GET /sync/ratings/shows'));
+    final all = await c.read(ratingsProvider).all();
+    expect(all['tt201']?.rating, 10);
+    expect(all['tt100']?.rating, 7, reason: 'merged, not mirrored');
+    trakt.calls.clear();
+    await c.read(traktSyncProvider).syncNow();
+    expect(trakt.calls, isNot(contains('GET /sync/ratings/shows')));
+  });
+
   test('a Trakt rating as a taste: 1–5 not for me, 6–8 like, 9–10 love', () {
     expect(
       [for (var r = 1; r <= 10; r++) Taste.fromTrakt(r)],

@@ -92,6 +92,9 @@ final class TraktSync extends ChangeNotifier {
   static const _activitiesKey = 'trakt.activities';
   static const _syncedKey = 'trakt.synced';
 
+  /// Set once ratings came in (older versions signed in without them).
+  static const _ratingsKey = 'trakt.ratings';
+
   /// The signed-in Trakt user, null when signed out.
   String? user;
   bool syncing = false;
@@ -261,7 +264,7 @@ final class TraktSync extends ChangeNotifier {
     final keys = _ref.read(secureKeysProvider);
     await keys.writeSecret(_tokensKey, null);
     await keys.writeSecret(_userKey, null);
-    for (final k in [_queueKey, _activitiesKey, _syncedKey]) {
+    for (final k in [_queueKey, _activitiesKey, _syncedKey, _ratingsKey]) {
       await _setKv(k, null);
     }
     _tokens = null;
@@ -518,8 +521,13 @@ final class TraktSync extends ChangeNotifier {
           changed('shows', 'watchlisted_at')) {
         await _pullWatchlist(merge: first);
       }
-      if (changed('movies', 'rated_at') || changed('shows', 'rated_at')) {
-        await _pullRatings(merge: first);
+      final ratingsBefore = await _kv(_ratingsKey) == null;
+      if (ratingsBefore ||
+          changed('movies', 'rated_at') ||
+          changed('shows', 'rated_at')) {
+        if (await _pullRatings(merge: first || ratingsBefore)) {
+          await _setKv(_ratingsKey, '1');
+        }
       }
       await _setKv(_activitiesKey, jsonEncode(now));
       brought = (watched: _watched, resume: _resume, listed: _listed);
@@ -828,6 +836,10 @@ final class TraktSync extends ChangeNotifier {
     ]);
     final m = movies.$1 == 200 ? picks(movies.$2, 'movie') : <MetaPreview>[];
     final sh = shows.$1 == 200 ? picks(shows.$2, 'series') : <MetaPreview>[];
+    Log.i(
+      'trakt',
+      'picks: ${m.length} movies (${movies.$1}), ${sh.length} shows (${shows.$1})',
+    );
     return [
       for (var i = 0; i < math.max(m.length, sh.length); i++) ...[
         if (i < sh.length) sh[i],
@@ -856,11 +868,11 @@ final class TraktSync extends ChangeNotifier {
 
   /// Whole-show and movie ratings (season and episode ratings are left
   /// on Trakt: Kinora rates titles only).
-  Future<void> _pullRatings({required bool merge}) async {
+  Future<bool> _pullRatings({required bool merge}) async {
     final theirs = <String, ({String type, int rating})>{};
     for (final type in ['movies', 'shows']) {
       final (status, body) = await _call('GET', '/sync/ratings/$type');
-      if (status != 200) return; // half the ratings would remove the rest
+      if (status != 200) return false; // half would remove the rest
       for (final item
           in (body! as List<Object?>).cast<Map<String, Object?>>()) {
         final media =
@@ -886,6 +898,7 @@ final class TraktSync extends ChangeNotifier {
     await _ref
         .read(ratingsProvider)
         .fromTrakt(theirs, merge: merge, keep: pending);
+    return true;
   }
 
   /// Posters for titles that came from Trakt (best effort).

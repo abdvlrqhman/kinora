@@ -52,8 +52,12 @@ everywhere.
 - **Discovery.** Browse your sources' catalogs by type and genre, search
   them all at once, or paste a magnet or video link to play it.
 - **Trakt, if you like.** Sign in with a code at trakt.tv (Kinora never sees
-  your password): what you watched, where you stopped and your watchlist
-  stay the same on every device, and in apps like Stremio and Kodi.
+  your password): what you watched, where you stopped, your watchlist and
+  your ratings stay the same on every device, and in apps like Stremio and
+  Kodi. Signed in, Home has a "For you" row and every title "More like
+  this".
+- **Ratings.** Rate a whole show or movie: Not for me, I like it or Love it.
+  Titles you don't like stay out of your suggestions.
 - **Backup.** Move your sources and keys to another device as a code locked
   with a passphrase you choose. Kinora keeps no copy anywhere.
 - **On your computer too.** A Windows app in its own window, with a sidebar,
@@ -129,8 +133,11 @@ Kinora has no accounts, no analytics and no ads. It only connects to:
 
 - the sources and subtitle sites you add;
 - TMDB, if you add a key;
-- Trakt, if you sign in: what you play, your progress and your watchlist
-  sync with your Trakt account, and signing out of Kinora revokes its access;
+- Trakt, if you sign in: what you play, your progress, your watchlist and
+  your ratings sync with your Trakt account, and signing out of Kinora
+  revokes its access;
+- Metahub (images.metahub.space), for posters of the titles Trakt suggests
+  when you're signed in;
 - the torrent swarm, plus a public tracker list it refreshes daily;
 - GitHub, once per launch, to check for a new version (you can turn this
   off).
