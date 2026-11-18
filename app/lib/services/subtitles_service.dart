@@ -296,6 +296,8 @@ final class PlayerSubtitles {
           'play-${SubtitleCache.keyFor(res)}.${isAss ? 'ass' : 'srt'}',
         ),
       );
+      // The folder may have been cleared (Settings › Storage, or iOS).
+      await file.parent.create(recursive: true);
       await file.writeAsString(
         isAss ? loaded.document.toAss() : loaded.document.toSrt(),
         encoding: utf8,

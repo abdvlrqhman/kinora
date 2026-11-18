@@ -169,7 +169,18 @@ final class _Eval {
           1,
           math.log(1 + math.max(0, seeds)) / math.log(1 + w.seedSaturation),
         );
-        if (candidate.live == null) availability *= w.addonSeedTrust;
+        final trust = candidate.live == null ? w.addonSeedTrust : 1.0;
+        availability *= trust;
+        if (seeds > w.seedSaturation) {
+          _bonus +=
+              w.moreSeedsBonus *
+              trust *
+              math.min(
+                1,
+                math.log((1 + seeds) / (1 + w.seedSaturation)) /
+                    math.log((1 + w.moreSeedsFull) / (1 + w.seedSaturation)),
+              );
+        }
         if (seeds <= 0) {
           _warn(RankWarningKind.noSeeds, 'No seeds');
         } else if (seeds < w.fewSeeds) {

@@ -10,7 +10,9 @@ import 'equality.dart';
 ///
 /// * **A** (availability): 1 for debrid-cached / direct links, else
 ///   `ln(1+seeds) / ln(1+seedSaturation)` capped at 1, times [addonSeedTrust]
-///   when the count comes from the addon instead of a live scrape.
+///   when the count comes from the addon instead of a live scrape. Seeds
+///   beyond saturation still add up to [moreSeedsBonus] (log scale up to
+///   [moreSeedsFull]): more people sharing starts and plays faster.
 /// * **Q** (quality): [resolutionShare] × resolution fit (1 at the target,
 ///   −[resolutionStepBelow] per rung below, −[resolutionStepAbove] per rung
 ///   above) + the rest × [sourceScores].
@@ -28,11 +30,13 @@ final class RankWeights {
     this.audioLanguage = 0.15,
     this.subtitles = 0.15,
     this.seedSaturation = 100,
+    this.moreSeedsBonus = 0.07,
+    this.moreSeedsFull = 3000,
     this.addonSeedTrust = 0.85,
     this.unknownSeedsAvailability = 0.25,
     this.fewSeeds = 5,
     this.resolutionShare = 0.6,
-    this.resolutionStepBelow = 0.25,
+    this.resolutionStepBelow = 0.35,
     this.resolutionStepAbove = 0.4,
     this.unknownResolutionFit = 0.4,
     this.sourceScores = const {
@@ -97,6 +101,12 @@ final class RankWeights {
 
   /// Seeds at which availability saturates.
   final int seedSaturation;
+
+  /// Most a well-shared torrent gains over one at [seedSaturation].
+  final double moreSeedsBonus;
+
+  /// Seeds at which [moreSeedsBonus] is reached.
+  final int moreSeedsFull;
 
   /// Multiplier for addon-reported (possibly stale) seed counts.
   final double addonSeedTrust;
@@ -187,6 +197,7 @@ final class RankWeights {
 
   List<Object?> get _fields => [
     availability, quality, audioLanguage, subtitles, seedSaturation, //
+    moreSeedsBonus, moreSeedsFull,
     addonSeedTrust, unknownSeedsAvailability, fewSeeds, resolutionShare,
     resolutionStepBelow, resolutionStepAbove, unknownResolutionFit,
     sourceScores, languageDecay, neutral, noAudioMatch, embeddedSubtitleFit,

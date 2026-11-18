@@ -208,7 +208,8 @@ void main() {
       expect(pack.isRejected, isFalse);
       expect(_labels(pack), contains('Season pack (slower start)'));
       expect(ranked.indexOf(pack), 1);
-      expect(ranked.first.score - pack.score, closeTo(0.05, 1e-9));
+      // The pack penalty, less what its extra seeds earn back.
+      expect(ranked.first.score - pack.score, inExclusiveRange(0, 0.05));
     });
 
     test('warnings explain the losers', () {
@@ -279,12 +280,12 @@ void main() {
       _c('d-4k', 'Movie.2019.2160p.WEB-DL.DDP5.1.H.264-GRP', live: 150, gb: 15),
     ];
 
-    test('on the phone the DTS BluRay can win', () {
+    test('on the phone the most-shared BluRay wins', () {
       final ranked = rank(
         candidates,
         RankPrefs(device: _phone, maxResolution: Resolution.p1080),
       );
-      expect(ranked.first.candidate.id, 'a-dts');
+      expect(ranked.first.candidate.id, 'c-10bit');
       expect(ranked.where((r) => r.isRejected), isEmpty);
     });
 
@@ -438,6 +439,25 @@ void main() {
       ], RankPrefs(device: _phone, maxResolution: Resolution.p1080));
       expect(ranked.map((r) => r.candidate.id), ['1080', '720', '2160']);
     });
+
+    test('more seeds win past 100: 2000-seed WEB-DL over 150-seed HDR', () {
+      final ranked = rank([
+        _c('hdr', 'Movie.2021.1080p.BluRay.HDR.x265-A', live: 150),
+        _c('web', 'Movie.2021.1080p.WEB-DL.H.264-B', live: 2000),
+      ], RankPrefs(device: _phone, maxResolution: Resolution.p1080));
+      expect(ranked.first.candidate.id, 'web');
+    });
+
+    test(
+      'seeds don\'t buy a lower resolution: 300-seed 1080p over 3000 720p',
+      () {
+        final ranked = rank([
+          _c('720', 'Movie.2021.720p.WEB-DL.H.264-A', live: 3000),
+          _c('1080', 'Movie.2021.1080p.WEB-DL.H.264-A', live: 300),
+        ], RankPrefs(device: _phone, maxResolution: Resolution.p1080));
+        expect(ranked.first.candidate.id, '1080');
+      },
+    );
 
     test('the limit is a ceiling: a well-shared 4K comes after weak 720p', () {
       final prefs = RankPrefs(device: _phone, maxResolution: Resolution.p1080);

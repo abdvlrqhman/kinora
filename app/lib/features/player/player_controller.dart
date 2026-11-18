@@ -192,6 +192,22 @@ class PlayerController extends ChangeNotifier {
   /// the next one (resolved releases) or say so.
   void _onPlayerError(String e) {
     Log.w('player', e);
+    // A subtitle file the player couldn't read: the next best one instead
+    // (never a reason to give up on the video).
+    if (e.startsWith('Can not open external file')) {
+      final id = _loaded.entries
+          .where((l) => e.contains(l.value))
+          .firstOrNull
+          ?.key;
+      final option = subtitles.where((s) => s.id == id).firstOrNull;
+      if (option != null) {
+        _loaded.remove(option.id);
+        if (activeSubtitleId == option.id) {
+          unawaited(_subtitleFailed(option, remember: false));
+        }
+      }
+      return;
+    }
     if (phase != PlayerPhase.playing || _started) return;
     // Some errors don't stop playback (no hardware decoder, no audio
     // device: a VM or Remote Desktop): give the file a moment to play.
@@ -1150,6 +1166,38 @@ class PlayerController extends ChangeNotifier {
 
   final _loaded = <String, String>{};
 
+  /// A subtitle file loaded earlier, unless it's gone since (a cleared
+  /// cache).
+  String? _cached(String id) {
+    final path = _loaded[id];
+    return path != null && File(path).existsSync() ? path : null;
+  }
+
+  /// [option] couldn't be loaded: the next best one in its language.
+  Future<void> _subtitleFailed(
+    SubtitleOption option, {
+    required bool remember,
+  }) async {
+    _broken.add(option.id);
+    final lang = option.language;
+    final next = lang == null
+        ? null
+        : _bestSubtitle(
+            lang,
+            variant: option.variant,
+            strictVariant: option.forced,
+          );
+    if (next != null) {
+      if (remember) {
+        notice = 'That subtitle couldn’t be loaded. Showing the next best one.';
+      }
+      return _activate(next, remember: remember);
+    }
+    activeSubtitleId = null;
+    notice = 'That subtitle couldn’t be loaded. Pick another one.';
+    notifyListeners();
+  }
+
   /// External subtitles that failed to load for this video: never picked
   /// automatically again (the viewer can still retry one from the list).
   final _broken = <String>{};
@@ -1172,7 +1220,7 @@ class PlayerController extends ChangeNotifier {
                     best == null || (s.fit ?? 0) > (best.fit ?? 0) ? s : best,
               );
     if (option == null) return null;
-    final path = option.uri ?? _loaded[option.id] ?? await option.load?.call();
+    final path = option.uri ?? _cached(option.id) ?? await option.load?.call();
     if (path == null) return null;
     _loaded[option.id] = path;
     return (path: path, language: option.language);
@@ -1199,35 +1247,13 @@ class PlayerController extends ChangeNotifier {
     } else {
       String? path;
       try {
-        path = option.uri ?? _loaded[option.id] ?? await option.load?.call();
+        path = option.uri ?? _cached(option.id) ?? await option.load?.call();
       } on Object catch (e) {
         Log.w('subtitles', 'load failed: $e');
       }
       // Another subtitle was chosen while this one downloaded.
       if (activeSubtitleId != option.id) return;
-      if (path == null) {
-        // Fall back to the next best one in the same language.
-        _broken.add(option.id);
-        final lang = option.language;
-        final next = lang == null
-            ? null
-            : _bestSubtitle(
-                lang,
-                variant: option.variant,
-                strictVariant: option.forced,
-              );
-        if (next != null) {
-          if (remember) {
-            notice =
-                'That subtitle couldn’t be loaded. Showing the next best one.';
-          }
-          return _activate(next, remember: remember);
-        }
-        activeSubtitleId = null;
-        notice = 'That subtitle couldn’t be loaded. Pick another one.';
-        notifyListeners();
-        return;
-      }
+      if (path == null) return _subtitleFailed(option, remember: remember);
       _loaded[option.id] = path;
       _broken.remove(option.id);
       await player.setSubtitleTrack(

@@ -228,6 +228,92 @@ void main() {
   );
 
   test(
+    'playing a file deleted while its torrent is loaded fetches it again',
+    () async {
+      final seeder = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory(
+            '${root.path}/rs-seed-gone',
+          ).create()).path,
+          statePath: '${root.path}/seed-gone.state',
+        ),
+      );
+      addTearDown(seeder.dispose);
+      seeder.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: '${root.path}/seed',
+          seedMode: true,
+        ),
+      );
+      await _until(() => seeder.listenPort > 0);
+      final dl = '${root.path}/dl-gone';
+      final engine = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory('${root.path}/rs-gone').create()).path,
+          statePath: '${root.path}/gone.state',
+        ),
+      );
+      addTearDown(engine.dispose);
+      final failures = <EngineEvent>[];
+      final sub = engine.events.listen((e) {
+        if (e is TorrentFailed || e is TorrentFileError) failures.add(e);
+      });
+      addTearDown(sub.cancel);
+      final ih = engine.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: dl,
+          peers: ['127.0.0.1:${seeder.listenPort}'],
+        ),
+      );
+      await _until(
+        () => (engine.fileProgress(ih)?.first ?? 0) == data.length,
+        timeout: const Duration(seconds: 90),
+      );
+      // Deleted while the torrent is still loaded (another episode's
+      // cleanup, a cleared cache): it still believes it has every piece.
+      File('$dl/$name').deleteSync();
+      final stream = engine.openStream(ih, 0, bitrate: 2 << 20);
+      final got = _get(stream.uri(), range: 'bytes=0-99999');
+      // The re-check makes it a downloader again; a seed turning up (a
+      // tracker's job out there) brings the file back.
+      await _until(() => engine.status(ih)?.state == TorrentState.downloading);
+      final seed2 = KinoraEngine.start(
+        EngineConfig(
+          testMode: true,
+          resumeDir: (await Directory(
+            '${root.path}/rs-seed-gone2',
+          ).create()).path,
+          statePath: '${root.path}/seed-gone2.state',
+        ),
+      );
+      addTearDown(seed2.dispose);
+      seed2.add(
+        AddTorrent.torrentFile(
+          torrent.bytes,
+          savePath: '${root.path}/seed',
+          seedMode: true,
+          peers: ['127.0.0.1:${engine.listenPort}'],
+        ),
+      );
+      final (code, _, body) = await got.timeout(const Duration(seconds: 90));
+      expect(code, 206);
+      expect(body, data.sublist(0, 100000), reason: 'the file came back');
+      expect(failures, isEmpty, reason: 'it re-checked instead of failing');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    // Windows won't delete a file the torrent has open.
+    skip: _lib == null
+        ? 'KINORA_ENGINE_LIB not set'
+        : Platform.isWindows
+        ? 'files in use can\'t be deleted on Windows'
+        : false,
+  );
+
+  test(
     'a stream that starts mid-file buffers ahead of it, not from the start',
     () async {
       // Resuming at 16 MiB of 64 MiB: after the deadline window (24 MiB)

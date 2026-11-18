@@ -1177,6 +1177,9 @@ void serve_stream(kn_session* s, int fd, const Request& req, std::shared_ptr<Rou
       file_fd = file_open(path);
       if (file_fd < 0) {
         push_log(s, "stream open failed: " + path + " " + last_error());
+        // Gone though the torrent holds the piece (deleted since, or a cleared
+        // cache): re-check, then wait for the piece to come in again.
+        if (stale_piece(s, *r, piece)) continue;
         break;
       }
     }
