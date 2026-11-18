@@ -41,6 +41,7 @@ import 'package:kinora/services/resolver.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:volume_controller/volume_controller.dart';
 
 import 'support/fake_world.dart';
 
@@ -412,9 +413,22 @@ void main() {
       expect(back.rect, isNot('0,0,$w,$h'), reason: 'back in its window');
       await mouse.removePointer();
     }
+    // What a volume swipe changes: the phone's volume, or the player's
+    // where iPhone won't let an app set it (the simulator).
+    Future<(double, double)> levels() async =>
+        (await VolumeController.instance.getVolume(), c.player.state.volume);
     for (final round in [
       if (!isDesktop) ...['first', 'after toggling the controls'],
     ]) {
+      if (round == 'first') {
+        try {
+          await VolumeController.instance.setVolume(0.3); // room to go up
+        } on Object {
+          // The simulator has no volume to set.
+        }
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      final before = await levels();
       await swipe(0.8);
       await pumpUntil(
         tester,
@@ -437,7 +451,21 @@ void main() {
             .map((e) => e.target.runtimeType)
             .join(' < '),
       );
-      if (round == 'first') await shot(tester, 'player-volume');
+      if (round == 'first') {
+        var after = await levels();
+        for (var i = 0; i < 30 && after == before; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          after = await levels();
+        }
+        expect(
+          after,
+          isNot(before),
+          reason: 'the volume swipe changes the volume (phone, player)',
+        );
+        // ignore: avoid_print
+        print('E2E ok: the volume swipe moved the volume: $before → $after');
+        await shot(tester, 'player-volume');
+      }
       await swipe(0.2);
       await pumpUntil(
         tester,

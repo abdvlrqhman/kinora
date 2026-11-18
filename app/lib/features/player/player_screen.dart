@@ -96,6 +96,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
       // (A computer's screen and speakers aren't the player's to change.)
       unawaited(_readLevels());
+      // Brightness follows the finger: the plugin otherwise eases every
+      // change over a second, and each swipe step cancels the last.
+      unawaited(ScreenBrightness.instance.setAnimate(false));
     } else {
       // Autofocus can lose to the route's own focus as the page opens.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -169,6 +172,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     scheduleMicrotask(() => launchingArt.value = null);
     _hide?.cancel();
     _levelHide?.cancel();
+    _volumeCheck?.cancel();
     _flashTimer?.cancel();
     _seekReset?.cancel();
     _keyFocus.dispose();
@@ -186,7 +190,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } else {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
       unawaited(keepPhoneUpright());
-      unawaited(ScreenBrightness.instance.resetApplicationScreenBrightness());
+      // Back to the phone's own brightness, eased.
+      unawaited(
+        ScreenBrightness.instance
+            .setAnimate(true)
+            .then(
+              (_) =>
+                  ScreenBrightness.instance.resetApplicationScreenBrightness(),
+            ),
+      );
     }
     super.dispose();
   }
@@ -269,6 +281,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   ({bool brightness, double value})? _levelShown;
   Timer? _levelHide;
 
+  /// iPhone's volume is set through a hidden system slider, which some iOS
+  /// versions ignore: once the volume doesn't follow a swipe, swipes set the
+  /// player's own volume instead.
+  bool _playerVolume = false;
+  Timer? _volumeCheck;
+
+  void _checkVolume(double wanted) {
+    _volumeCheck?.cancel();
+    _volumeCheck = Timer(const Duration(milliseconds: 400), () async {
+      if (_playerVolume || !mounted) return;
+      final now = await VolumeController.instance.getVolume();
+      // (iPhone's volume moves in 16 steps.)
+      if ((now - wanted).abs() < 0.07 || !mounted) return;
+      Log.i(
+        'player',
+        'the phone volume stayed at ${now.toStringAsFixed(2)} '
+            '(wanted ${wanted.toStringAsFixed(2)}): swipes set the player volume',
+      );
+      _playerVolume = true;
+      await c.player.setVolume(wanted * 100);
+    });
+  }
+
   /// Last double-tap position (kept on the State: a rebuild between the
   /// two taps must not lose it).
   TapDownDetails? _lastDown;
@@ -277,7 +312,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final writes = _levelWrites;
     try {
       final brightness = await ScreenBrightness.instance.application;
-      final volume = await VolumeController.instance.getVolume();
+      final volume = _playerVolume
+          ? c.player.state.volume / 100
+          : await VolumeController.instance.getVolume();
       if (writes != _levelWrites) return; // a swipe set newer values
       _brightnessNow = brightness;
       _volumeNow = volume;
@@ -322,15 +359,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     try {
       if (left) {
         await ScreenBrightness.instance.setApplicationScreenBrightness(next);
+      } else if (_playerVolume) {
+        await c.player.setVolume(next * 100);
       } else {
         VolumeController.instance.showSystemUI = false;
         await VolumeController.instance.setVolume(next);
+        _checkVolume(next);
       }
     } on Object catch (e) {
       // iOS can't always reach its volume slider (the simulator, AirPlay):
       // the player's own volume instead. Brightness just stays.
       Log.d('player', 'level: $e');
-      if (!left) await c.player.setVolume(next * 100);
+      if (!left) {
+        _playerVolume = true;
+        await c.player.setVolume(next * 100);
+      }
     }
   }
 
