@@ -440,24 +440,24 @@ void main() {
       expect(ranked.map((r) => r.candidate.id), ['1080', '720', '2160']);
     });
 
-    test('more seeds win past 100: 2000-seed WEB-DL over 150-seed HDR', () {
+    test('more seeds win past 100: 2000-seed WEB-DL over 150-seed BluRay', () {
       final ranked = rank([
-        _c('hdr', 'Movie.2021.1080p.BluRay.HDR.x265-A', live: 150),
+        _c('bluray', 'Movie.2021.1080p.BluRay.x264-A', live: 150),
         _c('web', 'Movie.2021.1080p.WEB-DL.H.264-B', live: 2000),
       ], RankPrefs(device: _phone, maxResolution: Resolution.p1080));
       expect(ranked.first.candidate.id, 'web');
     });
 
-    test(
-      'seeds don\'t buy a lower resolution: 300-seed 1080p over 3000 720p',
-      () {
+    test('seeds don\'t buy a lower resolution from a well-shared one', () {
+      final prefs = RankPrefs(device: _phone, maxResolution: Resolution.p1080);
+      for (final (hd, sd) in [(60, 1000), (100, 3000), (300, 3000)]) {
         final ranked = rank([
-          _c('720', 'Movie.2021.720p.WEB-DL.H.264-A', live: 3000),
-          _c('1080', 'Movie.2021.1080p.WEB-DL.H.264-A', live: 300),
-        ], RankPrefs(device: _phone, maxResolution: Resolution.p1080));
-        expect(ranked.first.candidate.id, '1080');
-      },
-    );
+          _c('720', 'Movie.2021.720p.WEB-DL.H.264-A', live: sd),
+          _c('1080', 'Movie.2021.1080p.WEB-DL.H.264-A', live: hd),
+        ], prefs);
+        expect(ranked.first.candidate.id, '1080', reason: '$hd vs $sd seeds');
+      }
+    });
 
     test('the limit is a ceiling: a well-shared 4K comes after weak 720p', () {
       final prefs = RankPrefs(device: _phone, maxResolution: Resolution.p1080);

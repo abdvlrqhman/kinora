@@ -277,7 +277,8 @@ void main() {
       // cleanup, a cleared cache): it still believes it has every piece.
       File('$dl/$name').deleteSync();
       final stream = engine.openStream(ih, 0, bitrate: 2 << 20);
-      final got = _get(stream.uri(), range: 'bytes=0-99999');
+      // The whole file: a part not fetched yet must wait, never read as zeros.
+      final got = _get(stream.uri(), range: 'bytes=0-${data.length - 1}');
       // The re-check makes it a downloader again; a seed turning up (a
       // tracker's job out there) brings the file back.
       await _until(() => engine.status(ih)?.state == TorrentState.downloading);
@@ -301,7 +302,7 @@ void main() {
       );
       final (code, _, body) = await got.timeout(const Duration(seconds: 90));
       expect(code, 206);
-      expect(body, data.sublist(0, 100000), reason: 'the file came back');
+      expect(body, data, reason: 'the file came back');
       expect(failures, isEmpty, reason: 'it re-checked instead of failing');
     },
     timeout: const Timeout(Duration(minutes: 3)),
