@@ -22,6 +22,9 @@ final class FakeWorld {
   );
 
   static const imdb = 'tt9999999';
+
+  /// A show whose first episode airs tomorrow (notifications).
+  static const comingImdb = 'tt9999998';
   static const show = 'Kinora E2E Show';
   static const fileName = 'Kinora.E2E.S01E01.1080p.WEB-DL.AAC2.0.H.264-KNR.mkv';
 
@@ -151,6 +154,26 @@ final class FakeWorld {
                 'episode': e,
                 'title': 'Pack $e',
               },
+          ],
+        },
+      };
+    } else if (path == '/meta/series/$comingImdb.json') {
+      json = {
+        'meta': {
+          'id': comingImdb,
+          'type': 'series',
+          'name': 'Kinora E2E Tomorrow',
+          'videos': [
+            {
+              'id': '$comingImdb:1:1',
+              'season': 1,
+              'episode': 1,
+              'title': 'Pilot',
+              'released': DateTime.now()
+                  .toUtc()
+                  .add(const Duration(days: 1))
+                  .toIso8601String(),
+            },
           ],
         },
       };

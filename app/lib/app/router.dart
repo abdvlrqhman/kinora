@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/title/title_screen.dart';
 import '../services/play_request.dart';
 import '../services/background.dart';
+import '../services/notices.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets/media.dart';
 import 'providers.dart';
@@ -138,6 +141,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
   // A tapped download notice (iPhone) opens Downloads.
   BackgroundKeeper.instance.onOpen((_) => router.go('/downloads'));
+  // A tapped show or pick notice opens its title.
+  unawaited(ref.read(noticesProvider).start(router.go));
   ref.onDispose(router.dispose);
   return router;
 });

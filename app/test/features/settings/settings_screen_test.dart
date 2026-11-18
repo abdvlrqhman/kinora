@@ -66,6 +66,7 @@ void main() {
       '/languages/style',
       '/subtitle-sites',
       '/playback',
+      '/notifications',
       '/downloads',
       '/network',
       '/storage',
@@ -92,6 +93,21 @@ void main() {
       expect(tester.takeException(), isNull, reason: page);
       await unmount(tester);
     }
+  });
+
+  kitTest('notification choices are saved', (tester) async {
+    final kit = await pumpKit(tester, location: '/settings/notifications');
+    await tester.pumpAndSettle();
+    expect(
+      find.text('One title a week you might like. Needs Trakt.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Shows you follow'));
+    await tester.tap(find.text('Picked for you'));
+    await tester.pumpAndSettle();
+    expect(kit.settings.notifyShows, isFalse);
+    expect(kit.settings.notifyPicks, isFalse);
+    await unmount(tester);
   });
 
   kitTest('playback, downloads and network choices are saved', (tester) async {

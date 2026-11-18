@@ -16,6 +16,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -25,6 +26,7 @@ import 'package:kinora/app/providers.dart';
 import 'package:kinora/app/router.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/paths.dart';
+import 'package:kinora/services/notices.dart';
 import 'package:kinora/core/settings.dart';
 import 'package:kinora/features/player/player_controller.dart';
 import 'package:kinora/features/player/player_screen.dart';
@@ -750,5 +752,40 @@ void main() {
     expect(mostAtOnce, lessThanOrEqualTo(2), reason: 'Downloads at once: 2');
     // ignore: avoid_print
     print('E2E ok: season pack episodes saved in Downloads, two at once');
+
+    // A show in My list airing tomorrow: its notice waits on the phone,
+    // and a tap opens the show.
+    if (Platform.isAndroid || Platform.isIOS) {
+      await db
+          .into(db.libraryItems)
+          .insert(
+            LibraryItemsCompanion.insert(
+              mediaId: FakeWorld.comingImdb,
+              type: 'series',
+              name: 'Kinora E2E Tomorrow',
+            ),
+          );
+      // (The simulator has no one to say yes: quiet delivery needs none.)
+      await FlutterLocalNotificationsPlugin()
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.requestPermissions(provisional: true);
+      await container.read(noticesProvider).plan();
+      final pending = await FlutterLocalNotificationsPlugin()
+          .pendingNotificationRequests();
+      final notice = pending
+          .where((p) => p.payload == '/title/series/${FakeWorld.comingImdb}')
+          .firstOrNull;
+      expect(
+        notice,
+        isNotNull,
+        reason: 'pending: ${pending.map((p) => p.payload)}',
+      );
+      expect(notice!.title, 'Kinora E2E Tomorrow');
+      expect(notice.body, 'Premiered: S1 E1 “Pilot” aired.');
+      // ignore: avoid_print
+      print('E2E ok: a followed show airing tomorrow has its notice waiting');
+    }
   }, timeout: const Timeout(Duration(minutes: 6)));
 }

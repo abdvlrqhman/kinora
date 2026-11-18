@@ -11,6 +11,7 @@ import 'package:stremio/stremio.dart';
 import '../app/providers.dart';
 import '../core/db/database.dart';
 import '../core/log.dart';
+import 'notices_plan.dart';
 import 'ratings.dart';
 import 'sources.dart';
 
@@ -845,6 +846,40 @@ final class TraktSync extends ChangeNotifier {
         if (i < sh.length) sh[i],
         if (i < m.length) m[i],
       ],
+    ];
+  }
+
+  /// Episodes of the viewer's shows airing from yesterday for [days]
+  /// days, with their real times and kinds (premiere, finale…).
+  Future<List<AirDate>> calendar({int days = 16}) async {
+    if (!signedIn) return const [];
+    final from = DateTime.now().toUtc().subtract(const Duration(days: 1));
+    final day = from.toIso8601String().substring(0, 10);
+    final (status, body) = await _call(
+      'GET',
+      '/calendars/my/shows/$day/$days?extended=full',
+    );
+    if (status != 200 || body is! List) return const [];
+    return [
+      for (final item in body.whereType<Map<String, Object?>>())
+        if ((
+              item['show'] as Map<String, Object?>?,
+              item['episode'] as Map<String, Object?>?,
+              DateTime.tryParse(item['first_aired'] as String? ?? ''),
+            )
+            case (final show?, final ep?, final at?))
+          if ((show['ids'] as Map<String, Object?>?)?['imdb']
+              case final String imdb)
+            (
+              showId: imdb,
+              show: show['title'] as String? ?? '',
+              season: (ep['season'] as num?)?.toInt() ?? 0,
+              episode: (ep['number'] as num?)?.toInt() ?? 0,
+              title: ep['title'] as String?,
+              airsAt: at,
+              precise: true,
+              type: ep['episode_type'] as String?,
+            ),
     ];
   }
 

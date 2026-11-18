@@ -10,6 +10,7 @@ import '../../app/providers.dart';
 import '../../core/format.dart';
 import '../../core/settings.dart';
 import '../../services/background.dart';
+import '../../services/trakt.dart';
 import 'widgets/settings_ui.dart';
 
 void _save(WidgetRef ref, AppSettings Function(AppSettings) change) =>
@@ -59,6 +60,45 @@ class PlaybackPage extends ConsumerWidget {
           detail: 'Jumps past intros and recaps when the video marks them.',
           value: s.skipIntros,
           onChanged: (v) => _save(ref, (s) => s.copyWith(skipIntros: v)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Settings › Notifications (phones).
+class NotificationsPage extends ConsumerWidget {
+  const NotificationsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(settingsProvider);
+    final trakt = ref.watch(traktSyncProvider);
+    return SettingsPage(
+      title: 'Notifications',
+      children: [
+        const Note(
+          'At most one notice per show a day, never between 10 PM and 9 AM.',
+        ),
+        SwitchRow(
+          label: 'Shows you follow',
+          detail:
+              'New episodes, new seasons and finales of shows in My list '
+              'or that you watched lately.',
+          value: s.notifyShows,
+          onChanged: (v) => _save(ref, (s) => s.copyWith(notifyShows: v)),
+        ),
+        ListenableBuilder(
+          listenable: trakt,
+          builder: (context, _) => SwitchRow(
+            label: 'Picked for you',
+            detail: trakt.signedIn
+                ? 'One title a week you might like, from what you watch '
+                      'and rate.'
+                : 'One title a week you might like. Needs Trakt.',
+            value: s.notifyPicks,
+            onChanged: (v) => _save(ref, (s) => s.copyWith(notifyPicks: v)),
+          ),
         ),
       ],
     );

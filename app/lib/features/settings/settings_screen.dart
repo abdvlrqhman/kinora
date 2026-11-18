@@ -31,6 +31,7 @@ final List<RouteBase> settingsRoutes = [
   pageRoute('trakt', (_) => const TraktPage()),
   pageRoute('backup', (_) => const BackupPage()),
   pageRoute('playback', (_) => const PlaybackPage()),
+  pageRoute('notifications', (_) => const NotificationsPage()),
   pageRoute('downloads', (_) => const DownloadSettingsPage()),
   pageRoute('network', (_) => const NetworkPage()),
   pageRoute('storage', (_) => const StoragePage()),
@@ -118,6 +119,18 @@ class SettingsScreen extends ConsumerWidget {
           ].join(', '),
           onTap: () => go('playback'),
         ),
+        if (!isDesktop)
+          NavRow(
+            label: 'Notifications',
+            icon: Icons.notifications_none_rounded,
+            value: switch ((s.notifyShows, s.notifyPicks)) {
+              (true, true) => 'Your shows and a weekly pick',
+              (true, false) => 'Your shows',
+              (false, true) => 'A weekly pick',
+              (false, false) => 'Off',
+            },
+            onTap: () => go('notifications'),
+          ),
         SectionTitle(thisDeviceTitle),
         NavRow(
           label: 'Downloads',

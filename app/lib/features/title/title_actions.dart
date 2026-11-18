@@ -11,6 +11,7 @@ import '../../core/db/database.dart';
 import '../../core/format.dart';
 import '../../services/downloads.dart';
 import '../../services/library.dart';
+import '../../services/notices.dart';
 import '../../services/play_request.dart';
 import '../../services/ratings.dart';
 import '../../services/resolver.dart';
@@ -43,15 +44,22 @@ class MyListButton extends ConsumerWidget {
   }
 }
 
-Future<bool> _toggle(WidgetRef ref, MetaPreview meta) => ref
-    .read(libraryRepositoryProvider)
-    .toggle(
-      mediaId: meta.id,
-      type: meta.type,
-      name: meta.name,
-      poster: meta.poster,
-      background: meta.background,
-    );
+Future<bool> _toggle(WidgetRef ref, MetaPreview meta) async {
+  final added = await ref
+      .read(libraryRepositoryProvider)
+      .toggle(
+        mediaId: meta.id,
+        type: meta.type,
+        name: meta.name,
+        poster: meta.poster,
+        background: meta.background,
+      );
+  // Following a show: its new episodes can be told.
+  if (added && meta.type == 'series') {
+    unawaited(ref.read(noticesProvider).followed());
+  }
+  return added;
+}
 
 /// A round glass control with a short label underneath.
 class ActionTile extends StatelessWidget {

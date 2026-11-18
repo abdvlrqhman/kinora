@@ -97,6 +97,8 @@ final class AppSettings {
     this.dataSaver = false,
     this.autoplayNext = true,
     this.skipIntros = true,
+    this.notifyShows = true,
+    this.notifyPicks = true,
     this.wifiOnlyDownloads = true,
     this.autoDownloadNext = false,
     this.downloadsAtOnce = 0,
@@ -128,6 +130,8 @@ final class AppSettings {
     dataSaver: j['dataSaver'] as bool? ?? false,
     autoplayNext: j['autoplayNext'] as bool? ?? true,
     skipIntros: j['skipIntros'] as bool? ?? true,
+    notifyShows: j['notifyShows'] as bool? ?? true,
+    notifyPicks: j['notifyPicks'] as bool? ?? true,
     wifiOnlyDownloads: j['wifiOnlyDownloads'] as bool? ?? true,
     autoDownloadNext: j['autoDownloadNext'] as bool? ?? false,
     downloadsAtOnce: (j['downloadsAtOnce'] as num? ?? 0).toInt(),
@@ -174,6 +178,12 @@ final class AppSettings {
   final bool dataSaver;
   final bool autoplayNext;
   final bool skipIntros;
+
+  /// Notices when followed shows air: episodes, seasons, finales.
+  final bool notifyShows;
+
+  /// One "Picked for you" a week (Trakt, signed in).
+  final bool notifyPicks;
   final bool wifiOnlyDownloads;
   final bool autoDownloadNext;
 
@@ -225,6 +235,8 @@ final class AppSettings {
     'dataSaver': dataSaver,
     'autoplayNext': autoplayNext,
     'skipIntros': skipIntros,
+    'notifyShows': notifyShows,
+    'notifyPicks': notifyPicks,
     'wifiOnlyDownloads': wifiOnlyDownloads,
     'autoDownloadNext': autoDownloadNext,
     'downloadsAtOnce': downloadsAtOnce,
@@ -254,6 +266,8 @@ final class AppSettings {
     bool? dataSaver,
     bool? autoplayNext,
     bool? skipIntros,
+    bool? notifyShows,
+    bool? notifyPicks,
     bool? wifiOnlyDownloads,
     bool? autoDownloadNext,
     int? downloadsAtOnce,
@@ -280,6 +294,8 @@ final class AppSettings {
     dataSaver: dataSaver ?? this.dataSaver,
     autoplayNext: autoplayNext ?? this.autoplayNext,
     skipIntros: skipIntros ?? this.skipIntros,
+    notifyShows: notifyShows ?? this.notifyShows,
+    notifyPicks: notifyPicks ?? this.notifyPicks,
     wifiOnlyDownloads: wifiOnlyDownloads ?? this.wifiOnlyDownloads,
     autoDownloadNext: autoDownloadNext ?? this.autoDownloadNext,
     downloadsAtOnce: downloadsAtOnce ?? this.downloadsAtOnce,
