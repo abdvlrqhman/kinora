@@ -174,7 +174,8 @@ final class PlaybackService {
       ).future,
     );
     // A version the viewer picked is tried alone (and reported if dead);
-    // otherwise versions that already failed this session are skipped.
+    // otherwise versions that already failed this session, and versions
+    // above the viewer's quality limit, are skipped.
     final picked = request.candidateId == null
         ? null
         : result.releases
@@ -184,11 +185,14 @@ final class PlaybackService {
         ? [picked]
         : [
             for (final r in result.releases)
-              if (!skip.contains(r.candidateId)) r,
+              if (!skip.contains(r.candidateId) && !r.aboveLimit) r,
           ];
     if (ordered.isEmpty) {
       throw PlaybackException(
-        result.message ?? 'No version of this is available right now.',
+        result.message ??
+            (result.releases.any((r) => !skip.contains(r.candidateId))
+                ? aboveLimitMessage
+                : 'No version of this is available right now.'),
         noStreamSource: result.noStreamSource,
       );
     }

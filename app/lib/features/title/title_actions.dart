@@ -328,7 +328,10 @@ class ReleaseLine extends ConsumerWidget {
     } else {
       final text = switch (result) {
         AsyncValue(:final value?) =>
-          value.message ?? 'No versions found yet. Try again later.',
+          value.message ??
+              (value.releases.isNotEmpty
+                  ? 'Only versions above your quality limit were found.'
+                  : 'No versions found yet. Try again later.'),
         AsyncError() => 'Couldn’t check versions right now.',
         _ => 'Finding the best version…',
       };

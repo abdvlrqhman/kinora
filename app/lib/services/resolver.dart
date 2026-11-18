@@ -55,6 +55,7 @@ final class ResolvedRelease {
     this.addonName,
     this.stream,
     this.fileIndex,
+    this.aboveLimit = false,
   });
 
   final String candidateId;
@@ -89,7 +90,14 @@ final class ResolvedRelease {
 
   /// File inside the torrent, when known.
   final int? fileIndex;
+
+  /// Sharper than the viewer's quality limit: played only when picked.
+  final bool aboveLimit;
 }
+
+/// When only versions above the viewer's quality limit are left.
+const aboveLimitMessage =
+    'No version within your quality limit is available. Choose one yourself, or raise the limit in Settings.';
 
 /// Releases for one video, best first.
 final class ResolveResult {
@@ -115,7 +123,8 @@ final class ResolveResult {
   /// is adding one, not retrying.
   final bool noStreamSource;
 
-  ResolvedRelease? get best => releases.isEmpty ? null : releases.first;
+  /// The version played automatically: never one above the quality limit.
+  ResolvedRelease? get best => releases.where((r) => !r.aboveLimit).firstOrNull;
 }
 
 /// What this phone decodes well through the player (mpv).
@@ -434,5 +443,6 @@ ResolvedRelease _toRelease(RankedCandidate r, StreamItem stream) {
     addonName: c.addonId,
     stream: stream,
     fileIndex: c.fileIndex,
+    aboveLimit: r.warnings.any((w) => w.kind == RankWarningKind.aboveLimit),
   );
 }

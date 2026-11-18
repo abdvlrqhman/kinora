@@ -439,6 +439,30 @@ void main() {
       expect(ranked.map((r) => r.candidate.id), ['1080', '720', '2160']);
     });
 
+    test('the limit is a ceiling: a well-shared 4K comes after weak 720p', () {
+      final prefs = RankPrefs(device: _phone, maxResolution: Resolution.p1080);
+      final ranked = rank([
+        _c('2160', 'Movie.2021.2160p.BluRay.x265-A', live: 3000),
+        _c('1080', 'Movie.2021.1080p.WEB-DL.H.264-A', live: 3),
+        _c('720', 'Movie.2021.720p.HDTV.x264-A', live: 2),
+        _c('unknown', 'Movie.2021.WEB-DL-A', live: 1),
+      ], prefs);
+      expect(ranked.last.candidate.id, '2160');
+      expect(_labels(ranked.last), contains('Above your 1080p limit'));
+      expect(ranked.last.isRejected, isFalse);
+      expect(
+        ranked
+            .take(3)
+            .expand((r) => r.warnings)
+            .where((w) => w.kind == RankWarningKind.aboveLimit),
+        isEmpty,
+      );
+      final alone = rank([
+        _c('2160', 'Movie.2021.2160p.BluRay.x265-A', live: 3000),
+      ], prefs);
+      expect(alone.single.isRejected, isFalse);
+    });
+
     test('source order: remux > bluray > web-dl > webrip > hdtv', () {
       final ranked = rank([
         _c('hdtv', 'Movie.2021.1080p.HDTV.x264-A', live: 100),

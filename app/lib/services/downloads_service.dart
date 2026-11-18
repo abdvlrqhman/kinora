@@ -192,19 +192,20 @@ final class DownloadsService implements DownloadActions {
       );
       final result = await _ref.read(resolveProvider(video).future);
       if (await _row(id) == null) return; // removed meanwhile
-      final releases = [...result.releases];
-      if (request.candidateId != null) {
-        final i = releases.indexWhere(
-          (r) => r.candidateId == request.candidateId,
-        );
-        if (i > 0) releases.insert(0, releases.removeAt(i));
-      }
-      final best = releases.firstOrNull;
+      // The viewer's pick, else the best version within their quality limit.
+      final best =
+          result.releases
+              .where((r) => r.candidateId == request.candidateId)
+              .firstOrNull ??
+          result.releases.where((r) => !r.aboveLimit).firstOrNull;
       final stream = best?.stream;
       if (best == null || stream == null) {
         await _fail(
           id,
-          result.message ?? 'No version is available to download right now.',
+          result.message ??
+              (result.releases.isNotEmpty
+                  ? aboveLimitMessage
+                  : 'No version is available to download right now.'),
         );
         return;
       }

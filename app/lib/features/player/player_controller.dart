@@ -354,6 +354,7 @@ class PlayerController extends ChangeNotifier {
     _startWatchdog?.cancel();
     _errorGrace?.cancel();
     _pending = null;
+    _broken.clear();
     upNextDismissed = false;
     _prefetchedNext = false;
     _watchedHandled = false;
@@ -1097,7 +1098,9 @@ class PlayerController extends ChangeNotifier {
     String? id,
     bool strictVariant = false,
   }) {
-    final inLang = subtitles.where((o) => sameLang(o.language, lang)).toList();
+    final inLang = subtitles
+        .where((o) => sameLang(o.language, lang) && !_broken.contains(o.id))
+        .toList();
     if (inLang.isEmpty) return null;
     if (id != null) {
       final exact = inLang.where((o) => o.id == id).firstOrNull;
@@ -1132,7 +1135,9 @@ class PlayerController extends ChangeNotifier {
     if (want == null) return;
     final exact = want.id == null
         ? null
-        : subtitles.where((o) => o.id == want.id).firstOrNull;
+        : subtitles
+              .where((o) => o.id == want.id && !_broken.contains(o.id))
+              .firstOrNull;
     if (exact != null) {
       _pending = null;
       unawaited(_activate(exact, remember: false));
@@ -1144,6 +1149,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   final _loaded = <String, String>{};
+
+  /// External subtitles that failed to load for this video: never picked
+  /// automatically again (the viewer can still retry one from the list).
+  final _broken = <String>{};
 
   /// A text subtitle file for the TV: the active external one, or the best
   /// external one in the active embedded track's language (TVs can't read
@@ -1188,15 +1197,39 @@ class PlayerController extends ChangeNotifier {
     } else if (option.track != null) {
       await player.setSubtitleTrack(option.track!);
     } else {
-      final path =
-          option.uri ?? _loaded[option.id] ?? await option.load?.call();
+      String? path;
+      try {
+        path = option.uri ?? _loaded[option.id] ?? await option.load?.call();
+      } on Object catch (e) {
+        Log.w('subtitles', 'load failed: $e');
+      }
+      // Another subtitle was chosen while this one downloaded.
+      if (activeSubtitleId != option.id) return;
       if (path == null) {
+        // Fall back to the next best one in the same language.
+        _broken.add(option.id);
+        final lang = option.language;
+        final next = lang == null
+            ? null
+            : _bestSubtitle(
+                lang,
+                variant: option.variant,
+                strictVariant: option.forced,
+              );
+        if (next != null) {
+          if (remember) {
+            notice =
+                'That subtitle couldn’t be loaded. Showing the next best one.';
+          }
+          return _activate(next, remember: remember);
+        }
         activeSubtitleId = null;
         notice = 'That subtitle couldn’t be loaded. Pick another one.';
         notifyListeners();
         return;
       }
       _loaded[option.id] = path;
+      _broken.remove(option.id);
       await player.setSubtitleTrack(
         SubtitleTrack.uri(path, title: option.label, language: option.language),
       );

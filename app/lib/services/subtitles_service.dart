@@ -329,29 +329,30 @@ final class PlayerSubtitles {
     for (final entry in update.byLanguage.entries) {
       final code = normalizeLang(entry.key.code) ?? entry.key.code;
       if (!wanted.any((w) => sameLang(w, code))) continue;
-      final best =
-          (entry.value
-                  .map(
-                    (s) =>
-                        (s, search.matcher.fit(s.result, info, query: query)),
-                  )
-                  .toList()
-                ..sort((a, b) => b.$2.compareTo(a.$2)))
-              .firstOrNull;
-      if (best == null || best.$2 <= 0) continue;
-      try {
-        final loaded = await search.load(best.$1.result, query: query);
-        final path = '$base.$code.srt';
-        // The torrent may not have created its folder yet.
-        await File(path).parent.create(recursive: true);
-        await File(path).writeAsString(loaded.document.toSrt(), encoding: utf8);
-        saved.add({
-          'lang': code,
-          'path': path,
-          'label': best.$1.result.releaseNames.firstOrNull ?? code,
-        });
-      } on SubtitleException catch (e) {
-        Log.w('subtitles', 'save for download failed ($code): $e');
+      final ranked =
+          entry.value
+              .map((s) => (s, search.matcher.fit(s.result, info, query: query)))
+              .where((x) => x.$2 > 0)
+              .toList()
+            ..sort((a, b) => b.$2.compareTo(a.$2));
+      // One that fails to load (a pack without this episode): the next best.
+      for (final (best, _) in ranked.take(3)) {
+        try {
+          final loaded = await search.load(best.result, query: query);
+          final path = '$base.$code.srt';
+          // The torrent may not have created its folder yet.
+          await File(path).parent.create(recursive: true);
+          await File(path)
+              .writeAsString(loaded.document.toSrt(), encoding: utf8);
+          saved.add({
+            'lang': code,
+            'path': path,
+            'label': best.result.releaseNames.firstOrNull ?? code,
+          });
+          break;
+        } on SubtitleException catch (e) {
+          Log.w('subtitles', 'save for download failed ($code): $e');
+        }
       }
     }
     return saved;

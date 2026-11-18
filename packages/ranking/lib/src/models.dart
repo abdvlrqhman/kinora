@@ -366,6 +366,9 @@ enum RankWarningKind {
 
   /// HDR on a screen without HDR.
   hdrOnSdr,
+
+  /// Sharper than the viewer's quality limit: never picked automatically.
+  aboveLimit,
 }
 
 /// A caveat shown to the user.

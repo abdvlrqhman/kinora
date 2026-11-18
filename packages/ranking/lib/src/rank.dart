@@ -18,7 +18,8 @@ import 'weights.dart';
 /// 4. CAM / TS / TC / SCR.
 ///
 /// Candidates that fail a gate but are kept because nothing better exists
-/// get a warning and a penalty. Ties break on availability, then
+/// get a warning and a penalty. Versions above [RankPrefs.maxResolution]
+/// stay playable but come after every version within it. Ties break on availability, then
 /// resolution, then [Candidate.id], so the order is deterministic.
 List<RankedCandidate> rank(
   List<Candidate> candidates,
@@ -69,6 +70,7 @@ int _compare(_Eval a, _Eval b) {
   if ((a.rejected == null) != (b.rejected == null)) {
     return a.rejected == null ? -1 : 1;
   }
+  if (a.aboveLimit != b.aboveLimit) return a.aboveLimit ? 1 : -1;
   final byScore = b.score.compareTo(a.score);
   if (byScore != 0) return byScore;
   final byAvailability = b.availability.compareTo(a.availability);
@@ -117,6 +119,16 @@ final class _Eval {
         _warn(RankWarningKind.pack, 'Season pack (slower start)');
         _penalty += w.packPenalty;
       }
+    }
+
+    // The viewer's limit is a ceiling, not a taste (unknown counts as within).
+    final limit = prefs.maxResolution;
+    aboveLimit =
+        limit != Resolution.unknown &&
+        r.resolution != Resolution.unknown &&
+        r.resolution.lines > limit.lines;
+    if (aboveLimit) {
+      _warn(RankWarningKind.aboveLimit, 'Above your ${limit.label} limit');
     }
 
     // Playability.
@@ -211,6 +223,7 @@ final class _Eval {
   final reasons = <RankReason>[];
   final warnings = <RankWarning>[];
   bool wrongEpisode = false;
+  bool aboveLimit = false;
   List<String> deviceProblems = const [];
   List<String> tvProblems = const [];
   double availability = 0;
