@@ -309,6 +309,25 @@ void main() {
     return sent;
   }
 
+  test('picks queued by 0.3.2 are cancelled, and their titles kept', () {
+    // 0.3.2 stored [key, at] (no open) and keyed picks by title.
+    final queued = <int, ScheduledNotice>{
+      for (final id in ['tt901', 'tt902', 'tt903'])
+        noticeId('pick:$id'): (key: 'pick:$id', at: local(27, 19), open: ''),
+    };
+    final plan = planNotices(
+      now: now,
+      episodes: const [],
+      picks: const [MetaPreview(id: 'tt904', type: 'movie', name: 'New')],
+      picked: {'tt901', 'tt902', 'tt903'},
+    );
+    final r = reconcile(before: queued, plan: plan, now: now);
+    expect(r.cancel.toSet(), queued.keys.toSet());
+    expect(r.after.values.single.key, startsWith('pick:2026-'));
+    expect(r.after.values.single.open, '/title/movie/tt904');
+    expect(r.sentPicks, isEmpty);
+  });
+
   test('planning again and again: one pick a week, never the same title', () {
     final sent = run(
       days: 15,

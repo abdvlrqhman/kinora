@@ -251,7 +251,7 @@ final class Notices {
       Log.i(
         'notices',
         'planned ${planned.length} from ${episodes.length} episodes '
-            'and ${picks.length} picks',
+            'and ${picks.length} picks, cancelled ${cancel.length}',
       );
     } on Object catch (e) {
       Log.w('notices', 'plan: $e');
