@@ -68,23 +68,27 @@ DateTime noticeTime(AirDate e) => outsideQuietHours(
 /// * [episodes] of followed shows airing within [horizon]: one notice per
 ///   show and day ("S2 E4 aired", "is back: Season 2 premiered", "Season
 ///   finale aired", "All 8 episodes of Season 2 aired");
-/// * a new season announced further out (once: keys in [announced]);
-/// * with [picks], one "Picked for you" a week, Friday 7 PM (once per
-///   title: keys in [picked]).
+/// * a new season announced further out: once per season (keys in
+///   [announced]), one a plan, at least a day after [lastAnnounced];
+/// * with [picks], one "Picked for you" a week, Friday 7 PM, never a title
+///   already sent ([picked] ids). Its key is the week's, so planning again
+///   replaces it instead of adding another.
 ///
-/// Finales come from Trakt's episode types only (a day-only list can't
-/// tell the last episode announced from the last one). At most [max]
-/// notices (iPhone keeps 64), soonest first.
+/// More than two shows on a day (or two at the same minute, as the night's
+/// episodes at 9 AM) become one notice. Finales come from Trakt's episode
+/// types only (a day-only list can't tell the last episode announced from
+/// the last one). At most [max] notices (iPhone keeps 64), soonest first.
 List<PlannedNotice> planNotices({
   required DateTime now,
   required List<AirDate> episodes,
   Set<String> announced = const {},
+  DateTime? lastAnnounced,
   List<MetaPreview> picks = const [],
   Set<String> picked = const {},
   Duration horizon = const Duration(days: 14),
   int max = 40,
 }) {
-  final out = <PlannedNotice>[];
+  final shows = <PlannedNotice>[];
   final until = now.add(horizon);
 
   // Episodes, grouped per show and local day.
@@ -107,7 +111,7 @@ List<PlannedNotice> planNotices({
     final (title, body) = eps.length == 1
         ? _one(first)
         : _many(first.show, eps, episodes);
-    out.add(
+    shows.add(
       PlannedNotice(
         key: key,
         at: at,
@@ -118,31 +122,37 @@ List<PlannedNotice> planNotices({
     );
   }
 
-  // A new season announced beyond the horizon: said once.
-  final soonest = <String, AirDate>{};
+  final out = _bundled(shows);
+
+  // A new season announced beyond the horizon: the soonest one not said
+  // yet, a day after the last.
+  AirDate? season;
   for (final e in episodes) {
     if (e.episode != 1 || e.season <= 1) continue;
     if (!e.airsAt.isAfter(until)) continue;
     if (e.airsAt.isAfter(now.add(const Duration(days: 365)))) continue;
-    final key = 'season:${e.showId}:${e.season}';
-    if (announced.contains(key)) continue;
-    final had = soonest[key];
-    if (had == null || e.airsAt.isBefore(had.airsAt)) soonest[key] = e;
+    if (announced.contains('season:${e.showId}:${e.season}')) continue;
+    if (season == null || e.airsAt.isBefore(season.airsAt)) season = e;
   }
-  for (final MapEntry(key: key, value: e) in soonest.entries) {
+  if (season != null) {
+    var at = now.add(const Duration(minutes: 1));
+    final after = lastAnnounced?.add(const Duration(days: 1));
+    if (after != null && after.isAfter(at)) at = after;
     out.add(
       PlannedNotice(
-        key: key,
-        at: outsideQuietHours(now.add(const Duration(minutes: 1))),
-        title: e.show,
-        body: 'Season ${e.season} starts ${_date(e.airsAt.toLocal(), now)}.',
-        open: '/title/series/${e.showId}',
+        key: 'season:${season.showId}:${season.season}',
+        at: outsideQuietHours(at),
+        title: season.show,
+        body:
+            'Season ${season.season} starts '
+            '${_date(season.airsAt.toLocal(), now)}.',
+        open: '/title/series/${season.showId}',
       ),
     );
   }
 
   // One pick a week.
-  final pick = picks.where((p) => !picked.contains('pick:${p.id}')).firstOrNull;
+  final pick = picks.where((p) => !picked.contains(p.id)).firstOrNull;
   if (pick != null) {
     var friday = DateTime(
       now.year,
@@ -153,7 +163,7 @@ List<PlannedNotice> planNotices({
     if (!friday.isAfter(now)) friday = friday.add(const Duration(days: 7));
     out.add(
       PlannedNotice(
-        key: 'pick:${pick.id}',
+        key: 'pick:${friday.year}-${friday.month}-${friday.day}',
         at: friday,
         title: 'Picked for you',
         body: [
@@ -167,6 +177,72 @@ List<PlannedNotice> planNotices({
 
   out.sort((a, b) => a.at.compareTo(b.at));
   return out.take(max).toList();
+}
+
+/// More than two shows on one day, or two at the same minute: one notice,
+/// when the last of them is out, opening Home.
+List<PlannedNotice> _bundled(List<PlannedNotice> shows) {
+  final byDay = <String, List<PlannedNotice>>{};
+  for (final n in shows) {
+    (byDay['${n.at.year}-${n.at.month}-${n.at.day}'] ??= []).add(n);
+  }
+  return [
+    for (final MapEntry(key: day, value: ns) in byDay.entries)
+      if (ns.length > 2 ||
+          (ns.length == 2 && ns[0].at.difference(ns[1].at).inMinutes == 0))
+        PlannedNotice(
+          key: 'eps:$day',
+          at: ns.map((n) => n.at).reduce((a, b) => a.isAfter(b) ? a : b),
+          title: 'New episodes',
+          body: ns.length == 2
+              ? '${_titleOf(ns[0])} and ${_titleOf(ns[1])} aired.'
+              : '${_titleOf(ns[0])}, ${_titleOf(ns[1])} and '
+                    '${ns.length - 2} more aired.',
+          open: '/',
+        )
+      else
+        ...ns,
+  ];
+}
+
+/// The show a single-show notice is about ("X is back" → "X").
+String _titleOf(PlannedNotice n) => n.title.endsWith(' is back')
+    ? n.title.substring(0, n.title.length - ' is back'.length)
+    : n.title;
+
+/// What was scheduled: its key, when, and what a tap opens.
+typedef ScheduledNotice = ({String key, DateTime at, String open});
+
+/// Brings what's scheduled ([before], by id) in line with [plan] at [now]:
+/// what to cancel, what's scheduled after, and the titles of picks that
+/// went out (never picked again). A season notice stays until it's out
+/// ([keepSeasons]); everything else follows the plan.
+({List<int> cancel, Map<int, ScheduledNotice> after, Set<String> sentPicks})
+reconcile({
+  required Map<int, ScheduledNotice> before,
+  required List<PlannedNotice> plan,
+  required DateTime now,
+  bool keepSeasons = true,
+}) {
+  final after = <int, ScheduledNotice>{
+    for (final p in plan) p.id: (key: p.key, at: p.at, open: p.open),
+  };
+  final cancel = <int>[];
+  final sentPicks = <String>{};
+  for (final MapEntry(key: id, value: n) in before.entries) {
+    if (!n.at.isAfter(now)) {
+      if (n.key.startsWith('pick:') && n.open.isNotEmpty) {
+        sentPicks.add(n.open.split('/').last);
+      }
+    } else if (!after.containsKey(id)) {
+      if (keepSeasons && n.key.startsWith('season:')) {
+        after[id] = n;
+      } else {
+        cancel.add(id);
+      }
+    }
+  }
+  return (cancel: cancel, after: after, sentPicks: sentPicks);
 }
 
 (String, String) _one(AirDate e) {

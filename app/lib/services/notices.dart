@@ -39,8 +39,15 @@ final class Notices {
   /// (never everything: the download notices are Kinora's too).
   static const _scheduledKey = 'notices.scheduled';
 
-  /// Once-only events already scheduled ("season:…", "pick:…").
+  /// Seasons already announced ("season:…"); older versions also kept
+  /// the picks they scheduled here ("pick:<id>").
   static const _toldKey = 'notices.told';
+
+  /// Titles a pick already went out for.
+  static const _pickedKey = 'notices.picked';
+
+  /// When the last new season was told (one a day at most).
+  static const _announcedKey = 'notices.announced';
 
   AppDatabase get _db => _ref.read(databaseProvider);
 
@@ -167,31 +174,32 @@ final class Notices {
                 if (!notForMe(p.id)) p,
             ]
           : const <MetaPreview>[];
-      final told = await _told();
+      final told = await _strings(_toldKey);
+      final picked = {
+        ...await _strings(_pickedKey),
+        for (final t in told)
+          if (t.startsWith('pick:')) t.substring('pick:'.length),
+      };
+      final announced = DateTime.tryParse(await _kv(_announcedKey) ?? '');
       final now = DateTime.now();
       final planned = planNotices(
         now: now,
         episodes: episodes,
         announced: told,
+        lastAnnounced: announced,
         picks: picks,
-        picked: told,
+        picked: picked,
       );
-      final before = await _scheduled();
-      final next = <int, (String, DateTime)>{
-        for (final p in planned) p.id: (p.key, p.at),
-      };
-      for (final MapEntry(key: id, value: (key, at)) in before.entries) {
-        if (next.containsKey(id) || !at.isAfter(now)) continue;
-        // Once-only events stay unless their switch went off.
-        final keep = key.startsWith('season:')
-            ? s.notifyShows
-            : key.startsWith('pick:') && s.notifyPicks;
-        if (keep) {
-          next[id] = (key, at);
-        } else {
-          await _plugin.cancel(id: id);
-        }
+      final (:cancel, :after, :sentPicks) = reconcile(
+        before: await _scheduled(),
+        plan: planned,
+        now: now,
+        keepSeasons: s.notifyShows,
+      );
+      for (final id in cancel) {
+        await _plugin.cancel(id: id);
       }
+      // (The same id replaces what's scheduled: planning again never adds.)
       for (final p in planned) {
         await _plugin.zonedSchedule(
           id: p.id,
@@ -206,18 +214,26 @@ final class Notices {
       await _setKv(
         _scheduledKey,
         jsonEncode({
-          for (final MapEntry(key: id, value: (key, at)) in next.entries)
-            '$id': [key, at.toUtc().toIso8601String()],
+          for (final MapEntry(key: id, value: n) in after.entries)
+            '$id': [n.key, n.at.toUtc().toIso8601String(), n.open],
         }),
       );
+      final seasons = [
+        for (final p in planned)
+          if (p.key.startsWith('season:')) p,
+      ];
       await _setKv(
         _toldKey,
         jsonEncode([
-          ...told,
-          for (final p in planned)
-            if (!p.key.startsWith('ep:') && !told.contains(p.key)) p.key,
+          ...told.where((t) => t.startsWith('season:')),
+          for (final p in seasons)
+            if (!told.contains(p.key)) p.key,
         ]),
       );
+      await _setKv(_pickedKey, jsonEncode([...picked, ...sentPicks]));
+      if (seasons.isNotEmpty) {
+        await _setKv(_announcedKey, seasons.first.at.toIso8601String());
+      }
       Log.i(
         'notices',
         'planned ${planned.length} from ${episodes.length} episodes '
@@ -316,24 +332,26 @@ final class Notices {
     }
   }
 
-  Future<Set<String>> _told() async {
+  Future<Set<String>> _strings(String key) async {
     try {
-      return {
-        ...(jsonDecode(await _kv(_toldKey) ?? '[]') as List).cast<String>(),
-      };
+      return {...(jsonDecode(await _kv(key) ?? '[]') as List).cast<String>()};
     } on Object {
       return {};
     }
   }
 
-  Future<Map<int, (String, DateTime)>> _scheduled() async {
+  Future<Map<int, ScheduledNotice>> _scheduled() async {
     try {
       final j =
           jsonDecode(await _kv(_scheduledKey) ?? '{}') as Map<String, Object?>;
       return {
         for (final MapEntry(:key, :value) in j.entries)
-          if (value case [final String k, final String at])
-            int.parse(key): (k, DateTime.parse(at)),
+          if (value case [final String k, final String at, ...final rest])
+            int.parse(key): (
+              key: k,
+              at: DateTime.parse(at),
+              open: rest.firstOrNull as String? ?? '',
+            ),
       };
     } on Object {
       return {};

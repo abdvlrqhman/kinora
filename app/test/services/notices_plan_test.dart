@@ -182,21 +182,132 @@ void main() {
       now: local(20, 20), // Friday evening, after 7
       episodes: const [],
       picks: picks,
-      picked: {'pick:tt901'},
+      picked: {'tt901'},
     );
     expect(next.single.at, local(27, 19));
     expect(next.single.body, 'Paper Moons');
   });
 
-  test('at most 40, soonest first', () {
+  test('a busy day is one notice, when the last show is out', () {
     final plan = planNotices(
       now: now,
       episodes: [
-        for (var i = 0; i < 60; i++)
-          ep(1, 1 + i ~/ 6, local(19 + i % 6, 15), id: 'tt$i', show: 'Show $i'),
+        ep(1, 3, local(19, 15), id: 'tt1', show: 'Harbor Lights'),
+        ep(2, 1, local(19, 16), id: 'tt2', show: 'North Wind'),
+        ep(1, 7, local(19, 18), id: 'tt3', show: 'Salt Roads'),
+        ep(4, 2, local(19, 20), id: 'tt4', show: 'Paper Moons'),
       ],
     );
-    expect(plan, hasLength(40));
-    expect(plan.first.at.isAfter(plan.last.at), isFalse);
+    expect(plan.single.title, 'New episodes');
+    expect(plan.single.body, 'Harbor Lights, North Wind and 2 more aired.');
+    expect(plan.single.at, local(19, 21));
+    expect(plan.single.open, '/');
+  });
+
+  test('two shows from the night, both at 9 AM: one notice', () {
+    final plan = planNotices(
+      now: now,
+      episodes: [
+        ep(1, 3, local(19, 2), id: 'tt1', show: 'Harbor Lights'),
+        ep(
+          2,
+          1,
+          local(19, 4),
+          id: 'tt2',
+          show: 'North Wind',
+          type: 'season_premiere',
+        ),
+      ],
+    );
+    expect(plan.single.at, local(19, 9));
+    expect(plan.single.body, 'Harbor Lights and North Wind aired.');
+  });
+
+  /// Plans every 30 minutes for [days], as Kinora does (opening, syncs),
+  /// keeping what's scheduled in line, and returns what went out.
+  List<ScheduledNotice> run({
+    required int days,
+    List<AirDate> episodes = const [],
+    List<MetaPreview> picks = const [],
+  }) {
+    var scheduled = <int, ScheduledNotice>{};
+    final told = <String>{}, picked = <String>{};
+    DateTime? announced;
+    final sent = <ScheduledNotice>[];
+    for (
+      var t = now;
+      t.isBefore(now.add(Duration(days: days)));
+      t = t.add(const Duration(minutes: 30))
+    ) {
+      sent.addAll(scheduled.values.where((n) => !n.at.isAfter(t)));
+      final plan = planNotices(
+        now: t,
+        episodes: episodes,
+        announced: told,
+        lastAnnounced: announced,
+        picks: picks,
+        picked: picked,
+      );
+      final r = reconcile(before: scheduled, plan: plan, now: t);
+      scheduled = r.after;
+      picked.addAll(r.sentPicks);
+      for (final p in plan.where((p) => p.key.startsWith('season:'))) {
+        told.add(p.key);
+        announced = p.at;
+      }
+    }
+    return sent;
+  }
+
+  test('planning again and again: one pick a week, never the same title', () {
+    final sent = run(
+      days: 15,
+      picks: const [
+        MetaPreview(id: 'tt901', type: 'series', name: 'Salt Roads'),
+        MetaPreview(id: 'tt902', type: 'movie', name: 'Paper Moons'),
+        MetaPreview(id: 'tt903', type: 'movie', name: 'Glass Harbor'),
+      ],
+    );
+    expect(sent.map((n) => n.at), [local(20, 19), local(27, 19)]);
+    expect(sent.map((n) => n.open), [
+      '/title/series/tt901',
+      '/title/movie/tt902',
+    ]);
+  });
+
+  test('new seasons announced: each once, one a day at most', () {
+    final premiere = DateTime(2027, 3, 4, 21);
+    final sent = run(
+      days: 5,
+      episodes: [
+        ep(2, 1, premiere, id: 'tt1', show: 'Harbor Lights'),
+        ep(3, 1, premiere, id: 'tt2', show: 'North Wind'),
+        ep(4, 1, premiere, id: 'tt3', show: 'Salt Roads'),
+      ],
+    );
+    expect(sent.map((n) => n.key).toSet(), hasLength(3));
+    expect(sent, hasLength(3));
+    for (var i = 1; i < sent.length; i++) {
+      expect(
+        sent[i].at.difference(sent[i - 1].at),
+        greaterThanOrEqualTo(const Duration(hours: 24)),
+      );
+    }
+  });
+
+  test('a busy fortnight: never two notices at once', () {
+    final sent = run(
+      days: 14,
+      episodes: [
+        for (var d = 0; d < 14; d++)
+          for (var s = 0; s < 4; s++)
+            ep(1, d + 1, local(19 + d, 1 + s * 5), id: 'tt$s', show: 'Show $s'),
+      ],
+      picks: const [
+        MetaPreview(id: 'tt901', type: 'series', name: 'Salt Roads'),
+      ],
+    );
+    final times = sent.map((n) => n.at).toList();
+    expect(times.toSet(), hasLength(times.length));
   });
 }
