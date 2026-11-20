@@ -50,18 +50,28 @@ int noticeId(String key) {
   return h & 0x7fffffff;
 }
 
-/// Never between 10 PM and 9 AM: moved to 9 AM.
-DateTime outsideQuietHours(DateTime t) => t.hour >= 22
-    ? DateTime(t.year, t.month, t.day + 1, 9)
-    : t.hour < 9
-    ? DateTime(t.year, t.month, t.day, 9)
-    : t;
+/// Moved out of the quiet hours, [from] to [to] o'clock (across midnight
+/// when [from] is later), to [to] o'clock. None when they're equal.
+DateTime outsideQuietHours(DateTime t, {int from = 22, int to = 9}) {
+  if (from == to) return t;
+  final quiet = from > to
+      ? t.hour >= from || t.hour < to
+      : t.hour >= from && t.hour < to;
+  if (!quiet) return t;
+  return DateTime(t.year, t.month, t.day + (t.hour >= to ? 1 : 0), to);
+}
 
 /// When to tell the viewer [e] aired: an hour after a precise time (the
 /// first versions turn up), late morning US time on a day-only date.
-DateTime noticeTime(AirDate e) => outsideQuietHours(
-  e.airsAt.add(Duration(hours: e.precise ? 1 : 4)).toLocal(),
-);
+DateTime noticeTime(AirDate e, {int quietFrom = 22, int quietTo = 9}) =>
+    outsideQuietHours(
+      e.airsAt.add(Duration(hours: e.precise ? 1 : 4)).toLocal(),
+      from: quietFrom,
+      to: quietTo,
+    );
+
+/// A premiere or a finale (a day-only list only knows first episodes).
+bool _big(AirDate e) => e.type != null ? e.type != 'standard' : e.episode == 1;
 
 /// What to notify about, from [now]:
 ///
@@ -85,17 +95,26 @@ List<PlannedNotice> planNotices({
   DateTime? lastAnnounced,
   List<MetaPreview> picks = const [],
   Set<String> picked = const {},
+  bool everyEpisode = true,
+  bool seasons = true,
+  int quietFrom = 22,
+  int quietTo = 9,
   Duration horizon = const Duration(days: 14),
   int max = 40,
 }) {
   final shows = <PlannedNotice>[];
   final until = now.add(horizon);
+  DateTime timeOf(AirDate e) =>
+      noticeTime(e, quietFrom: quietFrom, quietTo: quietTo);
+  DateTime quietless(DateTime t) =>
+      outsideQuietHours(t, from: quietFrom, to: quietTo);
 
   // Episodes, grouped per show and local day.
   final groups = <String, List<AirDate>>{};
   for (final e in episodes) {
     if (e.season <= 0) continue; // specials
-    final at = noticeTime(e);
+    if (!everyEpisode && !_big(e)) continue;
+    final at = timeOf(e);
     if (!at.isAfter(now) || at.isAfter(until)) continue;
     final day = '${at.year}-${at.month}-${at.day}';
     (groups['ep:${e.showId}:$day'] ??= []).add(e);
@@ -107,7 +126,7 @@ List<PlannedNotice> planNotices({
           : a.episode.compareTo(b.episode),
     );
     final first = eps.first;
-    final at = eps.map(noticeTime).reduce((a, b) => a.isAfter(b) ? a : b);
+    final at = eps.map(timeOf).reduce((a, b) => a.isAfter(b) ? a : b);
     final (title, body) = eps.length == 1
         ? _one(first)
         : _many(first.show, eps, episodes);
@@ -127,7 +146,7 @@ List<PlannedNotice> planNotices({
   // A new season announced beyond the horizon: the soonest one not said
   // yet, a day after the last.
   AirDate? season;
-  for (final e in episodes) {
+  for (final e in seasons ? episodes : const <AirDate>[]) {
     if (e.episode != 1 || e.season <= 1) continue;
     if (!e.airsAt.isAfter(until)) continue;
     if (e.airsAt.isAfter(now.add(const Duration(days: 365)))) continue;
@@ -141,7 +160,7 @@ List<PlannedNotice> planNotices({
     out.add(
       PlannedNotice(
         key: 'season:${season.showId}:${season.season}',
-        at: outsideQuietHours(at),
+        at: quietless(at),
         title: season.show,
         body:
             'Season ${season.season} starts '
@@ -164,7 +183,7 @@ List<PlannedNotice> planNotices({
     out.add(
       PlannedNotice(
         key: 'pick:${friday.year}-${friday.month}-${friday.day}',
-        at: friday,
+        at: quietless(friday),
         title: 'Picked for you',
         body: [
           pick.name,

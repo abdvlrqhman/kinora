@@ -98,7 +98,13 @@ final class AppSettings {
     this.autoplayNext = true,
     this.skipIntros = true,
     this.notifyShows = true,
+    this.notifyEveryEpisode = true,
+    this.notifyWatchedLately = true,
+    this.notifySeasons = true,
     this.notifyPicks = true,
+    this.notifyDownloads = true,
+    this.quietFrom = 22,
+    this.quietTo = 9,
     this.wifiOnlyDownloads = true,
     this.autoDownloadNext = false,
     this.downloadsAtOnce = 0,
@@ -131,7 +137,13 @@ final class AppSettings {
     autoplayNext: j['autoplayNext'] as bool? ?? true,
     skipIntros: j['skipIntros'] as bool? ?? true,
     notifyShows: j['notifyShows'] as bool? ?? true,
+    notifyEveryEpisode: j['notifyEveryEpisode'] as bool? ?? true,
+    notifyWatchedLately: j['notifyWatchedLately'] as bool? ?? true,
+    notifySeasons: j['notifySeasons'] as bool? ?? true,
     notifyPicks: j['notifyPicks'] as bool? ?? true,
+    notifyDownloads: j['notifyDownloads'] as bool? ?? true,
+    quietFrom: (j['quietFrom'] as num? ?? 22).toInt(),
+    quietTo: (j['quietTo'] as num? ?? 9).toInt(),
     wifiOnlyDownloads: j['wifiOnlyDownloads'] as bool? ?? true,
     autoDownloadNext: j['autoDownloadNext'] as bool? ?? false,
     downloadsAtOnce: (j['downloadsAtOnce'] as num? ?? 0).toInt(),
@@ -182,8 +194,25 @@ final class AppSettings {
   /// Notices when followed shows air: episodes, seasons, finales.
   final bool notifyShows;
 
+  /// Every new episode; false: only premieres and finales.
+  final bool notifyEveryEpisode;
+
+  /// Shows watched in the last two months count as followed (not only
+  /// My list).
+  final bool notifyWatchedLately;
+
+  /// A new season announced months ahead.
+  final bool notifySeasons;
+
   /// One "Picked for you" a week (Trakt, signed in).
   final bool notifyPicks;
+
+  /// "Downloaded. Ready to watch" when a download finishes.
+  final bool notifyDownloads;
+
+  /// No notices from [quietFrom] to [quietTo] o'clock (none when equal).
+  final int quietFrom;
+  final int quietTo;
   final bool wifiOnlyDownloads;
   final bool autoDownloadNext;
 
@@ -236,7 +265,13 @@ final class AppSettings {
     'autoplayNext': autoplayNext,
     'skipIntros': skipIntros,
     'notifyShows': notifyShows,
+    'notifyEveryEpisode': notifyEveryEpisode,
+    'notifyWatchedLately': notifyWatchedLately,
+    'notifySeasons': notifySeasons,
     'notifyPicks': notifyPicks,
+    'notifyDownloads': notifyDownloads,
+    'quietFrom': quietFrom,
+    'quietTo': quietTo,
     'wifiOnlyDownloads': wifiOnlyDownloads,
     'autoDownloadNext': autoDownloadNext,
     'downloadsAtOnce': downloadsAtOnce,
@@ -267,7 +302,13 @@ final class AppSettings {
     bool? autoplayNext,
     bool? skipIntros,
     bool? notifyShows,
+    bool? notifyEveryEpisode,
+    bool? notifyWatchedLately,
+    bool? notifySeasons,
     bool? notifyPicks,
+    bool? notifyDownloads,
+    int? quietFrom,
+    int? quietTo,
     bool? wifiOnlyDownloads,
     bool? autoDownloadNext,
     int? downloadsAtOnce,
@@ -295,7 +336,13 @@ final class AppSettings {
     autoplayNext: autoplayNext ?? this.autoplayNext,
     skipIntros: skipIntros ?? this.skipIntros,
     notifyShows: notifyShows ?? this.notifyShows,
+    notifyEveryEpisode: notifyEveryEpisode ?? this.notifyEveryEpisode,
+    notifyWatchedLately: notifyWatchedLately ?? this.notifyWatchedLately,
+    notifySeasons: notifySeasons ?? this.notifySeasons,
     notifyPicks: notifyPicks ?? this.notifyPicks,
+    notifyDownloads: notifyDownloads ?? this.notifyDownloads,
+    quietFrom: quietFrom ?? this.quietFrom,
+    quietTo: quietTo ?? this.quietTo,
     wifiOnlyDownloads: wifiOnlyDownloads ?? this.wifiOnlyDownloads,
     autoDownloadNext: autoDownloadNext ?? this.autoDownloadNext,
     downloadsAtOnce: downloadsAtOnce ?? this.downloadsAtOnce,

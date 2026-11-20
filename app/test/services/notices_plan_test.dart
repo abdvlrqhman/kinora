@@ -48,6 +48,56 @@ void main() {
     expect(plan.single.at, local(20, 9));
   });
 
+  test('quiet hours of your choice, or none', () {
+    DateTime q(DateTime t, int from, int to) =>
+        outsideQuietHours(t, from: from, to: to);
+    expect(q(local(19, 23, 30), 23, 8), local(20, 8));
+    expect(q(local(19, 22, 30), 23, 8), local(19, 22, 30));
+    expect(q(local(20, 3), 0, 10), local(20, 10));
+    expect(q(local(19, 23), 0, 10), local(19, 23));
+    expect(q(local(20, 3), 0, 0), local(20, 3));
+  });
+
+  test('premieres and finales only: the rest stay quiet', () {
+    final plan = planNotices(
+      now: now,
+      everyEpisode: false,
+      episodes: [
+        ep(2, 1, local(19, 15), id: 'tt1', type: 'season_premiere'),
+        ep(
+          1,
+          4,
+          local(20, 15),
+          id: 'tt2',
+          show: 'North Wind',
+          type: 'standard',
+        ),
+        ep(
+          3,
+          10,
+          local(21, 15),
+          id: 'tt3',
+          show: 'Salt Roads',
+          type: 'season_finale',
+        ),
+        ep(1, 1, local(22, 15), id: 'tt4', show: 'Paper Moons', precise: false),
+        ep(1, 2, local(23, 15), id: 'tt5', show: 'Glass', precise: false),
+      ],
+    );
+    expect(plan.map((p) => p.key.split(':')[1]), ['tt1', 'tt3', 'tt4']);
+  });
+
+  test('new seasons can be left untold', () {
+    expect(
+      planNotices(
+        now: now,
+        seasons: false,
+        episodes: [ep(3, 1, DateTime(2027, 3, 4, 21))],
+      ),
+      isEmpty,
+    );
+  });
+
   test('a day-only date is told late in the morning, US time', () {
     final day = DateTime.utc(2026, 11, 20, 5); // midnight US Eastern
     final plan = planNotices(

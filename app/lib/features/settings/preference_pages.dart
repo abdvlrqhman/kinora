@@ -70,35 +70,91 @@ class PlaybackPage extends ConsumerWidget {
 class NotificationsPage extends ConsumerWidget {
   const NotificationsPage({super.key});
 
+  /// Quiet hours on offer: (from, to) o'clock; equal is none.
+  static const quietOptions = [
+    ((22, 9), '10 PM–9 AM'),
+    ((23, 8), '11 PM–8 AM'),
+    ((0, 10), 'Midnight–10 AM'),
+    ((0, 0), 'None'),
+  ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsProvider);
     final trakt = ref.watch(traktSyncProvider);
+    final quiet = quietOptions
+        .map((o) => o.$1)
+        .firstWhere(
+          (q) => q == (s.quietFrom, s.quietTo),
+          orElse: () => (s.quietFrom, s.quietTo),
+        );
     return SettingsPage(
       title: 'Notifications',
       children: [
-        const Note(
-          'At most one notice per show a day, never between 10 PM and 9 AM.',
-        ),
+        const SectionTitle('Your shows'),
         SwitchRow(
           label: 'Shows you follow',
           detail:
-              'New episodes, new seasons and finales of shows in My list '
-              'or that you watched lately.',
+              'When they air, at most one notice per show a day. Several '
+              'shows on one day come as one notice.',
           value: s.notifyShows,
           onChanged: (v) => _save(ref, (s) => s.copyWith(notifyShows: v)),
         ),
+        if (s.notifyShows) ...[
+          Segmented<bool>(
+            options: const [
+              (true, 'Every episode'),
+              (false, 'Premieres and finales'),
+            ],
+            value: s.notifyEveryEpisode,
+            onChanged: (v) =>
+                _save(ref, (s) => s.copyWith(notifyEveryEpisode: v)),
+          ),
+          SwitchRow(
+            label: 'Shows you watched lately',
+            detail: 'Off: only shows in My list.',
+            value: s.notifyWatchedLately,
+            onChanged: (v) =>
+                _save(ref, (s) => s.copyWith(notifyWatchedLately: v)),
+          ),
+          SwitchRow(
+            label: 'New seasons announced',
+            detail: 'Once, when a date is set months ahead.',
+            value: s.notifySeasons,
+            onChanged: (v) => _save(ref, (s) => s.copyWith(notifySeasons: v)),
+          ),
+        ],
+        const SectionTitle('Suggestions'),
         ListenableBuilder(
           listenable: trakt,
           builder: (context, _) => SwitchRow(
             label: 'Picked for you',
             detail: trakt.signedIn
-                ? 'One title a week you might like, from what you watch '
+                ? 'One title a week, Friday evening, from what you watch '
                       'and rate.'
-                : 'One title a week you might like. Needs Trakt.',
+                : 'One title a week, Friday evening. Needs Trakt.',
             value: s.notifyPicks,
             onChanged: (v) => _save(ref, (s) => s.copyWith(notifyPicks: v)),
           ),
+        ),
+        const SectionTitle('Downloads'),
+        SwitchRow(
+          label: 'When a download is ready',
+          detail: 'Says it finished, so you can watch it offline.',
+          value: s.notifyDownloads,
+          onChanged: (v) => _save(ref, (s) => s.copyWith(notifyDownloads: v)),
+        ),
+        const SectionTitle('Quiet hours'),
+        const Note('Notices that would come then wait until they end.'),
+        Segmented<(int, int)>(
+          options: [
+            for (final (q, label) in quietOptions) (q, label),
+            if (!quietOptions.any((o) => o.$1 == quiet))
+              (quiet, '${quiet.$1}:00–${quiet.$2}:00'),
+          ],
+          value: quiet,
+          onChanged: (q) =>
+              _save(ref, (s) => s.copyWith(quietFrom: q.$1, quietTo: q.$2)),
         ),
       ],
     );

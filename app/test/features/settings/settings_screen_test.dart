@@ -99,14 +99,31 @@ void main() {
     final kit = await pumpKit(tester, location: '/settings/notifications');
     await tester.pumpAndSettle();
     expect(
-      find.text('One title a week you might like. Needs Trakt.'),
+      find.text('One title a week, Friday evening. Needs Trakt.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Shows you follow'));
-    await tester.tap(find.text('Picked for you'));
-    await tester.pumpAndSettle();
-    expect(kit.settings.notifyShows, isFalse);
+    Future<void> tap(String label) async {
+      await tester.ensureVisible(find.text(label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+
+    await tap('Premieres and finales');
+    await tap('Shows you watched lately');
+    await tap('New seasons announced');
+    await tap('Picked for you');
+    await tap('When a download is ready');
+    await tap('11 PM–8 AM');
+    expect(kit.settings.notifyEveryEpisode, isFalse);
+    expect(kit.settings.notifyWatchedLately, isFalse);
+    expect(kit.settings.notifySeasons, isFalse);
     expect(kit.settings.notifyPicks, isFalse);
+    expect(kit.settings.notifyDownloads, isFalse);
+    expect((kit.settings.quietFrom, kit.settings.quietTo), (23, 8));
+    await tap('Shows you follow');
+    expect(kit.settings.notifyShows, isFalse);
+    expect(find.text('Premieres and finales'), findsNothing);
     await unmount(tester);
   });
 

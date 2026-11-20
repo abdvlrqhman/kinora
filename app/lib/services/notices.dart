@@ -89,7 +89,17 @@ final class Notices {
     sync.addListener(onSync);
     final list = _ref.listen(myListProvider, (_, _) => planSoon(force: true));
     final settings = _ref.listen(
-      settingsProvider.select((s) => (s.notifyShows, s.notifyPicks)),
+      settingsProvider.select(
+        (s) => (
+          s.notifyShows,
+          s.notifyEveryEpisode,
+          s.notifyWatchedLately,
+          s.notifySeasons,
+          s.notifyPicks,
+          s.quietFrom,
+          s.quietTo,
+        ),
+      ),
       (_, _) => planSoon(force: true),
     );
     _subs.addAll([
@@ -166,7 +176,7 @@ final class Notices {
       bool notForMe(String id) =>
           (tastes[id]?.rating ?? 6) <= Taste.notForMe.trakt;
       final episodes = s.notifyShows
-          ? await _followedEpisodes(notForMe)
+          ? await _followedEpisodes(notForMe, lately: s.notifyWatchedLately)
           : const <AirDate>[];
       final picks = s.notifyPicks
           ? [
@@ -189,12 +199,16 @@ final class Notices {
         lastAnnounced: announced,
         picks: picks,
         picked: picked,
+        everyEpisode: s.notifyEveryEpisode,
+        seasons: s.notifySeasons,
+        quietFrom: s.quietFrom,
+        quietTo: s.quietTo,
       );
       final (:cancel, :after, :sentPicks) = reconcile(
         before: await _scheduled(),
         plan: planned,
         now: now,
-        keepSeasons: s.notifyShows,
+        keepSeasons: s.notifyShows && s.notifySeasons,
       );
       for (final id in cancel) {
         await _plugin.cancel(id: id);
@@ -274,8 +288,9 @@ final class Notices {
   /// Every episode of followed shows: Cinemeta's list (days only), with
   /// Trakt's real times and kinds when signed in.
   Future<List<AirDate>> _followedEpisodes(
-    bool Function(String) notForMe,
-  ) async {
+    bool Function(String) notForMe, {
+    required bool lately,
+  }) async {
     final recent = DateTime.now().subtract(const Duration(days: 60));
     final listed = await _db.select(_db.libraryItems).get();
     final watched =
@@ -287,7 +302,8 @@ final class Notices {
     final ids = {
       for (final i in listed)
         if (i.type == 'series') i.mediaId,
-      for (final w in watched) w.mediaId,
+      if (lately)
+        for (final w in watched) w.mediaId,
     }.where((id) => id.startsWith('tt') && !notForMe(id)).take(40).toSet();
     final precise = {
       for (final e in await _ref.read(traktSyncProvider).calendar())

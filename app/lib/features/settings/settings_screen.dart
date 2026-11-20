@@ -127,7 +127,7 @@ class SettingsScreen extends ConsumerWidget {
               (true, true) => 'Your shows and a weekly pick',
               (true, false) => 'Your shows',
               (false, true) => 'A weekly pick',
-              (false, false) => 'Off',
+              (false, false) => s.notifyDownloads ? 'Downloads only' : 'Off',
             },
             onTap: () => go('notifications'),
           ),
