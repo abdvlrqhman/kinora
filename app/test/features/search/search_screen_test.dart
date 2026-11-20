@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,11 @@ import 'package:kinora/features/search/search_model.dart';
 import 'package:kinora/features/search/search_screen.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:stremio/stremio.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:kinora/features/home/home_layout.dart';
+import 'package:kinora/app/providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../harness.dart';
 
@@ -286,6 +293,89 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Glass Harbor, 2024'));
     await tester.pumpAndSettle();
     expect(nav.locations.last, '/title/movie/tt101');
+  });
+
+  testScreen('a genre in Discovery goes on Home, and comes off', (
+    tester,
+  ) async {
+    final db = testDb();
+    final calls = <String>[];
+    await pumpScreen(
+      tester,
+      const SearchScreen(),
+      db: db,
+      overrides: [
+        enabledAddonsProvider.overrideWith(
+          (ref) async => [
+            Addon(
+              transportUrl: testAddon.transportUrl,
+              manifest: AddonManifest.fromJson({
+                'id': 'test.addon',
+                'name': 'Test source',
+                'resources': ['catalog', 'meta'],
+                'types': ['series'],
+                'catalogs': [
+                  {
+                    'type': 'series',
+                    'id': 'top',
+                    'name': 'Popular',
+                    'extra': [
+                      {
+                        'name': 'genre',
+                        'options': ['Animation', 'Drama'],
+                      },
+                    ],
+                  },
+                ],
+              }),
+            ),
+          ],
+        ),
+        homeRowsProvider.overrideWith(
+          (ref) => Stream.value(const HomeRows([])),
+        ),
+        httpClientProvider.overrideWithValue(
+          MockClient((r) async {
+            calls.add(r.url.path);
+            return http.Response(
+              jsonEncode({
+                'metas': [
+                  {'id': 'tt300', 'type': 'series', 'name': 'Salt Roads'},
+                ],
+              }),
+              200,
+            );
+          }),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Animation'));
+    await tester.pumpAndSettle();
+    expect(find.text('Salt Roads'), findsWidgets);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SearchScreen)),
+    );
+    final pin = pinnedRowId((
+      addon: testAddon.transportUrl.toString(),
+      type: 'series',
+      catalog: 'top',
+      genre: 'Animation',
+    ));
+    await tester.tap(find.bySemanticsLabel('Add to Home'));
+    await tester.pumpAndSettle();
+    expect(container.read(settingsProvider).homePinned, [pin]);
+    expect(container.read(homeLayoutProvider), contains(pin));
+    expect(
+      container
+          .read(homeRowChoicesProvider)
+          .firstWhere((c) => c.id == pin)
+          .title,
+      'Popular shows: Animation',
+    );
+    await tester.tap(find.bySemanticsLabel('On Home. Remove from Home'));
+    await tester.pumpAndSettle();
+    expect(container.read(settingsProvider).homePinned, isEmpty);
   });
 
   testScreen('long groups show two rows, then Show all', (tester) async {

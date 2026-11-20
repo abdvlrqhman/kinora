@@ -13,6 +13,7 @@ import '../../core/log.dart';
 import '../../services/library.dart';
 import '../../services/sources.dart';
 import '../title/title_model.dart';
+import 'home_layout.dart';
 
 /// Home rows so far.
 final class HomeRows {
@@ -87,6 +88,15 @@ final homeRowsProvider = StreamProvider<HomeRows>((ref) async* {
 
 typedef _Fetched = ({CatalogRow? row, bool error, bool network});
 
+/// A catalog's name as a row title ("Popular movies").
+String catalogTitle(ManifestCatalog c) {
+  final name = (c.name?.trim().isNotEmpty ?? false) ? c.name!.trim() : c.id;
+  final lower = name.toLowerCase();
+  return lower.contains(typeLabel(c.type)) || lower.contains(c.type)
+      ? name
+      : '$name ${typeLabel(c.type)}';
+}
+
 Future<_Fetched> _fetchRow(
   AddonClient client,
   Addon addon,
@@ -97,13 +107,8 @@ Future<_Fetched> _fetchRow(
         .catalog(addon, c.type, c.id)
         .timeout(const Duration(seconds: 15));
     if (items.isEmpty) return (row: null, error: false, network: false);
-    final name = (c.name?.trim().isNotEmpty ?? false) ? c.name!.trim() : c.id;
-    final lower = name.toLowerCase();
-    final title = lower.contains(typeLabel(c.type)) || lower.contains(c.type)
-        ? name
-        : '$name ${typeLabel(c.type)}';
     final row = CatalogRow(
-      title: title,
+      title: catalogTitle(c),
       type: c.type,
       items: items,
       addon: addon,
@@ -333,3 +338,44 @@ List<MetaPreview> pickFeaturedList(
         .take(count - 1),
   ];
 }
+
+/// Every row Home can show, in default order (see [homeRowChoices]).
+final homeRowChoicesProvider = Provider<List<HomeRowChoice>>((ref) {
+  final addons = ref.watch(enabledAddonsProvider).value ?? const <Addon>[];
+  final pinned = ref.watch(settingsProvider.select((s) => s.homePinned));
+  List<({String source, ManifestCatalog catalog})> where(
+    bool Function(ManifestCatalog) ok,
+  ) => [
+    for (final a in addons)
+      for (final c in a.manifest.catalogs)
+        if (ok(c)) (source: a.transportUrl.toString(), catalog: c),
+  ];
+  // The sources' catalogs, plus any row that arrived without being listed
+  // (a manifest that changed since).
+  final listed = where((c) => c.requiredExtras.isEmpty);
+  String key(String source, ManifestCatalog c) => '$source|${c.type}|${c.id}';
+  final known = {for (final c in listed) key(c.source, c.catalog)};
+  final arrived = ref.watch(homeRowsProvider).value?.rows ?? const [];
+  return homeRowChoices(
+    catalogs: [
+      ...listed,
+      for (final r in arrived)
+        if (!known.contains(key(r.addon.transportUrl.toString(), r.catalog)))
+          (source: r.addon.transportUrl.toString(), catalog: r.catalog),
+    ].take(20).toList(),
+    browsable: where((c) => c.requiredExtras.every((e) => e.name == 'genre')),
+    pinned: pinned,
+    titleOf: catalogTitle,
+  );
+});
+
+/// Home's rows as the viewer arranged them (ids, in order, shown ones).
+final homeLayoutProvider = Provider<List<String>>((ref) {
+  final choices = ref.watch(homeRowChoicesProvider);
+  final s = ref.watch(settingsProvider);
+  return homeLayout(
+    available: [for (final c in choices) c.id],
+    order: s.homeOrder,
+    hidden: s.homeHidden.toSet(),
+  );
+});

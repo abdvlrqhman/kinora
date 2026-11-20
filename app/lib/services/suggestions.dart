@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stremio/stremio.dart';
 
@@ -38,3 +39,31 @@ final forYouProvider = FutureProvider<List<MetaPreview>>((ref) async {
       if (!started.contains(m.id)) m,
   ];
 });
+
+/// Trending on Trakt, by type (signed in only).
+final trendingProvider = FutureProvider.autoDispose
+    .family<List<MetaPreview>, String>(
+      (ref, type) => ref.watch(traktSyncProvider).trending(type),
+    );
+
+/// "Because you watched X": titles like the last one watched here (signed
+/// in to Trakt only).
+final becauseProvider =
+    FutureProvider.autoDispose<({String name, List<MetaPreview> items})?>((
+      ref,
+    ) async {
+      final sync = ref.watch(traktSyncProvider);
+      if (!sync.signedIn) return null;
+      final db = ref.read(databaseProvider);
+      final recent =
+          await (db.select(db.watchProgress)
+                ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+                ..limit(30))
+              .get();
+      final last = recent.where((r) => r.mediaId.startsWith('tt')).firstOrNull;
+      if (last == null) return null;
+      final items = await ref.watch(
+        relatedProvider((id: last.mediaId, type: last.type)).future,
+      );
+      return (name: last.name, items: items);
+    });

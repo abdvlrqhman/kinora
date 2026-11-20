@@ -19,7 +19,9 @@ import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/chips.dart';
 import '../../ui/widgets/states.dart';
+import '../../app/providers.dart';
 import '../home/home_feed.dart';
+import '../home/home_layout.dart';
 import '../../ui/widgets/page_header.dart';
 import '../home/rows.dart' show HoverArt;
 import 'discovery.dart';
@@ -417,7 +419,10 @@ class _BrowseState extends ConsumerState<_Browse> {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
+                  // (Most of the room before the Spacer: long names
+                  // keep more of themselves.)
                   Flexible(
+                    flex: 4,
                     child: Semantics(
                       header: true,
                       child: Text(
@@ -436,6 +441,8 @@ class _BrowseState extends ConsumerState<_Browse> {
                       style: KType.meta,
                     ),
                   ],
+                  const Spacer(),
+                  _AddToHome(browse: key),
                 ],
               ),
             ),
@@ -479,6 +486,55 @@ class _BrowseState extends ConsumerState<_Browse> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Puts what's browsed on Home, or takes it off: a catalog Home lists is
+/// shown or hidden there; with a genre, it's pinned as a row of its own.
+class _AddToHome extends ConsumerWidget {
+  const _AddToHome({required this.browse});
+
+  final BrowseKey browse;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(settingsProvider);
+    final catalog = catalogRowId(browse.addon, browse.type, browse.catalog);
+    final listed = browse.genre != null
+        ? null
+        : ref
+              .watch(homeRowChoicesProvider)
+              .where((c) => c.catalog == catalog)
+              .firstOrNull
+              ?.id;
+    final pin = pinnedRowId(browse);
+    final on = listed != null
+        ? !s.homeHidden.contains(listed)
+        : s.homePinned.contains(pin);
+    void toggle() => unawaited(
+      ref
+          .read(settingsProvider.notifier)
+          .update(
+            (s) => listed != null
+                ? s.copyWith(
+                    homeHidden: on
+                        ? [...s.homeHidden, listed]
+                        : [...s.homeHidden.where((h) => h != listed)],
+                  )
+                : s.copyWith(
+                    homePinned: on
+                        ? [...s.homePinned.where((p) => p != pin)]
+                        : [...s.homePinned, pin],
+                  ),
+          ),
+    );
+    return GlassButton(
+      label: on ? 'On Home' : 'Add to Home',
+      icon: on ? Icons.check_rounded : Icons.add_rounded,
+      semanticLabel: on ? 'On Home. Remove from Home' : 'Add to Home',
+      compact: true,
+      onPressed: toggle,
     );
   }
 }

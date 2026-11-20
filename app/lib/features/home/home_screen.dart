@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +17,7 @@ import '../cast/cast_picker.dart';
 import '../trakt/trakt_ui.dart';
 import 'billboard.dart';
 import 'home_feed.dart';
+import 'home_layout.dart';
 import 'rows.dart';
 
 /// Home: a billboard, then Continue watching, New episodes, My list and
@@ -120,7 +120,13 @@ class _FeedState extends ConsumerState<_Feed> {
     final fresh = ref.watch(newEpisodesProvider);
     final featured = _pick(rows.value, fresh);
     final pad = MediaQuery.paddingOf(context);
-    final catalogs = rows.value?.rows ?? const <CatalogRow>[];
+    final layout = ref.watch(homeLayoutProvider);
+    final choices = ref.watch(homeRowChoicesProvider);
+    final titles = {for (final c in choices) c.id: c};
+    final byId = {
+      for (final r in rows.value?.rows ?? const <CatalogRow>[])
+        catalogRowId(r.addon.transportUrl.toString(), r.type, r.catalog.id): r,
+    };
     return Stack(
       children: [
         RefreshIndicator.adaptive(
@@ -147,14 +153,13 @@ class _FeedState extends ConsumerState<_Feed> {
                       ? const BillboardSkeleton()
                       : SizedBox(height: pad.top + 56),
                 ),
-                const SliverToBoxAdapter(child: ContinueRow()),
-                const SliverToBoxAdapter(child: NewEpisodesRow()),
-                // The first catalog, ranked.
-                if (catalogs.isNotEmpty)
-                  SliverToBoxAdapter(child: TrendingRow(row: catalogs.first)),
-                const SliverToBoxAdapter(child: MyListRow()),
-                const SliverToBoxAdapter(child: ForYouRow()),
-                ..._rows(rows),
+                // The rows, as the viewer arranged them (Settings › Home).
+                SliverList.builder(
+                  itemCount: layout.length,
+                  itemBuilder: (_, i) =>
+                      _row(layout[i], byId, titles) ?? const SizedBox.shrink(),
+                ),
+                ..._status(rows),
                 SliverToBoxAdapter(
                   child: SizedBox(height: AppShell.bottomInset(context)),
                 ),
@@ -214,7 +219,35 @@ class _FeedState extends ConsumerState<_Feed> {
     );
   }
 
-  List<Widget> _rows(AsyncValue<HomeRows> rows) => switch (rows) {
+  /// One row of Home by its id (null: nothing to show yet).
+  static Widget? _row(
+    String id,
+    Map<String, CatalogRow> byId,
+    Map<String, HomeRowChoice> choices,
+  ) => switch (id) {
+    'continue' => const ContinueRow(),
+    'new-episodes' => const NewEpisodesRow(),
+    'top10' => switch (byId[choices[id]?.catalog]) {
+      final row? => TrendingRow(row: row),
+      null => null,
+    },
+    'my-list' => const MyListRow(),
+    'for-you' => const ForYouRow(),
+    'because' => const BecauseRow(),
+    'trending-shows' => const TrendingTraktRow(type: 'series'),
+    'trending-movies' => const TrendingTraktRow(type: 'movie'),
+    _ when id.startsWith('cat:') => switch (byId[id]) {
+      final row? => CatalogRowView(row: row),
+      null => null,
+    },
+    _ => switch (pinnedKey(id)) {
+      final key? => PinnedRow(browse: key, title: choices[id]?.title ?? ''),
+      null => null,
+    },
+  };
+
+  /// Below the rows: why there are none, or that more are coming.
+  List<Widget> _status(AsyncValue<HomeRows> rows) => switch (rows) {
     AsyncValue(value: final v?) when v.complete && v.rows.isEmpty => [
       SliverToBoxAdapter(
         child: v.offline
@@ -243,11 +276,6 @@ class _FeedState extends ConsumerState<_Feed> {
       ),
     ],
     AsyncValue(value: final v?) => [
-      // (The first one is Trending now, above My list.)
-      SliverList.builder(
-        itemCount: math.max(0, v.rows.length - 1),
-        itemBuilder: (_, i) => CatalogRowView(row: v.rows[i + 1]),
-      ),
       // More sources still answering.
       if (!v.complete) const SliverToBoxAdapter(child: _SkeletonRows(rows: 1)),
     ],

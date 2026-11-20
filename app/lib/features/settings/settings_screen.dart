@@ -10,6 +10,7 @@ import '../../services/sources.dart';
 import '../../services/subtitles_service.dart';
 import 'help_pages.dart';
 import 'languages.dart';
+import 'home_settings_page.dart';
 import 'preference_pages.dart';
 import 'backup_page.dart';
 import 'trakt_page.dart';
@@ -32,6 +33,7 @@ final List<RouteBase> settingsRoutes = [
   pageRoute('backup', (_) => const BackupPage()),
   pageRoute('playback', (_) => const PlaybackPage()),
   pageRoute('notifications', (_) => const NotificationsPage()),
+  pageRoute('home', (_) => const HomeSettingsPage()),
   pageRoute('downloads', (_) => const DownloadSettingsPage()),
   pageRoute('network', (_) => const NetworkPage()),
   pageRoute('storage', (_) => const StoragePage()),
@@ -118,6 +120,12 @@ class SettingsScreen extends ConsumerWidget {
             if (s.dataSaver) 'data saver',
           ].join(', '),
           onTap: () => go('playback'),
+        ),
+        NavRow(
+          label: 'Home',
+          icon: Icons.dashboard_customize_outlined,
+          value: 'Choose and order its rows',
+          onTap: () => go('home'),
         ),
         if (!isDesktop)
           NavRow(

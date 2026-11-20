@@ -21,6 +21,7 @@ import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/pointer.dart';
 import '../../ui/widgets/sheet.dart';
+import '../search/discovery.dart';
 import 'home_feed.dart';
 
 /// Home's sizes: a wide window (the sidebar) or a phone.
@@ -487,20 +488,74 @@ class CatalogRowView extends StatelessWidget {
       PosterRow(title: row.title, items: row.items);
 }
 
-/// Trakt's picks for the viewer, without titles they marked Not for me.
-/// Nothing when not signed in to Trakt.
-class ForYouRow extends ConsumerWidget {
-  const ForYouRow({super.key});
+/// Suggested titles as a poster row, without the ones the viewer marked
+/// Not for me; nothing while there are none.
+class SuggestionRow extends ConsumerWidget {
+  const SuggestionRow({super.key, required this.title, required this.items});
+
+  final String title;
+  final List<MetaPreview>? items;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tastes = ref.watch(tastesProvider).value ?? const {};
-    final items = [
-      for (final m in ref.watch(forYouProvider).value ?? const <MetaPreview>[])
+    final shown = [
+      for (final m in items ?? const <MetaPreview>[])
         if (tastes[m.id] != Taste.notForMe) m,
     ];
-    if (items.isEmpty) return const SizedBox.shrink();
-    return PosterRow(title: 'For you', items: items);
+    if (shown.isEmpty) return const SizedBox.shrink();
+    return PosterRow(title: title, items: shown);
+  }
+}
+
+/// Trakt's picks for the viewer. Nothing when not signed in to Trakt.
+class ForYouRow extends ConsumerWidget {
+  const ForYouRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      SuggestionRow(title: 'For you', items: ref.watch(forYouProvider).value);
+}
+
+/// Titles like the last one watched (Trakt, signed in).
+class BecauseRow extends ConsumerWidget {
+  const BecauseRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final because = ref.watch(becauseProvider).value;
+    return SuggestionRow(
+      title: because == null ? '' : 'Because you watched ${because.name}',
+      items: because?.items,
+    );
+  }
+}
+
+/// Trending on Trakt (signed in).
+class TrendingTraktRow extends ConsumerWidget {
+  const TrendingTraktRow({super.key, required this.type});
+
+  final String type;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SuggestionRow(
+    title: type == 'movie' ? 'Trending movies' : 'Trending shows',
+    items: ref.watch(trendingProvider(type)).value,
+  );
+}
+
+/// A catalog with a genre, pinned to Home from Discovery.
+class PinnedRow extends ConsumerWidget {
+  const PinnedRow({super.key, required this.browse, required this.title});
+
+  final BrowseKey browse;
+  final String title;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final items = ref.watch(browseProvider(browse)).value?.items;
+    if (items == null || items.isEmpty) return const SizedBox.shrink();
+    return PosterRow(title: title, items: items);
   }
 }
 

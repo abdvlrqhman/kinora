@@ -10,6 +10,8 @@ import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/features/home/home_feed.dart';
 import 'package:kinora/features/home/home_screen.dart';
+import 'package:kinora/core/settings.dart';
+import 'package:kinora/features/home/home_layout.dart';
 import 'package:kinora/features/title/title_model.dart';
 import 'package:kinora/ui/glass.dart';
 import 'package:kinora/ui/widgets/states.dart';
@@ -171,6 +173,41 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('For you'), findsNothing);
+  });
+
+  testScreen('rows come in the viewer\'s order, hidden ones left out', (
+    tester,
+  ) async {
+    final db = testDb();
+    await seedLibrary(db);
+    final shows = catalogRowId(
+      testAddon.transportUrl.toString(),
+      'series',
+      'Popular shows',
+    );
+    await pumpScreen(
+      tester,
+      const HomeScreen(),
+      db: db,
+      size: const Size(390, 2400),
+      overrides: [
+        ...withSource(),
+        initialSettingsProvider.overrideWithValue(
+          AppSettings(
+            onboarded: true,
+            homeOrder: [shows, 'top10', 'continue'],
+            homeHidden: const ['my-list'],
+          ),
+        ),
+        homeRowsProvider.overrideWith((ref) => Stream.value(HomeRows(rows))),
+        metaProvider.overrideWith((ref, key) async => throw StateError('off')),
+      ],
+    );
+    await tester.pumpAndSettle();
+    double top(String text) => tester.getTopLeft(find.text(text).last).dy;
+    expect(top('Popular shows'), lessThan(top('Trending now')));
+    expect(top('Trending now'), lessThan(top('Keep watching')));
+    expect(find.text('My list'), findsOneWidget); // the billboard's button
   });
 
   testScreen('long-press on Keep watching offers row actions', (tester) async {

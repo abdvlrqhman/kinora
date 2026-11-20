@@ -105,6 +105,9 @@ final class AppSettings {
     this.notifyDownloads = true,
     this.quietFrom = 22,
     this.quietTo = 9,
+    this.homeOrder = const [],
+    this.homeHidden = const [],
+    this.homePinned = const [],
     this.wifiOnlyDownloads = true,
     this.autoDownloadNext = false,
     this.downloadsAtOnce = 0,
@@ -144,6 +147,9 @@ final class AppSettings {
     notifyDownloads: j['notifyDownloads'] as bool? ?? true,
     quietFrom: (j['quietFrom'] as num? ?? 22).toInt(),
     quietTo: (j['quietTo'] as num? ?? 9).toInt(),
+    homeOrder: _strings(j['homeOrder']),
+    homeHidden: _strings(j['homeHidden']),
+    homePinned: _strings(j['homePinned']),
     wifiOnlyDownloads: j['wifiOnlyDownloads'] as bool? ?? true,
     autoDownloadNext: j['autoDownloadNext'] as bool? ?? false,
     downloadsAtOnce: (j['downloadsAtOnce'] as num? ?? 0).toInt(),
@@ -213,6 +219,16 @@ final class AppSettings {
   /// No notices from [quietFrom] to [quietTo] o'clock (none when equal).
   final int quietFrom;
   final int quietTo;
+
+  /// Home's rows as the viewer ordered them (ids, see home_layout.dart);
+  /// rows not in it keep their default place.
+  final List<String> homeOrder;
+
+  /// Rows the viewer hid from Home.
+  final List<String> homeHidden;
+
+  /// Rows pinned from Discovery (a catalog with a genre).
+  final List<String> homePinned;
   final bool wifiOnlyDownloads;
   final bool autoDownloadNext;
 
@@ -272,6 +288,9 @@ final class AppSettings {
     'notifyDownloads': notifyDownloads,
     'quietFrom': quietFrom,
     'quietTo': quietTo,
+    'homeOrder': homeOrder,
+    'homeHidden': homeHidden,
+    'homePinned': homePinned,
     'wifiOnlyDownloads': wifiOnlyDownloads,
     'autoDownloadNext': autoDownloadNext,
     'downloadsAtOnce': downloadsAtOnce,
@@ -309,6 +328,9 @@ final class AppSettings {
     bool? notifyDownloads,
     int? quietFrom,
     int? quietTo,
+    List<String>? homeOrder,
+    List<String>? homeHidden,
+    List<String>? homePinned,
     bool? wifiOnlyDownloads,
     bool? autoDownloadNext,
     int? downloadsAtOnce,
@@ -343,6 +365,9 @@ final class AppSettings {
     notifyDownloads: notifyDownloads ?? this.notifyDownloads,
     quietFrom: quietFrom ?? this.quietFrom,
     quietTo: quietTo ?? this.quietTo,
+    homeOrder: homeOrder ?? this.homeOrder,
+    homeHidden: homeHidden ?? this.homeHidden,
+    homePinned: homePinned ?? this.homePinned,
     wifiOnlyDownloads: wifiOnlyDownloads ?? this.wifiOnlyDownloads,
     autoDownloadNext: autoDownloadNext ?? this.autoDownloadNext,
     downloadsAtOnce: downloadsAtOnce ?? this.downloadsAtOnce,

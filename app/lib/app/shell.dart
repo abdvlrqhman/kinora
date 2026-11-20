@@ -847,6 +847,7 @@ class _WindowBar extends StatelessWidget {
       'backup': 'Backup',
       'playback': 'Playback',
       'notifications': 'Notifications',
+      'home': 'Home',
       'downloads': 'Downloads',
       'network': 'Network',
       'storage': 'Storage',

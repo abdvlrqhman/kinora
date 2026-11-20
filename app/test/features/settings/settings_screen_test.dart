@@ -67,6 +67,7 @@ void main() {
       '/subtitle-sites',
       '/playback',
       '/notifications',
+      '/home',
       '/downloads',
       '/network',
       '/storage',
@@ -196,6 +197,9 @@ void main() {
     await addDownload(kit.db, id: 'd1', season: null, title: 'Ember');
     // Re-measure now that the files exist.
     await tester.tap(back);
+    await tester.pumpAndSettle();
+    // (To the top: the tab bar floats over the bottom.)
+    await tester.ensureVisible(find.bySemanticsLabel(RegExp('^Storage, ')));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel(RegExp('^Storage, ')));
     await settleIo(tester);

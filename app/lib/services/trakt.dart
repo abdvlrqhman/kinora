@@ -824,6 +824,18 @@ final class TraktSync extends ChangeNotifier {
     return status == 200 ? picks(body, movie ? 'movie' : 'series') : const [];
   }
 
+  /// What's being watched on Trakt right now ([type] `movie` or
+  /// `series`). Signed in only.
+  Future<List<MetaPreview>> trending(String type) async {
+    if (!signedIn) return const [];
+    final movie = type == 'movie';
+    final (status, body) = await _call(
+      'GET',
+      '/${movie ? 'movies' : 'shows'}/trending?limit=20',
+    );
+    return status == 200 ? picks(body, movie ? 'movie' : 'series') : const [];
+  }
+
   /// Trakt's picks for the viewer, from what they watched and rated:
   /// movies and shows taking turns. Signed in only.
   Future<List<MetaPreview>> recommendations() async {
