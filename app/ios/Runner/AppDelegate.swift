@@ -26,7 +26,10 @@ import UserNotifications
       FlutterMethodChannel(name: "kinora/files", binaryMessenger: registrar.messenger())
         .setMethodCallHandler { call, result in
           // The widget's app group, as this copy was signed.
-          if call.method == "appGroup" { return result(kinoraAppGroup()) }
+          if call.method == "appGroup" {
+            let found = kinoraAppGroupFound()
+            return result(["group": found.group, "how": found.how])
+          }
           guard call.method == "excludeFromBackup", let path = call.arguments as? String else {
             return result(FlutterMethodNotImplemented)
           }
@@ -309,25 +312,63 @@ final class KinoraBackground {
   }
 }
 
-/// The app group this copy of Kinora was signed with. SideStore and
-/// AltStore register their own, "group.io.github.abdvlrqhman.kinora.<team
-/// id>", and list it in the profile they embed: the widget's own, else the
-/// app's (two folders up from the widget).
-func kinoraAppGroup() -> String {
+/// The app group this copy of Kinora was signed with, and how it was found.
+/// SideStore and AltStore sign with their own name for ours,
+/// "group.io.github.abdvlrqhman.kinora.<team id>". Tried in turn, the first
+/// iOS gives a folder for wins: the groups in this binary's own signature
+/// (how SideStore finds its own), the embedded profile (the widget's, else
+/// the app's two folders up), then the team id SideStore appends to the
+/// app's id ("io.github.abdvlrqhman.kinora.<team id>[.KinoraWidget]").
+func kinoraAppGroupFound() -> (group: String, how: String) {
   let base = "group.io.github.abdvlrqhman.kinora"
+  let key = "com.apple.security.application-groups"
+
+  func plist(in data: Data, around: Range<Data.Index>) -> [String: Any]? {
+    guard let start = data.range(of: Data("<?xml".utf8), options: .backwards, in: data.startIndex..<around.lowerBound),
+          let end = data.range(of: Data("</plist>".utf8), in: around.upperBound..<data.endIndex)
+    else { return nil }
+    return try? PropertyListSerialization.propertyList(
+      from: data.subdata(in: start.lowerBound..<end.upperBound), format: nil
+    ) as? [String: Any]
+  }
+
+  var tried: [(String, String)] = []
+  // 1. This binary's code signature, at its end: the XML copy of its
+  // entitlements (a binary DER copy follows it, so skip back past that).
+  if let exe = Bundle.main.executableURL,
+     let data = try? Data(contentsOf: exe, options: .alwaysMapped) {
+    var upper = data.endIndex
+    while data.endIndex - upper < 8_000_000,
+          let k = data.range(of: Data(key.utf8), options: .backwards, in: data.startIndex..<upper) {
+      if let groups = plist(in: data, around: k)?[key] as? [String] {
+        tried += groups.map { ($0, "signature") }
+        break
+      }
+      upper = k.lowerBound
+    }
+  }
+  // 2. The embedded profile.
   let here = Bundle.main.bundleURL
   for dir in [here, here.deletingLastPathComponent().deletingLastPathComponent()] {
-    guard let data = try? Data(contentsOf: dir.appendingPathComponent("embedded.mobileprovision")),
-          let start = data.range(of: Data("<?xml".utf8)),
-          let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
-          let plist = try? PropertyListSerialization.propertyList(
-            from: data.subdata(in: start.lowerBound..<end.upperBound), format: nil
-          ) as? [String: Any],
-          let entitlements = plist["Entitlements"] as? [String: Any],
-          let groups = entitlements["com.apple.security.application-groups"] as? [String],
-          let group = groups.first(where: { $0.hasPrefix(base) })
-    else { continue }
-    return group
+    if let data = try? Data(contentsOf: dir.appendingPathComponent("embedded.mobileprovision")),
+       let k = data.range(of: Data(key.utf8)),
+       let groups = (plist(in: data, around: k)?["Entitlements"] as? [String: Any])?[key] as? [String] {
+      tried += groups.map { ($0, "profile") }
+    }
   }
-  return base
+  // 3. The team id after our id.
+  let id = (Bundle.main.bundleIdentifier ?? "").components(separatedBy: ".")
+  if id.count > 4, id[0..<4].joined(separator: ".") == "io.github.abdvlrqhman.kinora",
+     id[4].range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil {
+    tried.append(("\(base).\(id[4])", "team id"))
+  }
+  for (group, how) in tried where group.hasPrefix(base) {
+    if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil {
+      return (group, how)
+    }
+  }
+  let seen = tried.map { "\($0.0) (\($0.1))" }.joined(separator: ", ")
+  return (base, "none of [\(seen)] has a folder; id \(Bundle.main.bundleIdentifier ?? "?")")
 }
+
+func kinoraAppGroup() -> String { kinoraAppGroupFound().group }

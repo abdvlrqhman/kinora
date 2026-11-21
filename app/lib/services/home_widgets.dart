@@ -75,9 +75,9 @@ final class HomeWidgets {
     if (!supported || _started) return;
     _started = true;
     try {
-      final signed = Platform.isIOS ? await _signedGroup() ?? group : group;
-      Log.i('widget', 'app group $signed');
-      await HomeWidget.setAppGroupId(signed);
+      final found = Platform.isIOS ? await _signedGroup() : null;
+      Log.i('widget', 'app group ${found?.group ?? group} (${found?.how})');
+      await HomeWidget.setAppGroupId(found?.group ?? group);
       void tapped(Uri? uri) {
         if (widgetPath(uri) case final path?) open(path);
       }
@@ -95,12 +95,16 @@ final class HomeWidgets {
     }, fireImmediately: true);
   }
 
-  /// The group SideStore signed this copy with (its own name for ours).
-  static Future<String?> _signedGroup() async {
+  /// The group SideStore signed this copy with (its own name for ours),
+  /// and how the app found it.
+  static Future<({String group, String how})?> _signedGroup() async {
     try {
-      return await const MethodChannel('kinora/files')
-          .invokeMethod<String>('appGroup');
-    } on Object {
+      final r = await const MethodChannel('kinora/files')
+          .invokeMapMethod<String, String>('appGroup');
+      final group = r?['group'];
+      return group == null ? null : (group: group, how: r?['how'] ?? '');
+    } on Object catch (e) {
+      Log.w('widget', 'app group: $e');
       return null;
     }
   }
