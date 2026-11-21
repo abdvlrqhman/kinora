@@ -59,8 +59,8 @@ everywhere.
   lists by genre, year and rating, and find people by name.
 - **Coming up.** A calendar of the next episodes of the shows you follow,
   and notifications when they air.
-- **Home screen widget.** Continue watching on your iPhone or Android home
-  screen; a tap opens the title.
+- **Home screen widget (Android).** Continue watching on your home screen;
+  a tap opens the title.
 - **Trakt, if you like.** Sign in with a code at trakt.tv (Kinora never sees
   your password): what you watched, where you stopped, your watchlist and
   your ratings stay the same on every device, and in apps like Stremio and

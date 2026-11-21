@@ -238,14 +238,6 @@ jobs:
         run: |
           flutter build ios --release --no-codesign --build-number ${{ github.run_number }} \
             --dart-define=TRAKT_CLIENT_ID=${{ vars.TRAKT_CLIENT_ID }}
-          # The widget reads what to show through an app group: its
-          # entitlements go in an ad-hoc signature, which SideStore keeps
-          # when it signs the app with your Apple ID.
-          app=build/ios/iphoneos/Runner.app
-          codesign --force --sign - --entitlements ios/KinoraWidget/KinoraWidget.entitlements \
-            "$app/PlugIns/KinoraWidgetExtension.appex"
-          codesign --force --sign - --entitlements ios/Runner/Runner.entitlements "$app"
-          codesign -d --entitlements - "$app" | grep -q group.io.github.abdvlrqhman.kinora
           mkdir -p dist/Payload
           cp -R build/ios/iphoneos/Runner.app dist/Payload/
           cd dist && zip -qry Kinora.ipa Payload && ls -la

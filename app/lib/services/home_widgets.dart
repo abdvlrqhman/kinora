@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 
@@ -53,17 +52,17 @@ String? widgetPath(Uri? uri) {
   return '/';
 }
 
-/// The home screen widget (Android and iPhone): kept
-/// in step with Keep watching, and its taps open the title.
+/// The home screen widget (Android): kept in step with Keep watching, and
+/// its taps open the title. (iPhone: copies installed with SideStore and
+/// similar signers come without the app group a widget reads through.)
 final class HomeWidgets {
   HomeWidgets(this._ref);
   final Ref _ref;
 
   static const group = 'group.io.github.abdvlrqhman.kinora';
   static const _android = 'io.github.abdvlrqhman.kinora.KinoraWidgetProvider';
-  static const _ios = 'KinoraWidget';
 
-  static bool get supported => Platform.isAndroid || Platform.isIOS;
+  static bool get supported => Platform.isAndroid;
 
   var _started = false;
   Timer? _soon;
@@ -75,9 +74,7 @@ final class HomeWidgets {
     if (!supported || _started) return;
     _started = true;
     try {
-      final found = Platform.isIOS ? await _signedGroup() : null;
-      Log.i('widget', 'app group ${found?.group ?? group} (${found?.how})');
-      await HomeWidget.setAppGroupId(found?.group ?? group);
+      await HomeWidget.setAppGroupId(group);
       void tapped(Uri? uri) {
         if (widgetPath(uri) case final path?) open(path);
       }
@@ -93,20 +90,6 @@ final class HomeWidgets {
         _soon = Timer(const Duration(seconds: 2), () => unawaited(_show(rows)));
       }
     }, fireImmediately: true);
-  }
-
-  /// The group SideStore signed this copy with (its own name for ours),
-  /// and how the app found it.
-  static Future<({String group, String how})?> _signedGroup() async {
-    try {
-      final r = await const MethodChannel('kinora/files')
-          .invokeMapMethod<String, String>('appGroup');
-      final group = r?['group'];
-      return group == null ? null : (group: group, how: r?['how'] ?? '');
-    } on Object catch (e) {
-      Log.w('widget', 'app group: $e');
-      return null;
-    }
   }
 
   void dispose() {
@@ -152,10 +135,7 @@ final class HomeWidgets {
         });
       }
       await HomeWidget.saveWidgetData<String>('items', jsonEncode(out));
-      await HomeWidget.updateWidget(
-        qualifiedAndroidName: _android,
-        iOSName: _ios,
-      );
+      await HomeWidget.updateWidget(qualifiedAndroidName: _android);
       _shown = key;
       Log.i('widget', 'showing ${out.length}');
     } on Object catch (e) {
