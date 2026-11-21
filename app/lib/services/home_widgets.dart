@@ -75,9 +75,9 @@ final class HomeWidgets {
     if (!supported || _started) return;
     _started = true;
     try {
-      await HomeWidget.setAppGroupId(
-        Platform.isIOS ? await _signedGroup() ?? group : group,
-      );
+      final signed = Platform.isIOS ? await _signedGroup() ?? group : group;
+      Log.i('widget', 'app group $signed');
+      await HomeWidget.setAppGroupId(signed);
       void tapped(Uri? uri) {
         if (widgetPath(uri) case final path?) open(path);
       }
@@ -134,8 +134,9 @@ final class HomeWidgets {
                 extension: 'jpg',
               );
             }
-          } on Object {
+          } on Object catch (e) {
             // No poster: the row shows without one.
+            Log.w('widget', 'poster: $e');
           }
         }
         out.add({
@@ -152,8 +153,9 @@ final class HomeWidgets {
         iOSName: _ios,
       );
       _shown = key;
+      Log.i('widget', 'showing ${out.length}');
     } on Object catch (e) {
-      Log.d('widget', 'update: $e');
+      Log.w('widget', 'update: $e');
     }
   }
 }

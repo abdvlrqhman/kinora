@@ -311,18 +311,23 @@ final class KinoraBackground {
 
 /// The app group this copy of Kinora was signed with. SideStore and
 /// AltStore register their own, "group.io.github.abdvlrqhman.kinora.<team
-/// id>", and list it in the profile they embed in each bundle.
+/// id>", and list it in the profile they embed: the widget's own, else the
+/// app's (two folders up from the widget).
 func kinoraAppGroup() -> String {
   let base = "group.io.github.abdvlrqhman.kinora"
-  guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
-        let data = try? Data(contentsOf: url),
-        let start = data.range(of: Data("<?xml".utf8)),
-        let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
-        let plist = try? PropertyListSerialization.propertyList(
-          from: data.subdata(in: start.lowerBound..<end.upperBound), format: nil
-        ) as? [String: Any],
-        let entitlements = plist["Entitlements"] as? [String: Any],
-        let groups = entitlements["com.apple.security.application-groups"] as? [String]
-  else { return base }
-  return groups.first { $0.hasPrefix(base) } ?? base
+  let here = Bundle.main.bundleURL
+  for dir in [here, here.deletingLastPathComponent().deletingLastPathComponent()] {
+    guard let data = try? Data(contentsOf: dir.appendingPathComponent("embedded.mobileprovision")),
+          let start = data.range(of: Data("<?xml".utf8)),
+          let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
+          let plist = try? PropertyListSerialization.propertyList(
+            from: data.subdata(in: start.lowerBound..<end.upperBound), format: nil
+          ) as? [String: Any],
+          let entitlements = plist["Entitlements"] as? [String: Any],
+          let groups = entitlements["com.apple.security.application-groups"] as? [String],
+          let group = groups.first(where: { $0.hasPrefix(base) })
+    else { continue }
+    return group
+  }
+  return base
 }

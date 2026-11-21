@@ -1348,6 +1348,7 @@ class PlayerController extends ChangeNotifier {
     activeSubtitleId = option?.id;
     subtitleSync = null;
     _syncedFile = null;
+    _delayBeforeLineUp = null;
     notifyListeners();
     if (option == null) {
       await player.setSubtitleTrack(SubtitleTrack.no());
@@ -1489,7 +1490,9 @@ class PlayerController extends ChangeNotifier {
         }
         if (found == null) continue;
         if (activeSubtitleId != active.id) return;
-        // The viewer's own delay was a guess at the same thing.
+        // The viewer's own delay was a guess at the same thing (Undo
+        // brings it back).
+        _delayBeforeLineUp = subtitleDelay;
         await setSubtitleDelay(Duration.zero);
         final inSync = nearlyInSync(found);
         await _subtitleFiles.saveSync(
@@ -1530,7 +1533,14 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
     await _subtitleFiles.saveSync(_request.videoId, active.id, null);
     await _showFile(active, path);
+    if (_delayBeforeLineUp case final before?) {
+      _delayBeforeLineUp = null;
+      await setSubtitleDelay(before);
+    }
   }
+
+  /// The delay set by hand before "Line up automatically" cleared it.
+  Duration? _delayBeforeLineUp;
 
   Future<void> selectAudio(AudioTrack track) async {
     await player.setAudioTrack(track);
