@@ -496,15 +496,17 @@ String syncSummary(SubtitleSync s) {
 
 /// What to line [active] up against: other text subtitles for this video,
 /// best fit first. [auto] (unasked): only when [active] isn't made for
-/// this version itself, and only against ones that are, from sites
-/// without a daily download limit.
+/// this release itself, and only against ones that are (the same release
+/// name, or the very file), from sites without a daily download limit.
 List<SubtitleOption> syncReferences(
   List<SubtitleOption> all,
   SubtitleOption active, {
   required bool auto,
   Set<String> skip = const {},
 }) {
-  const madeForIt = 0.85;
+  // The matcher's release tier (0.75, less small penalties); the next one
+  // down, same group only, tops out near 0.70.
+  const madeForIt = 0.72;
   if (auto && (active.fit ?? 0) >= madeForIt) return const [];
   return [
     for (final s in all)

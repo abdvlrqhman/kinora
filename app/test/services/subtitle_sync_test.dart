@@ -54,27 +54,31 @@ void main() {
     final all = [
       arabic,
       _opt('en-hash', fit: 0.92),
-      _opt('en-web', fit: 0.78),
+      _opt('en-release', fit: 0.76),
+      _opt('en-group', fit: 0.66),
       _opt('en-os', fit: 0.95, provider: 'opensubtitles'),
       _opt('en-forced', fit: 0.9, forced: true),
       _opt('ar-copy', fit: 0.4, label: 'ar'),
     ];
 
-    test('unasked: only one made for this version, from an open site', () {
+    test('unasked: only ones made for this release, from open sites', () {
       expect(syncReferences(all, arabic, auto: true).map((s) => s.id), [
         'en-hash',
+        'en-release',
       ]);
     });
 
-    test('unasked: never when the subtitle is made for this version', () {
+    test('unasked: never when the subtitle is made for this release', () {
       expect(syncReferences(all, all[1], auto: true), isEmpty);
+      expect(syncReferences(all, all[2], auto: true), isEmpty);
     });
 
     test('asked: any other text subtitle, best fit first', () {
       expect(syncReferences(all, arabic, auto: false).map((s) => s.id), [
         'en-os',
         'en-hash',
-        'en-web',
+        'en-release',
+        'en-group',
       ]);
       expect(
         syncReferences(all, arabic, auto: false, skip: {'en-os'}).first.id,
