@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -814,6 +815,22 @@ void main() {
       expect(notice.body, 'Premiered: S1 E1 “Pilot” aired.');
       // ignore: avoid_print
       print('E2E ok: a followed show airing tomorrow has its notice waiting');
+    }
+
+    // The home screen widget (Android) shows what to keep watching.
+    if (Platform.isAndroid) {
+      String? items;
+      for (
+        var i = 0;
+        i < 40 && !(items?.contains(FakeWorld.show) ?? false);
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 500));
+        items = await HomeWidget.getWidgetData<String>('items');
+      }
+      expect(items, contains(FakeWorld.show), reason: 'widget data: $items');
+      // ignore: avoid_print
+      print('E2E ok: the home screen widget shows Keep watching');
     }
   }, timeout: const Timeout(Duration(minutes: 6)));
 }

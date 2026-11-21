@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kinora_widget_heading">Continue watching</string>
+    <string name="kinora_widget_empty">Nothing to continue yet. What you start watching in Kinora shows up here.</string>
+    <string name="kinora_widget_description">Pick up where you left off</string>
+</resources>

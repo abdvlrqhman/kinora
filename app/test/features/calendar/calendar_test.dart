@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinora/features/calendar/calendar_screen.dart';
 import 'package:kinora/services/followed.dart';

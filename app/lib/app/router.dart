@@ -15,6 +15,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/title/title_screen.dart';
 import '../services/play_request.dart';
 import '../services/background.dart';
+import '../services/home_widgets.dart';
 import '../services/notices.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets/media.dart';
@@ -150,6 +151,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   BackgroundKeeper.instance.onOpen((_) => router.go('/downloads'));
   // A tapped show or pick notice opens its title.
   unawaited(ref.read(noticesProvider).start(router.go));
+  // A tap on the home screen widget opens its title.
+  unawaited(ref.read(homeWidgetsProvider).start(router.go));
   ref.onDispose(router.dispose);
   return router;
 });
