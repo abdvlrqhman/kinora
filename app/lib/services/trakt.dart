@@ -15,6 +15,8 @@ import 'notices_plan.dart';
 import 'ratings.dart';
 import 'sources.dart';
 
+part 'trakt_lists.dart';
+
 /// Kinora's Trakt app, set at build time. Device sign-in needs only this
 /// public id: Trakt asks mobile and desktop apps not to carry a secret.
 const _clientId = String.fromEnvironment('TRAKT_CLIENT_ID');
@@ -1214,3 +1216,20 @@ final traktSyncProvider = Provider<TraktSync>((ref) {
   ref.onDispose(s.dispose);
   return s;
 });
+
+/// Whether you're signed in to Trakt, kept current (and quiet while it
+/// only syncs).
+final traktSignedInProvider = NotifierProvider<_TraktSignedIn, bool>(
+  _TraktSignedIn.new,
+);
+
+class _TraktSignedIn extends Notifier<bool> {
+  @override
+  bool build() {
+    final trakt = ref.watch(traktSyncProvider);
+    void changed() => state = trakt.signedIn;
+    trakt.addListener(changed);
+    ref.onDispose(() => trakt.removeListener(changed));
+    return trakt.signedIn;
+  }
+}

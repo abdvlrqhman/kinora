@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:kinora/app/providers.dart';
 import 'package:kinora/core/db/database.dart';
 import 'package:kinora/core/secure_keys.dart';
@@ -11,166 +9,11 @@ import 'package:kinora/services/library.dart';
 import 'package:kinora/services/ratings.dart';
 import 'package:kinora/services/sources.dart';
 import 'package:kinora/services/trakt.dart';
+import 'package:stremio/stremio.dart';
 
 import '../features/harness.dart';
+import 'fake_trakt.dart';
 import '../features/settings/settings_harness.dart';
-
-/// A small stand-in for api.trakt.tv: what it holds, and what it was sent.
-final class FakeTrakt {
-  final calls = <String>[];
-  final bodies = <String, Object?>{};
-  final queries = <String, String>{};
-  var pendingPolls = 1;
-  var access = 'a1';
-  var expireOnce = false;
-  var refuseRefresh = false;
-  var refresh = 'r1';
-  var renewals = 0;
-
-  /// How long a sign-in lasts (Trakt's: a day), and a renewed one.
-  var lifetime = const Duration(days: 1);
-  var renewed = const Duration(days: 1);
-  var watchedShows = <Object?>[];
-  var playback = <Object?>[];
-  var watchlistShows = <Object?>[];
-  var ratedShows = <Object?>[];
-  var activities = 'v1';
-
-  late final client = MockClient((r) async {
-    final path = r.url.path;
-    final key = '${r.method} $path';
-    calls.add(key);
-    queries[key] = r.url.query;
-    if (r.body.isNotEmpty) bodies[key] = jsonDecode(r.body);
-    http.Response json(Object? body, [int status = 200]) =>
-        http.Response(jsonEncode(body), status);
-    if (path.startsWith('/oauth/')) {
-      return switch (path) {
-        '/oauth/device/code' => json({
-          'device_code': 'dev',
-          'user_code': 'AB12CD',
-          'verification_url': 'https://trakt.tv/activate',
-          'expires_in': 600,
-          'interval': 0,
-        }),
-        '/oauth/device/token' when pendingPolls-- > 0 => http.Response('', 400),
-        '/oauth/device/token' => json(_tokens('a1', 'r1', lifetime)),
-        '/oauth/token' when refuseRefresh => json({
-          'error': 'invalid_grant',
-        }, 400),
-        // Like Trakt: each refresh token works once.
-        '/oauth/token'
-            when (jsonDecode(r.body) as Map)['refresh_token'] != refresh =>
-          json({'error': 'invalid_grant'}, 400),
-        '/oauth/token' => json(
-          _tokens(
-            access = 'a${++renewals + 1}',
-            refresh = 'r${renewals + 1}',
-            renewed,
-          ),
-        ),
-        _ => json({}),
-      };
-    }
-    if (r.headers['authorization'] != 'Bearer $access' || expireOnce) {
-      expireOnce = false;
-      return http.Response('', 401);
-    }
-    return switch (key) {
-      'GET /users/settings' => json({
-        'user': {'username': 'abd'},
-      }),
-      'GET /sync/last_activities' => json({
-        'episodes': {'watched_at': activities, 'paused_at': activities},
-        'movies': {'watched_at': 'm', 'paused_at': 'm', 'watchlisted_at': 'm'},
-        'shows': {'watchlisted_at': activities, 'rated_at': activities},
-        'watchlist': {'updated_at': activities},
-      }),
-      'GET /sync/watched/shows' => json(watchedShows),
-      'GET /sync/watched/movies' => json([]),
-      'GET /sync/playback' => json(playback),
-      'GET /sync/watchlist/movies' => json([]),
-      'GET /sync/watchlist/shows' => json(watchlistShows),
-      'GET /sync/ratings/movies' => json([]),
-      'GET /sync/ratings/shows' => json(ratedShows),
-      'GET /movies/trending' => json([
-        {
-          'watchers': 12,
-          'movie': {
-            'title': 'Paper Moons',
-            'year': 2024,
-            'ids': {'imdb': 'tt902'},
-          },
-        },
-      ]),
-      'GET /search/person' => json([
-        {
-          'type': 'person',
-          'person': {
-            'name': 'Ada Reyes',
-            'ids': {'slug': 'ada-reyes', 'trakt': 7},
-            'images': {
-              'headshot': ['media.trakt.tv/people/7/medium/headshot.webp'],
-            },
-          },
-        },
-      ]),
-      'GET /people/ada-reyes/movies' => json({
-        'cast': [
-          {
-            'characters': ['Mira'],
-            'movie': {
-              'title': 'Old Light',
-              'year': 2012,
-              'ids': {'imdb': 'tt1'},
-            },
-          },
-        ],
-        'crew': {
-          'directing': [
-            {
-              'jobs': ['Director'],
-              'movie': {
-                'title': 'New Light',
-                'year': 2024,
-                'ids': {'imdb': 'tt2'},
-              },
-            },
-          ],
-        },
-      }),
-      'GET /people/ada-reyes/shows' => json({
-        'cast': [
-          {
-            'characters': ['Herself'],
-            'show': {
-              'title': 'Harbor Lights',
-              'year': 2020,
-              'ids': {'imdb': 'tt3'},
-            },
-          },
-        ],
-        'crew': <String, Object?>{},
-      }),
-      'GET /genres/movies' => json([
-        {'name': 'Science Fiction', 'slug': 'science-fiction'},
-      ]),
-      'GET /shows/tt200/seasons/1/episodes/2' => json({
-        'ids': {'trakt': 42},
-      }),
-      _ => json({}, 201),
-    };
-  });
-
-  Map<String, Object?> _tokens(String a, String r, Duration life) => {
-    'access_token': a,
-    'refresh_token': r,
-    'token_type': 'bearer',
-    'expires_in': life.inSeconds - 1,
-    'scope': 'public',
-    'created_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-  };
-}
 
 void main() {
   late AppDatabase db;
@@ -398,6 +241,119 @@ void main() {
     expect(reopened.signedIn, isTrue);
     expect(reopened.note, isNull);
   });
+
+  test('your lists: made, renamed, filled, emptied and deleted', () async {
+    await signIn();
+    final sync = c.read(traktSyncProvider);
+    expect(await sync.myLists(), isEmpty);
+    final anime = await sync.createList('Anime');
+    expect(anime.privacy, 'private');
+    await sync.updateList(anime.id, name: 'Anime 2026', privacy: 'friends');
+    const dark = MetaPreview(id: 'tt5753856', type: 'series', name: 'Dark');
+    const heat = MetaPreview(id: 'tt0113277', type: 'movie', name: 'Heat');
+    await sync.addToList(anime.id, dark);
+    await sync.addToList(anime.id, heat);
+    expect(trakt.bodies['POST /users/me/lists/${anime.id}/items'], {
+      'movies': [
+        {
+          'ids': {'imdb': 'tt0113277'},
+        },
+      ],
+    });
+    final lists = await sync.myLists();
+    expect(lists.single.name, 'Anime 2026');
+    expect(lists.single.privacy, 'friends');
+    expect(lists.single.count, 2);
+    // Movies and shows, as posters; a person on the list is left out.
+    final items = await sync.listItems(anime.id);
+    expect(items.map((m) => (m.id, m.type)), [
+      ('tt5753856', 'series'),
+      ('tt0113277', 'movie'),
+    ]);
+    expect(await sync.listsWith('tt0113277', lists), {anime.id});
+    await sync.removeFromList(anime.id, heat);
+    expect(await sync.listsWith('tt0113277', lists), isEmpty);
+    await sync.deleteList(anime.id);
+    expect(await sync.myLists(), isEmpty);
+  });
+
+  test('a list over the plan\'s limit says so plainly', () async {
+    await signIn();
+    trakt.listLimit = 0;
+    final sync = c.read(traktSyncProvider);
+    await expectLater(
+      sync.createList('One too many'),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('plan allows no more lists'),
+        ),
+      ),
+    );
+  });
+
+  test(
+    'stats: all time from Trakt, this year from history, for a day',
+    () async {
+      await signIn();
+      trakt
+        ..stats = {
+          'movies': {'watched': 12, 'minutes': 1500},
+          'episodes': {'watched': 300, 'minutes': 13500},
+          'shows': {'watched': 9},
+        }
+        ..history = [
+          for (var i = 0; i < 150; i++)
+            {
+              'id': i,
+              'type': 'episode',
+              'episode': {'runtime': 24},
+              'show': {
+                'title': i < 100 ? 'Frieren' : 'Dark',
+                'genres': i < 100 ? ['anime', 'fantasy'] : ['drama'],
+                'ids': {'imdb': i < 100 ? 'tt22248376' : 'tt5753856'},
+              },
+            },
+          {
+            'id': 999,
+            'type': 'movie',
+            'movie': {
+              'title': 'Heat',
+              'runtime': 170,
+              'genres': ['crime'],
+              'ids': {'imdb': 'tt0113277'},
+            },
+          },
+        ];
+      final sync = c.read(traktSyncProvider);
+      final s = await sync.stats(now: DateTime(2026, 11, 21));
+      expect(s.minutes, 15000);
+      expect((s.movies, s.episodes, s.shows), (12, 300, 9));
+      expect(s.yearPlays, 151);
+      expect(s.yearMinutes, 150 * 24 + 170);
+      expect(s.topShows.map((t) => (t.show.name, t.episodes)), [
+        ('Frieren', 100),
+        ('Dark', 50),
+      ]);
+      expect(s.topGenres.first.genre, anyOf('anime', 'fantasy'));
+      expect(
+        s.topGenres.map((g) => g.share).fold(0.0, (a, b) => a + b),
+        closeTo(1, 0.001),
+      );
+      expect(
+        trakt.queries['GET /sync/history'],
+        contains('start_at=2026-01-01'),
+      );
+
+      // Asked again the same day: from what was kept, nothing sent.
+      trakt.calls.clear();
+      final again = await sync.stats(now: DateTime(2026, 11, 21, 20));
+      expect(trakt.calls, isEmpty);
+      expect(again.topShows.first.show.name, 'Frieren');
+      expect(again.topGenres.length, s.topGenres.length);
+    },
+  );
 
   test('later syncs: My List follows Trakt, removals too', () async {
     trakt.watchlistShows = [

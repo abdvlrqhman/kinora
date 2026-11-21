@@ -159,6 +159,26 @@ final class ProgressRepository {
     await _told(videoId, unwatched: !watched);
   }
 
+  /// What you finished, newest first: Kinora's own and what Trakt
+  /// brought in.
+  Stream<List<WatchProgressData>> watchHistory({int limit = 300}) =>
+      (_db.select(_db.watchProgress)
+            ..where((t) => t.completed)
+            ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+            ..limit(limit))
+          .watch();
+
+  /// Forgets [videoId] was watched (or started): here, and through
+  /// [onChanged] on Trakt.
+  Future<void> unwatch(String videoId) async {
+    final row = await get(videoId);
+    if (row == null) return;
+    await (_db.delete(
+      _db.watchProgress,
+    )..where((t) => t.videoId.equals(videoId))).go();
+    onChanged?.call(row, unwatched: true);
+  }
+
   Future<void> _told(String videoId, {bool unwatched = false}) async {
     final tell = onChanged;
     if (tell == null) return;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +21,7 @@ import '../../ui/tokens.dart';
 import '../../ui/widgets/artwork.dart';
 import '../../ui/widgets/media.dart';
 import '../../ui/widgets/chips.dart';
+import '../../ui/widgets/sheet.dart';
 import '../../ui/widgets/states.dart';
 import '../../app/providers.dart';
 import '../home/home_feed.dart';
@@ -959,11 +961,17 @@ class PosterGrid extends StatelessWidget {
     required this.items,
     required this.onOpen,
     this.bottom = KSpace.section,
+    this.onRemove,
+    this.removeLabel = 'Remove',
   });
 
   final List<MetaPreview> items;
   final ValueChanged<MetaPreview> onOpen;
   final double bottom;
+
+  /// Holding a title (or the screen reader's action) takes it off.
+  final ValueChanged<MetaPreview>? onRemove;
+  final String removeLabel;
 
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
@@ -987,6 +995,15 @@ class PosterGrid extends StatelessWidget {
                 plain: true,
                 label: [m.name, ?m.releaseInfo].join(', '),
                 onTap: () => onOpen(m),
+                onLongPress: onRemove == null
+                    ? null
+                    : () => _confirmRemove(context, m),
+                actions: onRemove == null
+                    ? null
+                    : {
+                        CustomSemanticsAction(label: removeLabel): () =>
+                            onRemove!(m),
+                      },
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1067,5 +1084,38 @@ class _SkeletonSliver extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+extension on PosterGrid {
+  void _confirmRemove(BuildContext context, MetaPreview m) => unawaited(
+    showGlassSheet<void>(
+      context,
+      builder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              KSpace.margin,
+              KSpace.x3,
+              KSpace.margin,
+              KSpace.x2,
+            ),
+            child: Text(m.name, style: KType.h2),
+          ),
+          SheetAction(
+            icon: Icons.remove_circle_outline_rounded,
+            label: removeLabel,
+            color: KColors.cut,
+            onTap: () {
+              Navigator.pop(sheet);
+              onRemove!(m);
+            },
+          ),
+          const SizedBox(height: KSpace.x2),
+        ],
+      ),
+    ),
   );
 }

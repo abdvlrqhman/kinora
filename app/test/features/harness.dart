@@ -37,6 +37,7 @@ Future<Nav> pumpScreen(
   List<Override> overrides = const [],
   double textScale = 1,
   Size size = const Size(390, 844),
+  List<RouteBase> routes = const [],
 }) async {
   tester.view
     ..physicalSize = size * 3
@@ -47,6 +48,7 @@ Future<Nav> pumpScreen(
   final router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (_, _) => screen),
+      ...routes,
       GoRoute(
         path: '/title/:type/:id',
         builder: (_, s) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -71,6 +73,19 @@ class SettingsScreen extends ConsumerWidget {
       children: [
         const SectionTitle('Account'),
         _TraktRow(trakt: trakt, onTap: () => go('trakt')),
+        if (ref.watch(traktSignedInProvider))
+          NavRow(
+            label: 'Your lists',
+            icon: Icons.playlist_play_rounded,
+            value: 'Your Trakt lists',
+            onTap: () => unawaited(context.push('/lists')),
+          ),
+        NavRow(
+          label: 'Watched',
+          icon: Icons.history_rounded,
+          value: 'Everything you finished, and your numbers',
+          onTap: () => unawaited(context.push('/history')),
+        ),
         NavRow(
           label: 'Backup',
 

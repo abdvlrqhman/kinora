@@ -674,13 +674,16 @@ Future<T?> pickOption<T>(
 );
 
 /// A short confirmation, floating above the tab bar (or the onboarding
-/// Continue button) so it never covers a control.
-void showNote(BuildContext context, String text) {
+/// Continue button) so it never covers a control. [undo]: an Undo button.
+void showNote(BuildContext context, String text, {VoidCallback? undo}) {
   ScaffoldMessenger.maybeOf(context)
     ?..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         content: Text(text),
+        action: undo == null
+            ? null
+            : SnackBarAction(label: 'Undo', onPressed: undo),
         margin: EdgeInsets.fromLTRB(
           KSpace.x4,
           0,

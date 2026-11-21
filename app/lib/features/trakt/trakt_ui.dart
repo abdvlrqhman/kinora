@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/desktop.dart';
@@ -331,6 +332,20 @@ class _SignedIn extends StatelessWidget {
           ),
         ),
         ActionRow(
+          icon: Icons.playlist_play_rounded,
+          label: 'Your lists',
+          detail: 'Make, rename and fill your Trakt lists.',
+          onTap: () => _open(context, '/lists'),
+        ),
+        ActionRow(
+          icon: Icons.history_rounded,
+          label: 'Watched',
+          detail:
+              'Your hours, top shows and genres, and everything you '
+              'finished.',
+          onTap: () => _open(context, '/history'),
+        ),
+        ActionRow(
           icon: Icons.sync_rounded,
           label: 'Sync now',
           onTap: trakt.syncing ? null : () => unawaited(trakt.syncNow()),
@@ -355,6 +370,13 @@ class _SignedIn extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Opens [path], closing the Trakt sheet first when the panel is in one.
+void _open(BuildContext context, String path) {
+  final router = GoRouter.of(context);
+  if (ModalRoute.of(context) is PopupRoute) Navigator.pop(context);
+  unawaited(router.push(path));
 }
 
 /// The signed-in user's initial in the accent, ringed while syncing.

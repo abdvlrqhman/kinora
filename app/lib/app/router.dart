@@ -10,6 +10,8 @@ import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/person/person_screen.dart';
+import '../features/trakt/history_screen.dart';
+import '../features/trakt/lists_screen.dart';
 import '../features/player/player_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -111,6 +113,24 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      pageRoute(
+        '/lists',
+        parentNavigatorKey: rootNavigatorKey,
+        (_) => const ListsScreen(),
+      ),
+      pageRoute(
+        '/lists/:id',
+        parentNavigatorKey: rootNavigatorKey,
+        (state) => ListScreen(
+          id: int.tryParse(state.pathParameters['id']!) ?? 0,
+          name: state.uri.queryParameters['name'] ?? '',
+        ),
+      ),
+      pageRoute(
+        '/history',
+        parentNavigatorKey: rootNavigatorKey,
+        (_) => const HistoryScreen(),
       ),
       pageRoute(
         '/person/:slug',

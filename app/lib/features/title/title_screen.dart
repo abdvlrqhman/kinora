@@ -26,6 +26,8 @@ import '../cast/cast_picker.dart';
 import '../downloads/download_prompts.dart';
 import '../settings/widgets/settings_ui.dart';
 import 'episodes.dart';
+import '../../services/trakt.dart' show traktSignedInProvider;
+import '../trakt/lists_screen.dart' show ListsAction;
 import 'title_actions.dart';
 import 'title_model.dart';
 import 'tmdb_rows.dart';
@@ -222,6 +224,8 @@ class _TitlePageState extends ConsumerState<_TitlePage> {
                                         )
                                       : DownloadAction(request: primary),
                                   MyListAction(meta: meta),
+                                  if (ref.watch(traktSignedInProvider))
+                                    ListsAction(meta: meta),
                                   RateAction(meta: meta),
                                   if (meta.trailerYouTubeIds.isNotEmpty)
                                     ActionTile(
