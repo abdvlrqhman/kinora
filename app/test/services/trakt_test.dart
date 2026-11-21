@@ -24,6 +24,12 @@ final class FakeTrakt {
   var access = 'a1';
   var expireOnce = false;
   var refuseRefresh = false;
+  var refresh = 'r1';
+  var renewals = 0;
+
+  /// How long a sign-in lasts (Trakt's: a day), and a renewed one.
+  var lifetime = const Duration(days: 1);
+  var renewed = const Duration(days: 1);
   var watchedShows = <Object?>[];
   var playback = <Object?>[];
   var watchlistShows = <Object?>[];
@@ -48,11 +54,21 @@ final class FakeTrakt {
           'interval': 0,
         }),
         '/oauth/device/token' when pendingPolls-- > 0 => http.Response('', 400),
-        '/oauth/device/token' => json(_tokens('a1', 'r1')),
+        '/oauth/device/token' => json(_tokens('a1', 'r1', lifetime)),
         '/oauth/token' when refuseRefresh => json({
           'error': 'invalid_grant',
         }, 400),
-        '/oauth/token' => json(_tokens(access = 'a2', 'r2')),
+        // Like Trakt: each refresh token works once.
+        '/oauth/token'
+            when (jsonDecode(r.body) as Map)['refresh_token'] != refresh =>
+          json({'error': 'invalid_grant'}, 400),
+        '/oauth/token' => json(
+          _tokens(
+            access = 'a${++renewals + 1}',
+            refresh = 'r${renewals + 1}',
+            renewed,
+          ),
+        ),
         _ => json({}),
       };
     }
@@ -146,11 +162,11 @@ final class FakeTrakt {
     };
   });
 
-  Map<String, Object?> _tokens(String a, String r) => {
+  Map<String, Object?> _tokens(String a, String r, Duration life) => {
     'access_token': a,
     'refresh_token': r,
     'token_type': 'bearer',
-    'expires_in': 7 * 86400,
+    'expires_in': life.inSeconds - 1,
     'scope': 'public',
     'created_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
   };
@@ -340,6 +356,48 @@ void main() {
       expect(trakt.access, 'a2');
     },
   );
+
+  test('a day-long sign-in is used as is, and renewed once near its end, '
+      'however many calls need it at once', () async {
+    await signIn();
+    final sync = c.read(traktSyncProvider);
+    Future<void> burst(TraktSync sync) => Future.wait([
+      for (final type in ['movie', 'series', 'movie', 'series', 'movie'])
+        sync.list(type, 'trending'),
+    ]);
+    await burst(sync);
+    await sync.syncNow();
+    expect(trakt.calls.where((k) => k == 'POST /oauth/token'), isEmpty);
+
+    // Kinora opens with a sign-in that runs out in five minutes, and Home
+    // asks Trakt for several rows at once. (Renewals here last five
+    // minutes too, so it's near its end again when they ask.)
+    trakt.renewed = const Duration(minutes: 5);
+    store.values['secret.trakt.tokens'] = jsonEncode({
+      'a': trakt.access,
+      'r': trakt.refresh,
+      'e': DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
+    });
+    final again = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        httpClientProvider.overrideWithValue(trakt.client),
+        secureKeysProvider.overrideWithValue(SecureKeys(store)),
+        traktConfigProvider.overrideWithValue(
+          const TraktConfig(clientId: 'kinora', api: 'https://trakt.test'),
+        ),
+        metaProvider.overrideWith((ref, key) async => throw StateError('off')),
+      ],
+    );
+    addTearDown(again.dispose);
+    final reopened = again.read(traktSyncProvider);
+    await reopened.start();
+    trakt.calls.clear();
+    await burst(reopened);
+    expect(trakt.calls.where((k) => k == 'POST /oauth/token'), hasLength(1));
+    expect(reopened.signedIn, isTrue);
+    expect(reopened.note, isNull);
+  });
 
   test('later syncs: My List follows Trakt, removals too', () async {
     trakt.watchlistShows = [

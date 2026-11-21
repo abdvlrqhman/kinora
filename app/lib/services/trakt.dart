@@ -1090,7 +1090,12 @@ final class TraktSync extends ChangeNotifier {
       final res = await http.Response.fromStream(
         await _http.send(req).timeout(const Duration(seconds: 30)),
       );
-      if (res.statusCode == 401 && attempt == 0 && await _refresh()) continue;
+      // Renewed meanwhile by another call: just try again with the new one.
+      if (res.statusCode == 401 &&
+          attempt == 0 &&
+          (_tokens?.access != token || await _refresh())) {
+        continue;
+      }
       Object? decoded;
       if (res.body.isNotEmpty) {
         try {
@@ -1103,19 +1108,26 @@ final class TraktSync extends ChangeNotifier {
     }
   }
 
-  /// The access token, renewed a day before it runs out.
+  /// The access token, renewed in its last 10 minutes. (Trakt's last a
+  /// day: a wider margin would renew it before every call.)
   Future<String?> _access() async {
     final t = _tokens;
     if (t == null) return null;
-    if (t.expiresAt.difference(DateTime.now()) < const Duration(days: 1)) {
+    if (t.expiresAt.difference(DateTime.now()) < const Duration(minutes: 10)) {
       await _refresh();
     }
     return _tokens?.access;
   }
 
-  /// Trakt's refresh tokens work once: the new pair is saved straight
-  /// away. A refused refresh signs out (the user signs in again).
-  Future<bool> _refresh() async {
+  Future<bool>? _refreshing;
+
+  /// Trakt's refresh tokens work once, so calls that need a renewal at the
+  /// same time share one; the new pair is saved straight away. A refused
+  /// refresh signs out (the user signs in again).
+  Future<bool> _refresh() =>
+      _refreshing ??= _renew().whenComplete(() => _refreshing = null);
+
+  Future<bool> _renew() async {
     final t = _tokens;
     final c = _config;
     if (t == null || c == null) return false;
