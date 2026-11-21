@@ -1323,6 +1323,10 @@ class PlayerController extends ChangeNotifier {
                     best == null || (s.fit ?? 0) > (best.fit ?? 0) ? s : best,
               );
     if (option == null) return null;
+    final fixed = option.id == activeSubtitleId ? _syncedFile : null;
+    if (fixed != null && File(fixed).existsSync()) {
+      return (path: fixed, language: option.language);
+    }
     final path = option.uri ?? _cached(option.id) ?? await option.load?.call();
     if (path == null) return null;
     _loaded[option.id] = path;
@@ -1342,6 +1346,8 @@ class PlayerController extends ChangeNotifier {
     required bool remember,
   }) async {
     activeSubtitleId = option?.id;
+    subtitleSync = null;
+    _syncedFile = null;
     notifyListeners();
     if (option == null) {
       await player.setSubtitleTrack(SubtitleTrack.no());
@@ -1359,11 +1365,171 @@ class PlayerController extends ChangeNotifier {
       if (path == null) return _subtitleFailed(option, remember: remember);
       _loaded[option.id] = path;
       _broken.remove(option.id);
-      await player.setSubtitleTrack(
-        SubtitleTrack.uri(path, title: option.label, language: option.language),
-      );
+      final videoId = _request.videoId;
+      final decided = await _subtitleFiles.storedSync(videoId, option.id);
+      if (activeSubtitleId != option.id) return;
+      if (decided?.sync case final sync?) {
+        await _showSynced(option, path, sync);
+      } else {
+        await _showFile(option, path);
+      }
+      if (decided == null) unawaited(_autoLineUp(option, path, videoId));
     }
     if (remember) await _remember();
+  }
+
+  PlayerSubtitles get _subtitleFiles => _ref.read(playerSubtitlesProvider);
+
+  Future<void> _showFile(SubtitleOption option, String path) =>
+      player.setSubtitleTrack(
+        SubtitleTrack.uri(path, title: option.label, language: option.language),
+      );
+
+  /// Shows [option] with its timing corrected by [sync] (the file as it
+  /// is if the copy can't be written).
+  Future<void> _showSynced(
+    SubtitleOption option,
+    String path,
+    SubtitleSync sync,
+  ) async {
+    try {
+      final fixed = await _subtitleFiles.corrected(path, sync);
+      if (activeSubtitleId != option.id) return;
+      subtitleSync = sync;
+      _syncedFile = fixed;
+      notifyListeners();
+      await _showFile(option, fixed);
+    } on Object catch (e) {
+      Log.w('subtitles', 'line up failed: $e');
+      await _showFile(option, path);
+    }
+  }
+
+  /// The active subtitle lined up with another subtitle of this video
+  /// (null: as it came).
+  SubtitleSync? subtitleSync;
+  String? _syncedFile;
+
+  /// Looking for a subtitle to line the active one up with.
+  bool liningUp = false;
+
+  /// Lines [option] up on its own when it isn't made for this version and
+  /// one that is can show where its lines go. Never over a delay the
+  /// viewer set for this video, nor after an Undo.
+  Future<void> _autoLineUp(
+    SubtitleOption option,
+    String path,
+    String videoId,
+  ) async {
+    try {
+      final refs = syncReferences(subtitles, option, auto: true, skip: _broken);
+      if (refs.isEmpty || subtitleDelay != Duration.zero) return;
+      final own = await _ref
+          .read(trackMemoryProvider)
+          .read(TrackMemoryRepository.videoKey(videoId));
+      if ((own?.subtitleOffsetMs ?? 0) != 0) return;
+      final found = await _lineUpWith(path, refs.first);
+      if (found == null ||
+          nearlyInSync(found) ||
+          activeSubtitleId != option.id ||
+          _request.videoId != videoId ||
+          subtitleDelay != Duration.zero) {
+        return;
+      }
+      await _subtitleFiles.saveSync(videoId, option.id, found);
+      await _showSynced(option, path, found);
+      if (subtitleSync == null) return;
+      notice = 'Subtitles lined up with this video (undo in Subtitles)';
+      notifyListeners();
+    } on Object catch (e) {
+      Log.d('subtitles', 'auto line up: $e');
+    }
+  }
+
+  /// How the subtitle at [path] lines up with [reference], if it does.
+  Future<SubtitleSync?> _lineUpWith(
+    String path,
+    SubtitleOption reference,
+  ) async {
+    final refPath =
+        reference.uri ?? _cached(reference.id) ?? await reference.load?.call();
+    if (refPath == null) return null;
+    _loaded[reference.id] = refPath;
+    return _subtitleFiles.lineUp(
+      path,
+      refPath,
+      duration: player.state.duration,
+      referenceName: reference.label,
+    );
+  }
+
+  /// "Line up automatically": tries the best few other subtitles of this
+  /// video until one shows where the active one's lines go.
+  Future<void> lineUpSubtitles() async {
+    final active = subtitles
+        .where((s) => s.id == activeSubtitleId && s.track == null)
+        .firstOrNull;
+    final path = active == null ? null : active.uri ?? _cached(active.id);
+    if (active == null || path == null || liningUp) return;
+    liningUp = true;
+    notifyListeners();
+    try {
+      for (final ref in syncReferences(
+        subtitles,
+        active,
+        auto: false,
+        skip: _broken,
+      ).take(3)) {
+        final SubtitleSync? found;
+        try {
+          found = await _lineUpWith(path, ref);
+        } on Object catch (e) {
+          Log.d('subtitles', 'line up with ${ref.id}: $e');
+          continue;
+        }
+        if (found == null) continue;
+        if (activeSubtitleId != active.id) return;
+        // The viewer's own delay was a guess at the same thing.
+        await setSubtitleDelay(Duration.zero);
+        final inSync = nearlyInSync(found);
+        await _subtitleFiles.saveSync(
+          _request.videoId,
+          active.id,
+          inSync ? null : found,
+        );
+        if (inSync) {
+          subtitleSync = null;
+          _syncedFile = null;
+          await _showFile(active, path);
+          notice = 'Already in sync with another subtitle for this video';
+        } else {
+          await _showSynced(active, path, found);
+          notice = syncSummary(found);
+        }
+        return;
+      }
+      notice =
+          'No other subtitle for this video lines up with this one. '
+          'Try “Line is spoken now”.';
+    } finally {
+      liningUp = false;
+      notifyListeners();
+    }
+  }
+
+  /// Back to the active subtitle's own timing, and kept that way.
+  Future<void> undoLineUp() async {
+    final active = subtitles
+        .where((s) => s.id == activeSubtitleId && s.track == null)
+        .firstOrNull;
+    final path = active == null ? null : active.uri ?? _cached(active.id);
+    if (active == null || path == null || subtitleSync == null) return;
+    subtitleSync = null;
+    _syncedFile = null;
+    notice = 'Subtitles back to their own timing';
+    notifyListeners();
+    await _subtitleFiles.saveSync(_request.videoId, active.id, null);
+    await _showFile(active, path);
   }
 
   Future<void> selectAudio(AudioTrack track) async {

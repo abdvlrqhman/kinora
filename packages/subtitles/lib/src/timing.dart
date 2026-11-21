@@ -164,6 +164,20 @@ SyncSuggestion? estimateSync(
   return best != null && best.matchedCues >= minMatches ? best : null;
 }
 
+/// [estimateSync] only when sure enough to act on: a quarter of
+/// [subtitle]'s own lines must line up. Measured on real subtitles, another
+/// episode lines up at most ~15%; a translation of the same video 25–50%,
+/// another copy of the same timing nearly all.
+SyncSuggestion? confidentSync(List<Cue> subtitle, List<Cue> reference) {
+  final s = estimateSync(subtitle, reference, minMatches: 20);
+  if (s == null ||
+      s.confidence < 0.25 ||
+      s.matchedCues < subtitle.length * 0.25) {
+    return null;
+  }
+  return s;
+}
+
 /// Most common start difference (ref - sub) in 100 ms bins, smoothed.
 double? _peakLag(List<double> sub, List<double> ref, double limit) {
   const bin = 100.0;

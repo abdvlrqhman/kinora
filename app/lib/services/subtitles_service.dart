@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -8,6 +9,7 @@ import 'package:release_parser/release_parser.dart' as rp;
 import 'package:subtitles/subtitles.dart';
 
 import '../app/providers.dart';
+import '../core/db/database.dart';
 import '../core/lang.dart';
 import '../core/log.dart';
 import '../core/settings.dart';
@@ -270,6 +272,7 @@ final class PlayerSubtitles {
             hearingImpaired: res.hearingImpaired,
             forced: res.forced,
             fit: r.fit,
+            provider: res.providerId,
             load: () => _materialize(search, res, query),
           ),
         );
@@ -360,6 +363,109 @@ final class PlayerSubtitles {
     return saved;
   }
 
+  /// How to line the subtitle at [path] up with the one at [reference]
+  /// (both files Kinora wrote), or null when they don't match well enough
+  /// or the result would run past the video's [duration].
+  Future<SubtitleSync?> lineUp(
+    String path,
+    String reference, {
+    required Duration duration,
+    required String referenceName,
+  }) async {
+    final s = await Isolate.run(() {
+      final own = _read(path).cues;
+      final ref = _read(reference).cues;
+      final found = confidentSync(own, ref);
+      if (found == null) return null;
+      final fixed = SubtitleDocument(
+        cues: own,
+        sourceFormat: SubtitleFormat.srt,
+      ).scale(found.scale).shift(found.offset);
+      if (duration > Duration.zero &&
+          checkTiming(fixed.cues, duration).exceedsDuration) {
+        return null;
+      }
+      return (offset: found.offset, scale: found.scale);
+    });
+    return s == null
+        ? null
+        : (offset: s.offset, scale: s.scale, reference: referenceName);
+  }
+
+  /// A copy of the subtitle at [path] with [sync] applied, in Kinora's
+  /// subtitle folder (never beside a downloaded video).
+  Future<String> corrected(String path, SubtitleSync sync) {
+    final dir = _ref.read(pathsProvider).subtitles.path;
+    return Isolate.run(() {
+      final doc = _read(path).scale(sync.scale).shift(sync.offset);
+      final ass = p.extension(path) == '.ass';
+      final out = File(
+        p.join(
+          dir,
+          'synced-${p.basenameWithoutExtension(path)}.${ass ? 'ass' : 'srt'}',
+        ),
+      );
+      out.parent.createSync(recursive: true);
+      out.writeAsStringSync(ass ? doc.toAss() : doc.toSrt(), encoding: utf8);
+      return out.path;
+    });
+  }
+
+  static SubtitleDocument _read(String path) =>
+      parseSubtitle(File(path).readAsStringSync());
+
+  /// What was decided for subtitle [subtitleId] of video [videoId]: lined
+  /// up ([sync]), or kept as it is after an Undo ([sync] null). Null when
+  /// nothing was decided yet.
+  Future<({SubtitleSync? sync})?> storedSync(
+    String videoId,
+    String subtitleId,
+  ) async {
+    final db = _ref.read(databaseProvider);
+    final row =
+        await (db.select(db.keyValues)
+              ..where((t) => t.key.equals(_syncKey(videoId, subtitleId))))
+            .getSingleOrNull();
+    if (row == null) return null;
+    try {
+      final j = jsonDecode(row.value) as Map<String, Object?>;
+      if (j['off'] == true) return (sync: null);
+      return (
+        sync: (
+          offset: Duration(milliseconds: j['o']! as int),
+          scale: (j['s']! as num).toDouble(),
+          reference: j['ref'] as String? ?? '',
+        ),
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Remembers [sync] for this subtitle of this video (null: Undo).
+  Future<void> saveSync(String videoId, String subtitleId, SubtitleSync? sync) {
+    final db = _ref.read(databaseProvider);
+    return db
+        .into(db.keyValues)
+        .insertOnConflictUpdate(
+          KeyValuesCompanion.insert(
+            key: _syncKey(videoId, subtitleId),
+            value: jsonEncode(
+              sync == null
+                  ? {'off': true}
+                  : {
+                      'o': sync.offset.inMilliseconds,
+                      's': sync.scale,
+                      'ref': sync.reference,
+                    },
+            ),
+          ),
+        );
+  }
+
+  static String _syncKey(String videoId, String subtitleId) =>
+      'subsync:$videoId:$subtitleId';
+
   /// The source's name as people know it ("OpenSubtitles", an add-on's
   /// own name), never an internal id like `stremio:<host>`.
   static String _providerName(String id, List<SubtitleProvider> providers) =>
@@ -369,3 +475,47 @@ final class PlayerSubtitles {
 }
 
 final playerSubtitlesProvider = Provider<PlayerSubtitles>(PlayerSubtitles.new);
+
+/// A subtitle's timing lined up with another subtitle of the same video
+/// ([reference], by name): its corrected copy's times are scale × own +
+/// offset.
+typedef SubtitleSync = ({Duration offset, double scale, String reference});
+
+/// Close enough not to bother moving (a translation's own timing style).
+bool nearlyInSync(SubtitleSync s) =>
+    s.offset.inMilliseconds.abs() < 700 && (s.scale - 1).abs() < 0.0005;
+
+/// "Subtitles moved 2.4 s later" for [s].
+String syncSummary(SubtitleSync s) {
+  if ((s.scale - 1).abs() >= 0.0005) {
+    return 'Subtitles matched to this video’s speed';
+  }
+  final sec = (s.offset.inMilliseconds.abs() / 1000).toStringAsFixed(1);
+  return 'Subtitles moved $sec s ${s.offset.isNegative ? 'earlier' : 'later'}';
+}
+
+/// What to line [active] up against: other text subtitles for this video,
+/// best fit first. [auto] (unasked): only when [active] isn't made for
+/// this version itself, and only against ones that are, from sites
+/// without a daily download limit.
+List<SubtitleOption> syncReferences(
+  List<SubtitleOption> all,
+  SubtitleOption active, {
+  required bool auto,
+  Set<String> skip = const {},
+}) {
+  const madeForIt = 0.85;
+  if (auto && (active.fit ?? 0) >= madeForIt) return const [];
+  return [
+    for (final s in all)
+      if (s.track == null &&
+          (s.uri != null || s.load != null) &&
+          s.id != active.id &&
+          s.label != active.label &&
+          !s.forced &&
+          !skip.contains(s.id) &&
+          (!auto ||
+              ((s.fit ?? 0) >= madeForIt && s.provider != 'opensubtitles')))
+        s,
+  ]..sort((a, b) => (b.fit ?? 0).compareTo(a.fit ?? 0));
+}

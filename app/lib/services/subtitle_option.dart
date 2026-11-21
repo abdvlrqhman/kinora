@@ -12,6 +12,7 @@ final class SubtitleOption {
     this.forced = false,
     this.detail,
     this.fit,
+    this.provider,
     this.load,
   });
 
@@ -34,6 +35,9 @@ final class SubtitleOption {
 
   /// 0..1 how well it fits this release (external only).
   final double? fit;
+
+  /// The site it comes from (external only).
+  final String? provider;
 
   /// Downloads/converts an external subtitle when picked; returns a path.
   final Future<String?> Function()? load;

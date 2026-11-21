@@ -285,16 +285,45 @@ class _TracksPanelState extends ConsumerState<TracksPanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (c.subtitleSync case final sync?) ...[
+                        Text(
+                          'Lined up with “${sync.reference}”, another '
+                          'subtitle for this video.',
+                          style: KType.small,
+                        ),
+                        const SizedBox(height: KSpace.x2),
+                        GlassButton(
+                          label: 'Undo line-up',
+                          icon: Icons.undo_rounded,
+                          onPressed: c.undoLineUp,
+                        ),
+                        const SizedBox(height: KSpace.x3),
+                      ],
                       Text(
-                        'Out of sync? Choose “Line is spoken now” as you hear '
-                        'the line. Hold − or + to move a whole second.',
+                        'Out of sync? Line it up with another subtitle for '
+                        'this video, or choose “Line is spoken now” as you '
+                        'hear the line. Hold − or + to move a whole second.',
                         style: KType.small,
                       ),
                       const SizedBox(height: KSpace.x2),
-                      GlassButton(
-                        label: 'Line is spoken now',
-                        icon: Icons.record_voice_over_rounded,
-                        onPressed: c.syncToCurrentLine,
+                      Wrap(
+                        spacing: KSpace.x2,
+                        runSpacing: KSpace.x2,
+                        children: [
+                          if (active.track == null)
+                            GlassButton(
+                              label: c.liningUp
+                                  ? 'Lining up…'
+                                  : 'Line up automatically',
+                              icon: Icons.auto_fix_high_rounded,
+                              onPressed: c.liningUp ? null : c.lineUpSubtitles,
+                            ),
+                          GlassButton(
+                            label: 'Line is spoken now',
+                            icon: Icons.record_voice_over_rounded,
+                            onPressed: c.syncToCurrentLine,
+                          ),
+                        ],
                       ),
                     ],
                   ),

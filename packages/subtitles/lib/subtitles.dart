@@ -61,4 +61,10 @@ export 'src/search.dart'
         SubtitleSearch,
         SubtitleSearchUpdate;
 export 'src/timing.dart'
-    show SyncSuggestion, TimingReport, checkTiming, estimateSync, fpsScales;
+    show
+        SyncSuggestion,
+        TimingReport,
+        checkTiming,
+        confidentSync,
+        estimateSync,
+        fpsScales;

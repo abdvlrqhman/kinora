@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:subtitles/subtitles.dart';
@@ -123,6 +125,50 @@ void main() {
       final s = estimateSync(other, reference);
       expect(s == null || s.confidence < 0.4, isTrue);
       expect(estimateSync(reference.take(3).toList(), reference), isNull);
+    });
+  });
+  group('confidentSync', () {
+    // Start times (no text) of real subtitles: two episodes of a drama,
+    // and English, Hebrew and Arabic for the same videos.
+    final real = {
+      for (final MapEntry(:key, :value) in (jsonDecode(
+        File('test/fixtures/timing/real_starts.json').readAsStringSync(),
+      ) as Map<String, Object?>).entries)
+        key: [
+          for (final ms in (value! as List).cast<int>())
+            Cue(
+              start: Duration(milliseconds: ms),
+              end: Duration(milliseconds: ms + 1500),
+              text: 'x',
+            ),
+        ],
+    };
+
+    test('a translation of the same video lines up', () {
+      final he = confidentSync(real['drama-e1-he']!, real['drama-e1-en']!)!;
+      expect(he.scale, closeTo(1, 0.0005));
+      expect(he.offset.inMilliseconds.abs(), lessThan(1000));
+      final ar = confidentSync(real['anime-e1-ar']!, real['anime-e1-en']!)!;
+      expect(ar.offset.inMilliseconds.abs(), lessThan(1500));
+    });
+
+    test('a copy 16 s late is moved back', () {
+      final late = transform(real['drama-e1-en']!, offsetMs: 16000);
+      final s = confidentSync(late, real['drama-e1-en']!)!;
+      expect(s.offset.inMilliseconds, closeTo(-16000, 100));
+    });
+
+    test('a 25 fps copy is slowed back down', () {
+      final fast = transform(real['drama-e1-he']!, scale: 23.976 / 25);
+      final s = confidentSync(fast, real['drama-e1-en']!)!;
+      expect(s.scale, closeTo(25 / 23.976, 0.001));
+    });
+
+    test('another episode is never lined up', () {
+      expect(confidentSync(real['drama-e2-en']!, real['drama-e1-en']!), isNull);
+      expect(confidentSync(real['drama-e1-he']!, real['drama-e2-en']!), isNull);
+      expect(confidentSync(real['anime-e1-ar']!, real['drama-e1-en']!), isNull);
+      expect(confidentSync(speech(99), speech(7)), isNull);
     });
   });
 }
