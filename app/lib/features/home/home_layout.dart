@@ -8,6 +8,7 @@ import '../search/discovery.dart';
 const homeBuiltIns = [
   'continue',
   'new-episodes',
+  'upcoming',
   'top10',
   'my-list',
   'for-you',
@@ -96,6 +97,7 @@ List<HomeRowChoice> homeRowChoices({
   return [
     (id: 'continue', title: 'Keep watching', catalog: null),
     (id: 'new-episodes', title: 'New episodes', catalog: null),
+    (id: 'upcoming', title: 'Coming up', catalog: null),
     if (first != null)
       (
         id: 'top10',

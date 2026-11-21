@@ -4,12 +4,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:stremio/stremio.dart';
 
 import '../../app/router.dart';
 import '../../core/db/database.dart';
 import '../../core/format.dart';
 import '../../services/library.dart';
+import '../calendar/calendar_screen.dart' show posterOf;
+import '../../services/notices_plan.dart';
+import '../../services/followed.dart';
 import '../../services/play_request.dart';
 import '../../services/ratings.dart';
 import '../../services/sources.dart';
@@ -57,6 +61,7 @@ class SectionHeader extends StatelessWidget {
     this.count,
     this.subtitle,
     this.controller,
+    this.onMore,
   });
 
   final String title;
@@ -67,6 +72,9 @@ class SectionHeader extends StatelessWidget {
 
   /// The row it pages (arrows on a wide window).
   final ScrollController? controller;
+
+  /// Opens the whole list ("See all").
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +116,37 @@ class SectionHeader extends StatelessWidget {
                 ],
               ),
             ),
+            if (onMore != null)
+              Semantics(
+                button: true,
+                label: 'See all $title',
+                excludeSemantics: true,
+                child: PointerFocus(
+                  onActivate: onMore!,
+                  shape: const StadiumBorder(),
+                  builder: (context, hovered) => GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onMore,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 30),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Center(
+                          child: Text(
+                            'See all',
+                            style: KType.label.copyWith(
+                              color: hovered
+                                  ? KColors.title
+                                  : KinoraTint.of(context),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (controller != null && KLayout.isWide(context))
               _RowArrows(controller: controller!, title: title),
           ],
@@ -239,11 +278,13 @@ class RowSection extends StatefulWidget {
     this.count,
     this.subtitle,
     this.gap,
+    this.onMore,
   });
 
   final String title;
   final String? count;
   final String? subtitle;
+  final VoidCallback? onMore;
   final double height;
   final double itemWidth;
   final int itemCount;
@@ -279,6 +320,7 @@ class _RowSectionState extends State<RowSection> {
             count: widget.count,
             subtitle: widget.subtitle,
             controller: _controller,
+            onMore: widget.onMore,
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -505,6 +547,64 @@ class SuggestionRow extends ConsumerWidget {
     ];
     if (shown.isEmpty) return const SizedBox.shrink();
     return PosterRow(title: title, items: shown);
+  }
+}
+
+/// What airs next for the shows the viewer follows; See all opens the
+/// calendar. Nothing while there's nothing coming.
+class UpcomingRow extends ConsumerWidget {
+  const UpcomingRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final items = [
+      for (final e in ref.watch(upcomingProvider).value ?? const <AirDate>[])
+        if (!e.airsAt.toLocal().isBefore(today)) e,
+    ].take(15).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final w = HomeSizes.poster(context);
+    final s = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
+    return RowSection(
+      title: 'Coming up',
+      onMore: () => context.go('/calendar'),
+      height: w * 1.5 + 8 + s.scale(20) + 2 + s.scale(16),
+      itemWidth: w,
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final e = items[i];
+        final t = e.airsAt.toLocal();
+        final when = dayLabel(DateTime(t.year, t.month, t.day), now);
+        return Pressable(
+          plain: true,
+          label: '${e.show}, S${e.season} E${e.episode}, $when',
+          onTap: () => openTitle(context, type: 'series', id: e.showId),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              HoverArt(
+                child: Artwork(
+                  url: posterOf(e.showId),
+                  fallbackText: e.show,
+                  radius: KRadius.poster,
+                  aspectRatio: 2 / 3,
+                  memCacheWidth: decodeWidth(context, w),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _cardTitle(e.show),
+              Text(
+                '$when, S${e.season} E${e.episode}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: KType.small.copyWith(color: KinoraTint.of(context)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

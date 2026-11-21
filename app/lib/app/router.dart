@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/calendar/calendar_screen.dart';
 import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
@@ -77,7 +78,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, shell) => AppShell(shell: shell),
         branches: [
           StatefulShellBranch(
-            routes: [GoRoute(path: '/', builder: (_, _) => const HomeScreen())],
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (_, _) => const HomeScreen(),
+                routes: [pageRoute('calendar', (_) => const CalendarScreen())],
+              ),
+            ],
           ),
           StatefulShellBranch(
             routes: [

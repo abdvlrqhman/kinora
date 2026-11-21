@@ -23,6 +23,7 @@ class HomeSettingsPage extends ConsumerWidget {
     'trending-shows' ||
     'trending-movies' => 'With Trakt',
     'new-episodes' => 'Shows you follow, when there are some',
+    'upcoming' => 'What airs next for the shows you follow',
     _ when id.startsWith('pin:') => 'Added from Discovery',
     _ => null,
   };

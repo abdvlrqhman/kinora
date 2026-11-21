@@ -227,6 +227,7 @@ class _FeedState extends ConsumerState<_Feed> {
   ) => switch (id) {
     'continue' => const ContinueRow(),
     'new-episodes' => const NewEpisodesRow(),
+    'upcoming' => const UpcomingRow(),
     'top10' => switch (byId[choices[id]?.catalog]) {
       final row? => TrendingRow(row: row),
       null => null,

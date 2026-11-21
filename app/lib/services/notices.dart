@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:drift/drift.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,9 +12,9 @@ import '../app/providers.dart';
 import '../core/db/database.dart';
 import '../core/log.dart';
 import 'library.dart';
+import 'followed.dart';
 import 'notices_plan.dart';
 import 'ratings.dart';
-import 'sources.dart';
 import 'suggestions.dart';
 import 'trakt.dart';
 
@@ -176,7 +175,7 @@ final class Notices {
       bool notForMe(String id) =>
           (tastes[id]?.rating ?? 6) <= Taste.notForMe.trakt;
       final episodes = s.notifyShows
-          ? await _followedEpisodes(notForMe, lately: s.notifyWatchedLately)
+          ? await followedEpisodes(_ref, lately: s.notifyWatchedLately)
           : const <AirDate>[];
       final picks = s.notifyPicks
           ? [
@@ -284,61 +283,6 @@ final class Notices {
               : InterruptionLevel.active,
         ),
       );
-
-  /// Every episode of followed shows: Cinemeta's list (days only), with
-  /// Trakt's real times and kinds when signed in.
-  Future<List<AirDate>> _followedEpisodes(
-    bool Function(String) notForMe, {
-    required bool lately,
-  }) async {
-    final recent = DateTime.now().subtract(const Duration(days: 60));
-    final listed = await _db.select(_db.libraryItems).get();
-    final watched =
-        await (_db.select(_db.watchProgress)..where(
-              (t) =>
-                  t.season.isNotNull() & t.updatedAt.isBiggerThanValue(recent),
-            ))
-            .get();
-    final ids = {
-      for (final i in listed)
-        if (i.type == 'series') i.mediaId,
-      if (lately)
-        for (final w in watched) w.mediaId,
-    }.where((id) => id.startsWith('tt') && !notForMe(id)).take(40).toSet();
-    final precise = {
-      for (final e in await _ref.read(traktSyncProvider).calendar())
-        '${e.showId}:${e.season}:${e.episode}': e,
-    };
-    final out = <AirDate>[];
-    for (final id in ids) {
-      try {
-        final meta = await _ref.read(
-          metaProvider((type: 'series', id: id)).future,
-        );
-        for (final v in meta.videos) {
-          final (season, episode, at) = (v.season, v.episode, v.released);
-          if (season == null || episode == null || at == null) continue;
-          out.add(
-            precise.remove('$id:$season:$episode') ??
-                (
-                  showId: id,
-                  show: meta.name,
-                  season: season,
-                  episode: episode,
-                  title: v.title,
-                  airsAt: at,
-                  precise: false,
-                  type: null,
-                ),
-          );
-        }
-      } on Object {
-        // No details for this show: Trakt's times only.
-      }
-    }
-    out.addAll(precise.values.where((e) => ids.contains(e.showId)));
-    return out;
-  }
 
   Future<List<MetaPreview>> _picks() async {
     try {
