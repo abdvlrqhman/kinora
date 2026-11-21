@@ -37,12 +37,16 @@ everywhere.
   one tap away.
 - **One player for streams and downloads.** It plays any format, names audio
   tracks by language and channels, and groups subtitles by language. You get
-  timing, style, speed, skip intro, next episode and an episode list.
-  Swipe for brightness and volume, pinch to zoom, and use picture-in-picture
-  on Android. Your audio and subtitle choice is remembered for each show.
+  timing, style, speed, next episode and an episode list. Intros, recaps
+  and credits are skipped on their own (anime, shows and movies), with
+  Undo, or with a Skip button you can swipe away. Swipe for brightness and
+  volume, pinch to zoom, and use picture-in-picture on Android. Your audio
+  and subtitle choice is remembered for each show.
 - **Subtitles from many sites.** OpenSubtitles works without a key; SubDL,
-  SubSource, Wyzie and Jimaku take your own. Lines can be synced with one
-  tap: "Line is spoken now".
+  SubSource, Wyzie and Jimaku take your own. A subtitle that runs early,
+  late or drifts is lined up with another subtitle for the same video, on
+  its own when one is made for your release, or with one tap; "Line is
+  spoken now" fixes the rest.
 - **Downloads that keep going.** Torrents keep downloading with the screen
   off, and debrid links go through the system downloader. Episodes you
   stream to the end are kept as downloads, with their best subtitles.
@@ -50,12 +54,20 @@ everywhere.
   you before casting a version the TV can't play, and rides out Wi-Fi
   hiccups.
 - **Discovery.** Browse your sources' catalogs by type and genre, search
-  them all at once, or paste a magnet or video link to play it.
+  them all at once, or paste a magnet or video link to play it. Signed in
+  to Trakt, browse its trending, popular, most anticipated and box office
+  lists by genre, year and rating, and find people by name.
+- **Coming up.** A calendar of the next episodes of the shows you follow,
+  and notifications when they air.
+- **Home screen widget.** Continue watching on your iPhone or Android home
+  screen; a tap opens the title.
 - **Trakt, if you like.** Sign in with a code at trakt.tv (Kinora never sees
   your password): what you watched, where you stopped, your watchlist and
   your ratings stay the same on every device, and in apps like Stremio and
   Kodi. Signed in, Home has a "For you" row and every title "More like
-  this".
+  this". Make and edit your Trakt lists, and see what you watched: this
+  year's hours, your top shows and genres, and any of it can be marked
+  unwatched.
 - **Ratings.** Rate a whole show or movie: Not for me, I like it or Love it.
   Titles you don't like stay out of your suggestions.
 - **Backup.** Move your sources and keys to another device as a code locked

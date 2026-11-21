@@ -1,7 +1,7 @@
 name: kinora
 description: "Kinora: stream or download from torrents and debrid with one player."
 publish_to: 'none'
-version: 0.3.4+31
+version: 0.4.0+32
 
 environment:
   sdk: ^3.13.0
