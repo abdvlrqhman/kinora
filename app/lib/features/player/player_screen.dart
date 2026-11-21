@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -632,11 +633,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                               MediaQuery.paddingOf(context).bottom +
                               (_controls ? 120 : 40),
                         ),
-                        child: GlassButton(
-                          label: 'Undo',
-                          icon: Icons.undo_rounded,
-                          semanticLabel: 'Undo the skip',
-                          onPressed: c.undoSkip,
+                        child: _Swipeable(
+                          id: 'undo',
+                          onHide: c.hideSkip,
+                          child: GlassButton(
+                            label: 'Undo',
+                            icon: Icons.undo_rounded,
+                            semanticLabel: 'Undo the skip',
+                            onPressed: c.undoSkip,
+                          ),
                         ),
                       ),
                     )
@@ -651,11 +656,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                               MediaQuery.paddingOf(context).bottom +
                               (_controls ? 120 : 40),
                         ),
-                        child: GlassButton(
-                          label: skip.label,
-                          icon: Icons.fast_forward_rounded,
-                          prominent: true,
-                          onPressed: c.skip,
+                        child: _Swipeable(
+                          id: '${skip.label}@${skip.end}',
+                          onHide: c.hideSkip,
+                          child: GlassButton(
+                            label: skip.label,
+                            icon: Icons.fast_forward_rounded,
+                            prominent: true,
+                            onPressed: c.skip,
+                          ),
                         ),
                       ),
                     ),
@@ -1955,3 +1964,29 @@ String _buffering(
   })
   s,
 ) => s.finishing ? 'Almost ready' : 'Buffering ${s.ready}%';
+
+/// Swiped sideways, [child] goes away ([onHide]); a screen reader gets a
+/// Hide action instead.
+class _Swipeable extends StatelessWidget {
+  const _Swipeable({
+    required this.id,
+    required this.onHide,
+    required this.child,
+  });
+
+  final String id;
+  final VoidCallback onHide;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    customSemanticsActions: {
+      const CustomSemanticsAction(label: 'Hide'): onHide,
+    },
+    child: Dismissible(
+      key: ValueKey(id),
+      onDismissed: (_) => onHide(),
+      child: child,
+    ),
+  );
+}

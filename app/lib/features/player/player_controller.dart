@@ -378,6 +378,7 @@ class PlayerController extends ChangeNotifier {
     chapters = const [];
     skipTimes = noSkipTimes;
     _skipped.clear();
+    _hiddenSkips.clear();
     autoSkipped = null;
     upNextDismissed = false;
     _prefetchedNext = false;
@@ -761,7 +762,22 @@ class PlayerController extends ChangeNotifier {
     final d = player.state.duration;
     if (d == Duration.zero) return null;
     final s = skippableAt(_segments.segments, player.state.position, d);
-    return s == null ? null : (label: skipLabel(s.segment.kind), end: s.to);
+    if (s == null || _hiddenSkips.contains(s.segment)) return null;
+    return (label: skipLabel(s.segment.kind), end: s.to);
+  }
+
+  /// Stretches whose Skip button was swiped away: not offered again.
+  final _hiddenSkips = <Segment>{};
+
+  /// Swiped away: hides the Skip button for the stretch playing now (and
+  /// the Undo after an automatic skip).
+  void hideSkip() {
+    final d = player.state.duration;
+    final s = skippableAt(_segments.segments, player.state.position, d);
+    if (s != null) _hiddenSkips.add(s.segment);
+    autoSkipped = null;
+    _autoSkippedHide?.cancel();
+    notifyListeners();
   }
 
   Future<void> skip() async {
