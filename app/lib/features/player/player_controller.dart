@@ -25,6 +25,7 @@ import '../../services/downloads.dart';
 import '../../services/resolver.dart';
 import '../../services/sources.dart';
 import '../../ui/widgets/media.dart' show runtimeMinutes;
+import '../../services/skip_times.dart';
 import '../../services/subtitle_option.dart';
 import '../../services/subtitles_service.dart';
 
@@ -63,7 +64,10 @@ class PlayerController extends ChangeNotifier {
     _subs = [
       player.stream.error.listen(_onPlayerError),
       player.stream.duration.listen((d) {
-        if (d > Duration.zero) _started = true;
+        if (d > Duration.zero) {
+          _started = true;
+          _loadSkipTimes(d);
+        }
       }),
       player.stream.tracks.listen((_) => _onTracks()),
       player.stream.completed.listen((done) {
@@ -371,6 +375,10 @@ class PlayerController extends ChangeNotifier {
     _errorGrace?.cancel();
     _pending = null;
     _broken.clear();
+    chapters = const [];
+    skipTimes = noSkipTimes;
+    _skipped.clear();
+    autoSkipped = null;
     upNextDismissed = false;
     _prefetchedNext = false;
     _watchedHandled = false;
@@ -679,29 +687,118 @@ class PlayerController extends ChangeNotifier {
     caseSensitive: false,
   );
 
-  /// The intro/recap chapter playing now and where it ends, if any.
-  ({String label, Duration end})? get skippable {
-    if (!_settings.skipIntros || chapters.length < 2) return null;
-    final pos = player.state.position;
-    for (var i = 0; i < chapters.length - 1; i++) {
-      final ch = chapters[i];
-      final end = chapters[i + 1].start;
-      if (pos >= ch.start &&
-          pos < end - const Duration(seconds: 2) &&
-          _skippable.hasMatch(ch.title)) {
-        final recap = RegExp(
-          'recap|previously',
-          caseSensitive: false,
-        ).hasMatch(ch.title);
-        return (label: recap ? 'Skip recap' : 'Skip intro', end: end);
-      }
+  /// Online intro and credits times for this video (TheIntroDB, AniSkip).
+  SkipTimes skipTimes = noSkipTimes;
+  String? _skipFor;
+
+  /// Stretches skipped (or undone) once: never jumped again.
+  final _skipped = <Segment>{};
+
+  /// The jump just made on its own, offered back with Undo for a moment.
+  ({SegmentKind kind, Duration back})? autoSkipped;
+  Timer? _autoSkippedHide;
+
+  void _loadSkipTimes(Duration d) {
+    final req = _request;
+    if (_skipFor == req.videoId ||
+        !_settings.skipIntros ||
+        !_settings.skipLookup) {
+      return;
     }
-    return null;
+    _skipFor = req.videoId;
+    unawaited(() async {
+      final t = await _ref
+          .read(skipTimesProvider)
+          .lookUp(
+            imdb: req.mediaId,
+            season: req.season,
+            episode: req.episode,
+            duration: d,
+          );
+      if (_disposed || _request.videoId != req.videoId) return;
+      skipTimes = t;
+      if (t.segments.isNotEmpty) {
+        Log.i(
+          'player',
+          'skip times from ${t.source}: ${t.segments.length}'
+              '${t.sure ? '' : ' (button only: not sure it fits)'}',
+        );
+      }
+      notifyListeners();
+    }());
+  }
+
+  /// What can be skipped, and whether without asking: online times when
+  /// there are some, else the chapters the video marks.
+  ({List<Segment> segments, bool sure}) get _segments {
+    if (skipTimes.segments.isNotEmpty) {
+      return (segments: skipTimes.segments, sure: skipTimes.sure);
+    }
+    return (
+      segments: [
+        for (final (i, ch) in chapters.indexed)
+          if (_skippable.hasMatch(ch.title) || _credits.hasMatch(ch.title))
+            (
+              kind: _credits.hasMatch(ch.title)
+                  ? SegmentKind.credits
+                  : RegExp(
+                      'recap|previously',
+                      caseSensitive: false,
+                    ).hasMatch(ch.title)
+                  ? SegmentKind.recap
+                  : SegmentKind.intro,
+              start: ch.start,
+              end: i + 1 < chapters.length ? chapters[i + 1].start : null,
+            ),
+      ],
+      sure: true,
+    );
+  }
+
+  /// The stretch playing now that can be skipped, and where it ends.
+  ({String label, Duration end})? get skippable {
+    if (!_settings.skipIntros) return null;
+    final d = player.state.duration;
+    if (d == Duration.zero) return null;
+    final s = skippableAt(_segments.segments, player.state.position, d);
+    return s == null ? null : (label: skipLabel(s.segment.kind), end: s.to);
   }
 
   Future<void> skip() async {
     final s = skippable;
     if (s != null) await player.seek(s.end);
+  }
+
+  /// Back to where the automatic skip jumped from.
+  Future<void> undoSkip() async {
+    final a = autoSkipped;
+    if (a == null) return;
+    autoSkipped = null;
+    _autoSkippedHide?.cancel();
+    notifyListeners();
+    await player.seek(a.back);
+  }
+
+  void _autoSkip(Duration pos, Duration d) {
+    if (!_settings.skipIntros || !_settings.autoSkip) return;
+    final segs = _segments;
+    if (!segs.sure) return;
+    final s = skippableAt(segs.segments, pos, d);
+    if (s == null || !_skipped.add(s.segment)) return;
+    autoSkipped = (kind: s.segment.kind, back: pos);
+    notice = switch (s.segment.kind) {
+      SegmentKind.intro => 'Skipped the intro',
+      SegmentKind.recap => 'Skipped the recap',
+      SegmentKind.credits => 'Skipped the credits',
+      SegmentKind.preview => 'Skipped the preview',
+    };
+    _autoSkippedHide?.cancel();
+    _autoSkippedHide = Timer(const Duration(seconds: 6), () {
+      autoSkipped = null;
+      if (!_disposed) notifyListeners();
+    });
+    notifyListeners();
+    unawaited(player.seek(s.to));
   }
 
   // ------------------------------------------------------------- episodes --
@@ -823,11 +920,16 @@ class PlayerController extends ChangeNotifier {
     final d = player.state.duration;
     if (d == Duration.zero || nextEpisode == null) return false;
     final pos = player.state.position;
-    final credits = chapters
-        .where((c) => _credits.hasMatch(c.title))
+    // Credits that run to the end (credits followed by more get skipped).
+    final credits = _segments.segments
+        .where((s) => s.kind == SegmentKind.credits)
         .lastOrNull;
-    if (credits != null && credits.start > d * 0.7 && pos >= credits.start)
+    if (credits != null &&
+        credits.start > d * 0.6 &&
+        pos >= credits.start &&
+        d - (credits.end ?? d) < const Duration(seconds: 15)) {
       return true;
+    }
     final window = Duration(
       seconds: (d.inSeconds * 0.04).clamp(25, 90).toInt(),
     );
@@ -837,6 +939,7 @@ class PlayerController extends ChangeNotifier {
   void _onPosition(Duration pos) {
     final d = player.state.duration;
     if (d == Duration.zero) return;
+    if (_started) _autoSkip(pos, d);
     if (!_prefetchedNext &&
         pos.inSeconds > d.inSeconds * 0.8 &&
         nextEpisode != null) {
@@ -1602,6 +1705,7 @@ class PlayerController extends ChangeNotifier {
     _disposed = true;
     _startWatchdog?.cancel();
     _errorGrace?.cancel();
+    _autoSkippedHide?.cancel();
     _lifecycle.dispose();
     unawaited(_pipSub?.cancel());
     unawaited(_interruptSub?.cancel());

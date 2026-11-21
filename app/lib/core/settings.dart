@@ -97,6 +97,8 @@ final class AppSettings {
     this.dataSaver = false,
     this.autoplayNext = true,
     this.skipIntros = true,
+    this.autoSkip = true,
+    this.skipLookup = true,
     this.notifyShows = true,
     this.notifyEveryEpisode = true,
     this.notifyWatchedLately = true,
@@ -139,6 +141,8 @@ final class AppSettings {
     dataSaver: j['dataSaver'] as bool? ?? false,
     autoplayNext: j['autoplayNext'] as bool? ?? true,
     skipIntros: j['skipIntros'] as bool? ?? true,
+    autoSkip: j['autoSkip'] as bool? ?? true,
+    skipLookup: j['skipLookup'] as bool? ?? true,
     notifyShows: j['notifyShows'] as bool? ?? true,
     notifyEveryEpisode: j['notifyEveryEpisode'] as bool? ?? true,
     notifyWatchedLately: j['notifyWatchedLately'] as bool? ?? true,
@@ -196,6 +200,14 @@ final class AppSettings {
   final bool dataSaver;
   final bool autoplayNext;
   final bool skipIntros;
+
+  /// Intros, recaps and credits followed by more are skipped without a
+  /// tap (with Undo); off: a Skip button.
+  final bool autoSkip;
+
+  /// Asks TheIntroDB and AniSkip where they are, for videos that don't
+  /// mark them.
+  final bool skipLookup;
 
   /// Notices when followed shows air: episodes, seasons, finales.
   final bool notifyShows;
@@ -280,6 +292,8 @@ final class AppSettings {
     'dataSaver': dataSaver,
     'autoplayNext': autoplayNext,
     'skipIntros': skipIntros,
+    'autoSkip': autoSkip,
+    'skipLookup': skipLookup,
     'notifyShows': notifyShows,
     'notifyEveryEpisode': notifyEveryEpisode,
     'notifyWatchedLately': notifyWatchedLately,
@@ -320,6 +334,8 @@ final class AppSettings {
     bool? dataSaver,
     bool? autoplayNext,
     bool? skipIntros,
+    bool? autoSkip,
+    bool? skipLookup,
     bool? notifyShows,
     bool? notifyEveryEpisode,
     bool? notifyWatchedLately,
@@ -357,6 +373,8 @@ final class AppSettings {
     dataSaver: dataSaver ?? this.dataSaver,
     autoplayNext: autoplayNext ?? this.autoplayNext,
     skipIntros: skipIntros ?? this.skipIntros,
+    autoSkip: autoSkip ?? this.autoSkip,
+    skipLookup: skipLookup ?? this.skipLookup,
     notifyShows: notifyShows ?? this.notifyShows,
     notifyEveryEpisode: notifyEveryEpisode ?? this.notifyEveryEpisode,
     notifyWatchedLately: notifyWatchedLately ?? this.notifyWatchedLately,

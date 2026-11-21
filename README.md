@@ -138,6 +138,9 @@ Kinora has no accounts, no analytics and no ads. It only connects to:
   revokes its access;
 - Metahub (images.metahub.space), for posters of the titles Trakt suggests
   when you're signed in;
+- TheIntroDB, AniSkip and ARM (an anime id mapping), to find where a
+  video's intro and credits are: they learn which episode you play (turn
+  it off in Settings › Playback);
 - the torrent swarm, plus a public tracker list it refreshes daily;
 - GitHub, once per launch, to check for a new version (you can turn this
   off).

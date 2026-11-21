@@ -55,12 +55,32 @@ class PlaybackPage extends ConsumerWidget {
           value: s.autoplayNext,
           onChanged: (v) => _save(ref, (s) => s.copyWith(autoplayNext: v)),
         ),
-        SwitchRow(
-          label: 'Skip intros',
-          detail: 'Jumps past intros and recaps when the video marks them.',
-          value: s.skipIntros,
-          onChanged: (v) => _save(ref, (s) => s.copyWith(skipIntros: v)),
+        const SectionTitle('Intros, recaps and credits'),
+        Segmented<int>(
+          options: const [
+            (2, 'Skip automatically'),
+            (1, 'Show a Skip button'),
+            (0, 'Off'),
+          ],
+          value: !s.skipIntros
+              ? 0
+              : s.autoSkip
+              ? 2
+              : 1,
+          onChanged: (v) => _save(
+            ref,
+            (s) => s.copyWith(skipIntros: v > 0, autoSkip: v == 2),
+          ),
         ),
+        if (s.skipIntros)
+          SwitchRow(
+            label: 'Look up where they are',
+            detail:
+                'For videos that don\'t mark them: TheIntroDB for shows and '
+                'movies, AniSkip for anime. They learn which episode you play.',
+            value: s.skipLookup,
+            onChanged: (v) => _save(ref, (s) => s.copyWith(skipLookup: v)),
+          ),
       ],
     );
   }

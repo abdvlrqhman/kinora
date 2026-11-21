@@ -622,7 +622,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ),
                   if (_levelShown case final l?)
                     _LevelIndicator(brightness: l.brightness, value: l.value),
-                  if (c.skippable case final skip? when _panel == _Panel.none)
+                  if (c.autoSkipped != null && _panel == _Panel.none)
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: playerEdges(context).right + KSpace.margin,
+                          bottom:
+                              MediaQuery.paddingOf(context).bottom +
+                              (_controls ? 120 : 40),
+                        ),
+                        child: GlassButton(
+                          label: 'Undo',
+                          icon: Icons.undo_rounded,
+                          semanticLabel: 'Undo the skip',
+                          onPressed: c.undoSkip,
+                        ),
+                      ),
+                    )
+                  else if (c.skippable case final skip?
+                      when _panel == _Panel.none)
                     Align(
                       alignment: Alignment.bottomRight,
                       child: Padding(

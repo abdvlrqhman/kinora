@@ -189,6 +189,8 @@ void main() {
             wifiOnlyDownloads: false,
             // The test plays this build, whatever GitHub's latest release.
             updateChecks: false,
+            // Intro times from the internet: the test stays offline.
+            skipLookup: false,
           ),
         ),
         // Live tracker scraping would reach the internet; the swarm is local.
