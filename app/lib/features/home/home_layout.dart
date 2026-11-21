@@ -21,18 +21,20 @@ String catalogRowId(String source, String type, String catalog) =>
     'cat:$source|$type|$catalog';
 
 String pinnedRowId(BrowseKey k) =>
-    'pin:${k.addon}|${k.type}|${k.catalog}|${k.genre ?? ''}';
+    'pin:${k.addon}|${k.type}|${k.catalog}|${k.genre ?? ''}'
+    '${k.filter == null ? '' : '|${k.filter}'}';
 
 /// The catalog and genre of a pinned row's id (null for other ids).
 BrowseKey? pinnedKey(String id) {
   if (!id.startsWith('pin:')) return null;
   final p = id.substring(4).split('|');
-  if (p.length != 4) return null;
+  if (p.length != 4 && p.length != 5) return null;
   return (
     addon: p[0],
     type: p[1],
     catalog: p[2],
     genre: p[3].isEmpty ? null : p[3],
+    filter: p.length == 5 && p[4].isNotEmpty ? p[4] : null,
   );
 }
 
@@ -116,7 +118,10 @@ List<HomeRowChoice> homeRowChoices({
         if (pinOf(k) case final c?)
           (
             id: p,
-            title: [titleOf(c.catalog), ?k.genre].join(': '),
+            title: [
+              titleOf(c.catalog),
+              [?k.genre, ?filterLabel(k.filter)].join(', '),
+            ].where((t) => t.isNotEmpty).join(': '),
             catalog: id(c),
           ),
   ];

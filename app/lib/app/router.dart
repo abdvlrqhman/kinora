@@ -9,6 +9,7 @@ import '../features/calendar/calendar_screen.dart';
 import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/person/person_screen.dart';
 import '../features/player/player_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -110,6 +111,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      pageRoute(
+        '/person/:slug',
+        parentNavigatorKey: rootNavigatorKey,
+        (state) => PersonScreen(
+          slug: state.pathParameters['slug']!,
+          name: state.uri.queryParameters['name'] ?? '',
+          photo: state.uri.queryParameters['photo'],
+        ),
       ),
       pageRoute(
         '/title/:type/:id',

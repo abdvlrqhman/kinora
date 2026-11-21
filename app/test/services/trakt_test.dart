@@ -19,6 +19,7 @@ import '../features/settings/settings_harness.dart';
 final class FakeTrakt {
   final calls = <String>[];
   final bodies = <String, Object?>{};
+  final queries = <String, String>{};
   var pendingPolls = 1;
   var access = 'a1';
   var expireOnce = false;
@@ -33,6 +34,7 @@ final class FakeTrakt {
     final path = r.url.path;
     final key = '${r.method} $path';
     calls.add(key);
+    queries[key] = r.url.query;
     if (r.body.isNotEmpty) bodies[key] = jsonDecode(r.body);
     http.Response json(Object? body, [int status = 200]) =>
         http.Response(jsonEncode(body), status);
@@ -75,6 +77,68 @@ final class FakeTrakt {
       'GET /sync/watchlist/shows' => json(watchlistShows),
       'GET /sync/ratings/movies' => json([]),
       'GET /sync/ratings/shows' => json(ratedShows),
+      'GET /movies/trending' => json([
+        {
+          'watchers': 12,
+          'movie': {
+            'title': 'Paper Moons',
+            'year': 2024,
+            'ids': {'imdb': 'tt902'},
+          },
+        },
+      ]),
+      'GET /search/person' => json([
+        {
+          'type': 'person',
+          'person': {
+            'name': 'Ada Reyes',
+            'ids': {'slug': 'ada-reyes', 'trakt': 7},
+            'images': {
+              'headshot': ['media.trakt.tv/people/7/medium/headshot.webp'],
+            },
+          },
+        },
+      ]),
+      'GET /people/ada-reyes/movies' => json({
+        'cast': [
+          {
+            'characters': ['Mira'],
+            'movie': {
+              'title': 'Old Light',
+              'year': 2012,
+              'ids': {'imdb': 'tt1'},
+            },
+          },
+        ],
+        'crew': {
+          'directing': [
+            {
+              'jobs': ['Director'],
+              'movie': {
+                'title': 'New Light',
+                'year': 2024,
+                'ids': {'imdb': 'tt2'},
+              },
+            },
+          ],
+        },
+      }),
+      'GET /people/ada-reyes/shows' => json({
+        'cast': [
+          {
+            'characters': ['Herself'],
+            'show': {
+              'title': 'Harbor Lights',
+              'year': 2020,
+              'ids': {'imdb': 'tt3'},
+            },
+          },
+        ],
+        'crew': <String, Object?>{},
+      }),
+      'GET /genres/movies' => json([
+        {'name': 'Science Fiction', 'slug': 'science-fiction'},
+      ]),
       'GET /shows/tt200/seasons/1/episodes/2' => json({
         'ids': {'trakt': 42},
       }),
@@ -416,6 +480,44 @@ void main() {
       picks.first.poster,
       'https://images.metahub.space/poster/medium/tt2707408/img',
     );
+  });
+
+  test('Trakt lists page, filter and take genres by slug', () async {
+    await signIn();
+    final sync = c.read(traktSyncProvider);
+    final items = await sync.list(
+      'movie',
+      'trending',
+      genre: 'science-fiction',
+      filter: 'years=2020-2029&ratings=80-100',
+      page: 2,
+    );
+    expect(items.single.name, 'Paper Moons');
+    final q = Uri.splitQueryString(trakt.queries['GET /movies/trending']!);
+    expect(q, {
+      'limit': '40',
+      'page': '2',
+      'genres': 'science-fiction',
+      'years': '2020-2029',
+      'ratings': '80-100',
+    });
+    expect(await sync.genres('movie'), ['Science Fiction']);
+  });
+
+  test('people: found by name, with their titles by role', () async {
+    await signIn();
+    final sync = c.read(traktSyncProvider);
+    final found = await sync.people('ada');
+    expect(found.single.slug, 'ada-reyes');
+    expect(
+      found.single.photo,
+      'https://media.trakt.tv/people/7/medium/headshot.webp',
+    );
+    final credits = await sync.credits('ada-reyes');
+    expect(credits.directed.map((m) => m.name), ['New Light']);
+    expect(credits.acted.map((m) => m.id), ['tt3', 'tt1']); // newest first
+    expect(credits.acted.first.type, 'series');
+    expect(credits.wrote, isEmpty);
   });
 
   test('suggestions are for signed-in viewers only', () async {

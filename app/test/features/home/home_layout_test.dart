@@ -61,11 +61,18 @@ void main() {
       type: 'series',
       catalog: 'top',
       genre: 'Animation',
+      filter: null,
     );
     expect(pinnedKey(pinnedRowId(key)), key);
     expect(
       pinnedKey(
-        pinnedRowId((addon: 'a', type: 'movie', catalog: 'top', genre: null)),
+        pinnedRowId((
+          addon: 'a',
+          type: 'movie',
+          catalog: 'top',
+          genre: null,
+          filter: null,
+        )),
       )?.genre,
       isNull,
     );

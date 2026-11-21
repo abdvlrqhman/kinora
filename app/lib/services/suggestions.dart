@@ -67,3 +67,15 @@ final becauseProvider =
       );
       return (name: last.name, items: items);
     });
+
+/// People matching a search (Trakt, signed in).
+final personSearchProvider = FutureProvider.autoDispose
+    .family<List<TraktPerson>, String>(
+      (ref, query) => ref.watch(traktSyncProvider).people(query),
+    );
+
+/// A person's movies and shows by role (Trakt, signed in).
+final personCreditsProvider = FutureProvider.autoDispose
+    .family<PersonCredits, String>(
+      (ref, slug) => ref.watch(traktSyncProvider).credits(slug),
+    );

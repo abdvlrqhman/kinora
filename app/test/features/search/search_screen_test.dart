@@ -361,6 +361,7 @@ void main() {
       type: 'series',
       catalog: 'top',
       genre: 'Animation',
+      filter: null,
     ));
     await tester.tap(find.bySemanticsLabel('Add to Home'));
     await tester.pumpAndSettle();

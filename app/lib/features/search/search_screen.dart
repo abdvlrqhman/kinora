@@ -11,6 +11,8 @@ import '../../app/router.dart';
 import '../../app/shell.dart';
 import '../../services/play_request.dart';
 import '../../services/sources.dart';
+import '../../services/trakt.dart';
+import '../../services/suggestions.dart';
 import '../../ui/glass.dart';
 import '../../ui/tint.dart';
 import '../../ui/layout.dart';
@@ -249,6 +251,10 @@ class _BrowseState extends ConsumerState<_Browse> {
   int _catalog = 0;
   String? _genre;
 
+  /// Trakt's lists: a decade and a rating floor (queries; '' is none).
+  String _years = '';
+  String _rating = '';
+
   @override
   Widget build(BuildContext context) {
     final recents = ref.watch(recentSearchesProvider).value ?? const [];
@@ -323,7 +329,14 @@ class _BrowseState extends ConsumerState<_Browse> {
         : genres.required
         ? genres.options.firstOrNull
         : null;
-    final key = browseKey(source, genre);
+    final trakt =
+        source.addon.transportUrl == traktLists &&
+        source.catalog.id != 'boxoffice';
+    final key = browseKey(
+      source,
+      genre,
+      trakt ? [_years, _rating].where((q) => q.isNotEmpty).join('&') : null,
+    );
     final page = ref.watch(browseProvider(key));
     String name(BrowseSource s) {
       final n = s.catalog.name?.trim().isNotEmpty ?? false
@@ -358,6 +371,7 @@ class _BrowseState extends ConsumerState<_Browse> {
                       _type = t;
                       _catalog = 0;
                       _genre = null;
+                      _years = _rating = '';
                     }),
                   ),
                 ),
@@ -377,6 +391,7 @@ class _BrowseState extends ConsumerState<_Browse> {
                       onTap: () => setState(() {
                         _catalog = i;
                         _genre = null;
+                        _years = _rating = '';
                       }),
                     ),
                 ],
@@ -406,6 +421,29 @@ class _BrowseState extends ConsumerState<_Browse> {
             ),
             gap,
           ],
+          if (trakt) ...[
+            SliverToBoxAdapter(
+              child: ChipRow(
+                gutter: KSpace.margin,
+                children: [
+                  for (final (label, q) in traktYears)
+                    ChoiceChipButton(
+                      label: label,
+                      selected: q == _years,
+                      onTap: () => setState(() => _years = q),
+                    ),
+                  const SizedBox(width: KSpace.x3),
+                  for (final (label, q) in traktRatings)
+                    ChoiceChipButton(
+                      label: label,
+                      selected: q == _rating,
+                      onTap: () => setState(() => _rating = q),
+                    ),
+                ],
+              ),
+            ),
+            gap,
+          ],
           const SliverToBoxAdapter(child: SizedBox(height: KSpace.x2)),
           SliverToBoxAdapter(
             child: Padding(
@@ -426,7 +464,11 @@ class _BrowseState extends ConsumerState<_Browse> {
                     child: Semantics(
                       header: true,
                       child: Text(
-                        [name(source), ?genre].join(' · '),
+                        [
+                          name(source),
+                          ?genre,
+                          ?filterLabel(key.filter),
+                        ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: KType.h2.copyWith(color: KColors.title),
@@ -456,7 +498,7 @@ class _BrowseState extends ConsumerState<_Browse> {
                   message: 'This catalog has no titles for that choice.',
                 ),
               ),
-            AsyncValue(value: final p?) => _PosterGrid(
+            AsyncValue(value: final p?) => PosterGrid(
               items: p.items,
               onOpen: (m) => openTitle(context, type: m.type, id: m.id),
               bottom: p.loadingMore ? KSpace.x4 : KSpace.section,
@@ -501,8 +543,13 @@ class _AddToHome extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsProvider);
     final catalog = catalogRowId(browse.addon, browse.type, browse.catalog);
-    final listed = browse.genre != null
+    final plain = browse.genre == null && browse.filter == null;
+    final listed = !plain
         ? null
+        : browse.addon == traktLists.toString()
+        ? (browse.catalog == 'trending'
+              ? (browse.type == 'movie' ? 'trending-movies' : 'trending-shows')
+              : null)
         : ref
               .watch(homeRowChoicesProvider)
               .where((c) => c.catalog == catalog)
@@ -535,6 +582,54 @@ class _AddToHome extends ConsumerWidget {
       semanticLabel: on ? 'On Home. Remove from Home' : 'Add to Home',
       compact: true,
       onPressed: toggle,
+    );
+  }
+}
+
+/// A person found by a search: photo and name; opens their page.
+class _PersonChip extends StatelessWidget {
+  const _PersonChip({required this.person});
+
+  final TraktPerson person;
+
+  @override
+  Widget build(BuildContext context) {
+    void open() => context.push(
+      Uri(
+        path: '/person/${person.slug}',
+        queryParameters: {'name': person.name, 'photo': ?person.photo},
+      ).toString(),
+    );
+    return Pressable(
+      plain: true,
+      label: person.name,
+      hint: 'Their movies and shows',
+      onTap: open,
+      child: SizedBox(
+        width: 80,
+        child: Column(
+          children: [
+            ClipOval(
+              child: SizedBox.square(
+                dimension: 72,
+                child: Artwork(
+                  url: person.photo,
+                  fallbackText: person.name,
+                  memCacheWidth: decodeWidth(context, 72),
+                ),
+              ),
+            ),
+            const SizedBox(height: KSpace.x2),
+            Text(
+              person.name,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: KType.small.copyWith(color: KColors.lamp),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -719,17 +814,50 @@ class _ResultsState extends ConsumerState<_Results> {
       );
     }
     final groups = ref.watch(searchGroupsProvider(query));
+    final people = ref.watch(personSearchProvider(query)).value ?? const [];
     final bottom = AppShell.bottomInset(context);
     return switch (groups) {
-      AsyncValue(value: []) when !groups.isLoading => EmptyState(
-        title: 'No matches',
-        message:
-            'Nothing in your sources matches “$query”. Check the spelling, '
-            'or try the original title.',
-      ),
+      AsyncValue(value: []) when !groups.isLoading && people.isEmpty =>
+        EmptyState(
+          title: 'No matches',
+          message:
+              'Nothing in your sources matches “$query”. Check the spelling, '
+              'or try the original title.',
+        ),
       AsyncValue(:final value?) => CustomScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
+          if (people.isNotEmpty) ...[
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                KSpace.margin,
+                KSpace.x3,
+                KSpace.margin,
+                KSpace.x3,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: Semantics(
+                  header: true,
+                  child: Text('People', style: KType.h2),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 120,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: KSpace.margin,
+                  ),
+                  itemCount: people.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: KSpace.x3),
+                  itemBuilder: (context, i) => _PersonChip(person: people[i]),
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: KSpace.section)),
+          ],
           for (final g in value) ...[
             SliverPadding(
               // The first heading gets room from the search field above.
@@ -761,7 +889,7 @@ class _ResultsState extends ConsumerState<_Results> {
               ),
             ),
             if (g.items.length > _cap && !_all.contains(g.label)) ...[
-              _PosterGrid(
+              PosterGrid(
                 items: g.items.take(_cap).toList(),
                 onOpen: onOpen,
                 bottom: KSpace.x4,
@@ -788,7 +916,7 @@ class _ResultsState extends ConsumerState<_Results> {
                 ),
               ),
             ] else
-              _PosterGrid(items: g.items, onOpen: onOpen),
+              PosterGrid(items: g.items, onOpen: onOpen),
           ],
           SliverToBoxAdapter(child: SizedBox(height: bottom)),
         ],
@@ -826,8 +954,8 @@ class _ResultsState extends ConsumerState<_Results> {
   );
 }
 
-class _PosterGrid extends StatelessWidget {
-  const _PosterGrid({
+class PosterGrid extends StatelessWidget {
+  const PosterGrid({
     required this.items,
     required this.onOpen,
     this.bottom = KSpace.section,

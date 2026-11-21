@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stremio/stremio.dart';
 
 import '../../services/sources.dart';
+import '../../services/trakt.dart';
 import '../home/home_feed.dart';
 import '../../ui/tint.dart';
 import '../../ui/tokens.dart';
@@ -15,12 +16,104 @@ import '../../ui/widgets/pointer.dart';
 /// (optionally) a genre.
 typedef BrowseSource = ({Addon addon, ManifestCatalog catalog});
 
-/// Every browsable catalog of the enabled sources, grouped by type (movies
-/// first, then shows, then the rest).
+/// Trakt's lists, browsed like a source's catalogs (signed in only).
+final traktLists = Uri.parse('trakt:lists');
+
+/// Trakt's lists as a source: Trending, Popular, Most anticipated (and Box
+/// office for movies), each with Trakt's genres.
+Addon traktListsSource({
+  required List<String> movieGenres,
+  required List<String> showGenres,
+}) {
+  Map<String, Object?> catalog(String type, String id, String name) => {
+    'type': type,
+    'id': id,
+    'name': name,
+    if (id != 'boxoffice')
+      'extra': [
+        {
+          'name': 'genre',
+          'options': type == 'movie' ? movieGenres : showGenres,
+        },
+        {'name': 'skip'},
+      ],
+  };
+  return Addon(
+    transportUrl: traktLists,
+    manifest: AddonManifest.fromJson({
+      'id': 'trakt.lists',
+      'name': 'Trakt',
+      'version': '1.0.0',
+      'resources': ['catalog'],
+      'types': ['movie', 'series'],
+      'catalogs': [
+        for (final type in ['movie', 'series']) ...[
+          catalog(type, 'trending', 'Trending'),
+          catalog(type, 'popular', 'Popular'),
+          catalog(type, 'anticipated', 'Most anticipated'),
+          if (type == 'movie') catalog(type, 'boxoffice', 'Box office'),
+        ],
+      ],
+    }),
+  );
+}
+
+/// Trakt's genres for a type (empty when not signed in).
+final traktGenresProvider = FutureProvider.family<List<String>, String>(
+  (ref, type) => ref.watch(traktSyncProvider).genres(type),
+);
+
+/// A genre name as Trakt's slug ("Science Fiction" → "science-fiction").
+String traktSlug(String genre) =>
+    genre.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-');
+
+/// Year and rating filters for Trakt's lists: (label, query) pairs; the
+/// first of each means no filter.
+const traktYears = [
+  ('Any year', ''),
+  ('2020s', 'years=2020-2029'),
+  ('2010s', 'years=2010-2019'),
+  ('2000s', 'years=2000-2009'),
+  ('1990s', 'years=1990-1999'),
+  ('Older', 'years=1900-1989'),
+];
+const traktRatings = [
+  ('Any rating', ''),
+  ('7+', 'ratings=70-100'),
+  ('8+', 'ratings=80-100'),
+];
+
+/// A filter query as words ("2010s, 8+"), null when there is none.
+String? filterLabel(String? filter) {
+  if (filter == null || filter.isEmpty) return null;
+  final parts = filter.split('&');
+  return [
+    for (final (label, q) in [...traktYears, ...traktRatings])
+      if (q.isNotEmpty && parts.contains(q)) label,
+  ].join(', ');
+}
+
+/// Every browsable catalog of the enabled sources, then Trakt's lists when
+/// signed in, grouped by type (movies first, then shows, then the rest).
 final browseSourcesProvider = FutureProvider<Map<String, List<BrowseSource>>>((
   ref,
 ) async {
-  final addons = await ref.watch(enabledAddonsProvider.future);
+  final sync = ref.watch(traktSyncProvider);
+  final signedIn = sync.signedIn;
+  void changed() {
+    if (sync.signedIn != signedIn) ref.invalidateSelf();
+  }
+
+  sync.addListener(changed);
+  ref.onDispose(() => sync.removeListener(changed));
+  final addons = [
+    ...await ref.watch(enabledAddonsProvider.future),
+    if (signedIn)
+      traktListsSource(
+        movieGenres: await ref.watch(traktGenresProvider('movie').future),
+        showGenres: await ref.watch(traktGenresProvider('series').future),
+      ),
+  ];
   final byType = <String, List<BrowseSource>>{};
   for (final a in addons) {
     for (final c in a.manifest.catalogs) {
@@ -70,19 +163,22 @@ final class BrowsePage {
   final bool loadingMore;
 }
 
-/// Which catalog, and genre, to browse (strings: providers compare keys).
+/// Which catalog, genre and filter (Trakt's lists: years, rating) to
+/// browse (strings: providers compare keys).
 typedef BrowseKey = ({
   String addon,
   String type,
   String catalog,
   String? genre,
+  String? filter,
 });
 
-BrowseKey browseKey(BrowseSource s, String? genre) => (
+BrowseKey browseKey(BrowseSource s, String? genre, [String? filter]) => (
   addon: s.addon.transportUrl.toString(),
   type: s.catalog.type,
   catalog: s.catalog.id,
   genre: genre,
+  filter: filter == null || filter.isEmpty ? null : filter,
 );
 
 final browseProvider = AsyncNotifierProvider.autoDispose
@@ -94,15 +190,27 @@ class BrowseNotifier extends AsyncNotifier<BrowsePage> {
   final BrowseKey key;
   late BrowseSource _source;
 
-  Future<List<MetaPreview>> _fetch(int skip) => ref
-      .read(addonClientProvider)
-      .catalog(
-        _source.addon,
-        key.type,
-        key.catalog,
-        extra: {'genre': ?key.genre, if (skip > 0) 'skip': '$skip'},
-      )
-      .timeout(const Duration(seconds: 20));
+  bool get _trakt => key.addon == traktLists.toString();
+
+  Future<List<MetaPreview>> _fetch(int skip) => _trakt
+      ? ref
+            .read(traktSyncProvider)
+            .list(
+              key.type,
+              key.catalog,
+              genre: key.genre == null ? null : traktSlug(key.genre!),
+              filter: key.filter,
+              page: skip ~/ 40 + 1,
+            )
+      : ref
+            .read(addonClientProvider)
+            .catalog(
+              _source.addon,
+              key.type,
+              key.catalog,
+              extra: {'genre': ?key.genre, if (skip > 0) 'skip': '$skip'},
+            )
+            .timeout(const Duration(seconds: 20));
 
   @override
   Future<BrowsePage> build() async {

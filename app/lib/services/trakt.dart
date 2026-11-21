@@ -836,6 +836,97 @@ final class TraktSync extends ChangeNotifier {
     return status == 200 ? picks(body, movie ? 'movie' : 'series') : const [];
   }
 
+  /// One page of a Trakt list ([list]: `trending`, `popular`,
+  /// `anticipated`, `boxoffice`) of [type] (`movie` or `series`), with an
+  /// optional genre slug and filters (`years=2020-2029&ratings=80-100`).
+  /// Signed in only.
+  Future<List<MetaPreview>> list(
+    String type,
+    String list, {
+    String? genre,
+    String? filter,
+    int page = 1,
+  }) async {
+    if (!signedIn) return const [];
+    final movie = type == 'movie';
+    final query = [
+      'limit=40',
+      'page=$page',
+      if (genre != null) 'genres=$genre',
+      if (filter != null && filter.isNotEmpty) filter,
+    ].join('&');
+    final (status, body) = await _call(
+      'GET',
+      '/${movie ? 'movies' : 'shows'}/$list?$query',
+    );
+    return status == 200 ? picks(body, movie ? 'movie' : 'series') : const [];
+  }
+
+  /// Trakt's genres for [type], by name (signed in only).
+  Future<List<String>> genres(String type) async {
+    if (!signedIn) return const [];
+    final (status, body) = await _call(
+      'GET',
+      '/genres/${type == 'movie' ? 'movies' : 'shows'}',
+    );
+    if (status != 200 || body is! List) return const [];
+    return [
+      for (final g in body.whereType<Map<String, Object?>>())
+        if (g['name'] case final String name) name,
+    ];
+  }
+
+  /// People whose name matches [query] (signed in only).
+  Future<List<TraktPerson>> people(String query) async {
+    if (!signedIn || query.trim().length < 2) return const [];
+    final (status, body) = await _call(
+      'GET',
+      '/search/person?query=${Uri.encodeQueryComponent(query.trim())}'
+          '&limit=8&extended=images',
+    );
+    if (status != 200 || body is! List) return const [];
+    return [
+      for (final item in body.whereType<Map<String, Object?>>())
+        if (item['person'] case final Map<String, Object?> p)
+          if ((p['ids'] as Map<String, Object?>?)?['slug']
+              case final String slug)
+            (
+              name: p['name'] as String? ?? '',
+              slug: slug,
+              photo: switch ((p['images']
+                  as Map<String, Object?>?)?['headshot']) {
+                [final String url, ...] => 'https://$url',
+                _ => null,
+              },
+            ),
+    ];
+  }
+
+  /// What [slug] made: movies and shows they directed, acted in and wrote,
+  /// newest first (signed in only).
+  Future<PersonCredits> credits(String slug) async {
+    final directed = <MetaPreview>[], acted = <MetaPreview>[];
+    final wrote = <MetaPreview>[];
+    if (!signedIn) return (directed: directed, acted: acted, wrote: wrote);
+    for (final (kind, type) in [('movies', 'movie'), ('shows', 'series')]) {
+      final (status, body) = await _call('GET', '/people/$slug/$kind');
+      if (status != 200 || body is! Map<String, Object?>) continue;
+      final crew = body['crew'] as Map<String, Object?>? ?? const {};
+      acted.addAll(picks(body['cast'], type));
+      directed.addAll(picks(crew['directing'], type));
+      wrote.addAll(picks(crew['writing'], type));
+    }
+    List<MetaPreview> tidy(List<MetaPreview> list) {
+      final seen = <String>{};
+      return [
+        for (final m in list)
+          if (seen.add(m.id)) m,
+      ]..sort((a, b) => (b.releaseInfo ?? '').compareTo(a.releaseInfo ?? ''));
+    }
+
+    return (directed: tidy(directed), acted: tidy(acted), wrote: tidy(wrote));
+  }
+
   /// Trakt's picks for the viewer, from what they watched and rated:
   /// movies and shows taking turns. Signed in only.
   Future<List<MetaPreview>> recommendations() async {
@@ -1095,6 +1186,16 @@ final class TraktSync extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// A person on Trakt: their name, slug (for their credits) and photo.
+typedef TraktPerson = ({String name, String slug, String? photo});
+
+/// A person's titles by role, newest first.
+typedef PersonCredits = ({
+  List<MetaPreview> directed,
+  List<MetaPreview> acted,
+  List<MetaPreview> wrote,
+});
 
 final traktSyncProvider = Provider<TraktSync>((ref) {
   final s = TraktSync(ref);

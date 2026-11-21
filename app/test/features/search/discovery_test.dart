@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinora/features/home/home_layout.dart';
 import 'package:kinora/features/search/discovery.dart';
 import 'package:stremio/stremio.dart';
 
@@ -32,5 +33,35 @@ void main() {
     final none = genresOf(const ManifestCatalog(type: 'movie', id: 'x'));
     expect(none.options, isEmpty);
     expect(none.required, isFalse);
+  });
+
+  test('Trakt\'s lists browse like a source, with genres and filters', () {
+    final source = traktListsSource(
+      movieGenres: const ['Science Fiction'],
+      showGenres: const ['Anime'],
+    );
+    final movies = source.manifest.catalogs.where((c) => c.type == 'movie');
+    expect(movies.map((c) => c.id), [
+      'trending',
+      'popular',
+      'anticipated',
+      'boxoffice',
+    ]);
+    expect(genresOf(movies.first).options, ['Science Fiction']);
+    expect(genresOf(movies.last).options, isEmpty); // box office
+    expect(traktSlug('Science Fiction'), 'science-fiction');
+    expect(filterLabel('years=2010-2019&ratings=80-100'), '2010s, 8+');
+    expect(filterLabel(''), isNull);
+  });
+
+  test('a pinned Trakt list keeps its filter', () {
+    const key = (
+      addon: 'trakt:lists',
+      type: 'series',
+      catalog: 'popular',
+      genre: 'Anime',
+      filter: 'years=2020-2029',
+    );
+    expect(pinnedKey(pinnedRowId(key)), key);
   });
 }

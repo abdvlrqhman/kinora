@@ -13,6 +13,7 @@ import '../../core/log.dart';
 import '../../services/library.dart';
 import '../../services/sources.dart';
 import '../title/title_model.dart';
+import '../search/discovery.dart';
 import 'home_layout.dart';
 
 /// Home rows so far.
@@ -363,7 +364,12 @@ final homeRowChoicesProvider = Provider<List<HomeRowChoice>>((ref) {
         if (!known.contains(key(r.addon.transportUrl.toString(), r.catalog)))
           (source: r.addon.transportUrl.toString(), catalog: r.catalog),
     ].take(20).toList(),
-    browsable: where((c) => c.requiredExtras.every((e) => e.name == 'genre')),
+    // (Discovery's catalogs: the sources', and Trakt's lists when signed in.)
+    browsable: [
+      for (final list in (ref.watch(browseSourcesProvider).value ?? {}).values)
+        for (final s in list)
+          (source: s.addon.transportUrl.toString(), catalog: s.catalog),
+    ],
     pinned: pinned,
     titleOf: catalogTitle,
   );
