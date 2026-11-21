@@ -25,6 +25,8 @@ import UserNotifications
       // Downloads are re-downloadable: keep them out of iCloud backups.
       FlutterMethodChannel(name: "kinora/files", binaryMessenger: registrar.messenger())
         .setMethodCallHandler { call, result in
+          // The widget's app group, as this copy was signed.
+          if call.method == "appGroup" { return result(kinoraAppGroup()) }
           guard call.method == "excludeFromBackup", let path = call.arguments as? String else {
             return result(FlutterMethodNotImplemented)
           }
@@ -305,4 +307,22 @@ final class KinoraBackground {
       self.startAudio()
     })
   }
+}
+
+/// The app group this copy of Kinora was signed with. SideStore and
+/// AltStore register their own, "group.io.github.abdvlrqhman.kinora.<team
+/// id>", and list it in the profile they embed in each bundle.
+func kinoraAppGroup() -> String {
+  let base = "group.io.github.abdvlrqhman.kinora"
+  guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+        let data = try? Data(contentsOf: url),
+        let start = data.range(of: Data("<?xml".utf8)),
+        let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
+        let plist = try? PropertyListSerialization.propertyList(
+          from: data.subdata(in: start.lowerBound..<end.upperBound), format: nil
+        ) as? [String: Any],
+        let entitlements = plist["Entitlements"] as? [String: Any],
+        let groups = entitlements["com.apple.security.application-groups"] as? [String]
+  else { return base }
+  return groups.first { $0.hasPrefix(base) } ?? base
 }

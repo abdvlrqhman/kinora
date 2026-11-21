@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 
@@ -52,7 +53,7 @@ String? widgetPath(Uri? uri) {
   return '/';
 }
 
-/// The home screen widget (Android; iPhone once its extension ships): kept
+/// The home screen widget (Android and iPhone): kept
 /// in step with Keep watching, and its taps open the title.
 final class HomeWidgets {
   HomeWidgets(this._ref);
@@ -74,7 +75,9 @@ final class HomeWidgets {
     if (!supported || _started) return;
     _started = true;
     try {
-      await HomeWidget.setAppGroupId(group);
+      await HomeWidget.setAppGroupId(
+        Platform.isIOS ? await _signedGroup() ?? group : group,
+      );
       void tapped(Uri? uri) {
         if (widgetPath(uri) case final path?) open(path);
       }
@@ -90,6 +93,16 @@ final class HomeWidgets {
         _soon = Timer(const Duration(seconds: 2), () => unawaited(_show(rows)));
       }
     }, fireImmediately: true);
+  }
+
+  /// The group SideStore signed this copy with (its own name for ours).
+  static Future<String?> _signedGroup() async {
+    try {
+      return await const MethodChannel('kinora/files')
+          .invokeMethod<String>('appGroup');
+    } on Object {
+      return null;
+    }
   }
 
   void dispose() {
